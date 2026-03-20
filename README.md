@@ -13,7 +13,8 @@ Personal Bloomberg-style terminal for investment tracking and analysis.
 - **Risk Analysis** — portfolio volatility, Sharpe/Sortino ratios, max drawdown, VaR, correlation heatmap, stress tests, glidepath tracking
 - **Dividends** — upcoming dividend calendar, yield metrics (dividend yield, yield on cost), income projections, historical dividend events from Yahoo Finance
 - **Research** — per-security research notes with bull/bear/base cases, intrinsic value, margin of safety, moat ratings, tagging, full-text search
-- **Data Pipelines** — automated fetching from Yahoo Finance, ECB, CoinGecko, FRED
+- **News Feed** — aggregated financial news from Google News RSS, per-security linking, impact tagging, bookmarks, sentiment summary
+- **Data Pipelines** — automated fetching from Yahoo Finance, ECB, CoinGecko, FRED, Google News
 
 ## Tech Stack
 
@@ -201,6 +202,7 @@ All API keys are stored in `.env` (never committed to git).
 | `fred_macro_indicators` | FRED | US + Eurozone + Finland macro data (30+ series) | Daily |
 | `ecb_macro_indicators` | ECB SDW | ECB rates, Euro yield curve, HICP inflation, unemployment | Daily (weekdays) |
 | `yahoo_dividends` | Yahoo Finance | Dividend events (ex-dates, amounts, frequency) for all stocks/ETFs | Daily |
+| `google_news` | Google News RSS | News articles for held securities + global macro topics | Every 30 min (market hours) |
 
 ### Manual Trigger
 
