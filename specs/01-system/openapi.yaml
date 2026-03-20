@@ -1,0 +1,3537 @@
+openapi: 3.1.0
+info:
+  title: Warren Cashett API
+  version: 1.0.0
+  description: >
+    Personal Bloomberg-style terminal API for portfolio management,
+    market data, tax tracking, and investment research.
+    Single-user, localhost-only, no authentication.
+    All monetary values are integers in cents paired with an ISO 4217 currency code.
+    All timestamps are ISO 8601 UTC. Response fields use camelCase.
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+tags:
+  - name: Health
+    description: System health checks
+  - name: Pipelines
+    description: Data pipeline control and status
+  - name: Securities
+    description: Security catalog management
+  - name: Accounts
+    description: Brokerage account management
+  - name: Portfolio
+    description: Dashboard, holdings, allocation, performance
+  - name: Prices
+    description: Market data and live prices
+  - name: Transactions
+    description: Transaction log
+  - name: Tax
+    description: Tax lots, gains, harvesting
+  - name: Risk
+    description: Risk metrics, correlation, stress tests
+  - name: Watchlists
+    description: Watchlist management
+  - name: Screener
+    description: Security screening
+  - name: Research
+    description: Research notes and investment theses
+  - name: Macro
+    description: Economic indicators
+  - name: Charts
+    description: Chart data and technical indicators
+  - name: FixedIncome
+    description: Bond analysis and ladder
+  - name: Alerts
+    description: Alert management
+  - name: ESG
+    description: ESG scores
+  - name: Dividends
+    description: Dividend events and history
+  - name: News
+    description: News items
+  - name: InsiderInstitutional
+    description: Insider and institutional trades
+  - name: Recommendations
+    description: Analyst recommendations
+  - name: NordnetImport
+    description: Nordnet transaction import
+  - name: GlobalEvents
+    description: Global economic and market events
+  - name: Reports
+    description: Report generation and export
+
+# ---------------------------------------------------------------------------
+# Reusable components
+# ---------------------------------------------------------------------------
+components:
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    PathSecurityId:
+      name: securityId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    QueryLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 500
+    QueryOffset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    QueryFromDate:
+      name: fromDate
+      in: query
+      schema:
+        type: string
+        format: date
+    QueryToDate:
+      name: toDate
+      in: query
+      schema:
+        type: string
+        format: date
+    QueryAccountId:
+      name: accountId
+      in: query
+      schema:
+        type: integer
+        format: int64
+    QuerySecurityId:
+      name: securityId
+      in: query
+      schema:
+        type: integer
+        format: int64
+    QuerySortBy:
+      name: sortBy
+      in: query
+      schema:
+        type: string
+    QuerySortOrder:
+      name: sortOrder
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: asc
+    QuerySearch:
+      name: q
+      in: query
+      schema:
+        type: string
+
+  # -------------------------------------------------------------------------
+  # Schemas
+  # -------------------------------------------------------------------------
+  schemas:
+
+    # --- Primitives / shared value objects ---
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          format: int64
+          description: Value in cents (e.g. 123456 = 1234.56)
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code
+
+    ResponseMeta:
+      type: object
+      required: [timestamp, cacheAge, stale]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        cacheAge:
+          type: integer
+          nullable: true
+          description: Seconds since data was last refreshed from source
+        stale:
+          type: boolean
+
+    Pagination:
+      type: object
+      required: [total, limit, offset, hasMore]
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        hasMore:
+          type: boolean
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        value: {}
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable UPPER_SNAKE_CASE error code
+            message:
+              type: string
+            details:
+              type: array
+              nullable: true
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    PaginatedResponse:
+      type: object
+      required: [data, meta, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # --- Domain entities ---
+
+    Security:
+      type: object
+      required: [id, ticker, name, assetClass, currency, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        ticker:
+          type: string
+        isin:
+          type: string
+          nullable: true
+        name:
+          type: string
+        assetClass:
+          type: string
+          enum: [stock, bond, etf, crypto]
+        currency:
+          type: string
+        exchange:
+          type: string
+          nullable: true
+        sector:
+          type: string
+          nullable: true
+        industry:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+          description: ISO 3166-1 alpha-2
+        isAccumulating:
+          type: boolean
+          nullable: true
+        coingeckoId:
+          type: string
+          nullable: true
+        openfigi:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SecurityCreate:
+      type: object
+      required: [ticker, name, assetClass, currency]
+      properties:
+        ticker:
+          type: string
+        isin:
+          type: string
+          nullable: true
+        name:
+          type: string
+        assetClass:
+          type: string
+          enum: [stock, bond, etf, crypto]
+        currency:
+          type: string
+        exchange:
+          type: string
+          nullable: true
+        sector:
+          type: string
+          nullable: true
+        industry:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        isAccumulating:
+          type: boolean
+          nullable: true
+        coingeckoId:
+          type: string
+          nullable: true
+        openfigi:
+          type: string
+          nullable: true
+
+    Account:
+      type: object
+      required: [id, name, type, currency, osaDepositTotalCents, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        type:
+          type: string
+          enum: [regular, osakesaastotili, crypto_wallet, pension]
+        pensionSubtype:
+          type: string
+          nullable: true
+          enum: [ps_sopimus, kapitalisaatiosopimus]
+        institution:
+          type: string
+          nullable: true
+        currency:
+          type: string
+        osaDepositTotalCents:
+          type: integer
+          format: int64
+        notes:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AccountCreate:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [regular, osakesaastotili, crypto_wallet, pension]
+        pensionSubtype:
+          type: string
+          nullable: true
+          enum: [ps_sopimus, kapitalisaatiosopimus]
+        institution:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          default: EUR
+        notes:
+          type: string
+          nullable: true
+
+    Holding:
+      type: object
+      required: [accountId, securityId, security, quantity, costBasis, marketValue, unrealizedPnl, weightPct, priceAvailable]
+      properties:
+        accountId:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        security:
+          $ref: '#/components/schemas/Security'
+        quantity:
+          type: string
+          description: Decimal string for precision
+        costBasis:
+          $ref: '#/components/schemas/Money'
+        marketPrice:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        marketValue:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        unrealizedPnl:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        unrealizedPnlPct:
+          type: number
+          nullable: true
+        weightPct:
+          type: number
+          nullable: true
+        priceAvailable:
+          type: boolean
+        fxRate:
+          type: number
+          nullable: true
+
+    Transaction:
+      type: object
+      required: [id, accountId, type, tradeDate, quantity, totalCents, feeCents, feeCurrency, currency, withholdingTaxCents, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        accountId:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+          nullable: true
+        type:
+          type: string
+          enum: [buy, sell, dividend, transfer_in, transfer_out, fee, interest, corporate_action, deposit, withdrawal]
+        tradeDate:
+          type: string
+          format: date
+        settlementDate:
+          type: string
+          format: date
+          nullable: true
+        quantity:
+          type: string
+          description: Decimal string; positive = inflow, negative = outflow
+        priceCents:
+          type: integer
+          format: int64
+          nullable: true
+        priceCurrency:
+          type: string
+          nullable: true
+        totalCents:
+          type: integer
+          format: int64
+        feeCents:
+          type: integer
+          format: int64
+        feeCurrency:
+          type: string
+        fxRate:
+          type: number
+          nullable: true
+        currency:
+          type: string
+        withholdingTaxCents:
+          type: integer
+          format: int64
+        notes:
+          type: string
+          nullable: true
+        externalRef:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransactionCreate:
+      type: object
+      required: [accountId, type, tradeDate, totalCents]
+      properties:
+        accountId:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+          nullable: true
+        type:
+          type: string
+          enum: [buy, sell, dividend, transfer_in, transfer_out, fee, interest, corporate_action, deposit, withdrawal]
+        tradeDate:
+          type: string
+          format: date
+        settlementDate:
+          type: string
+          format: date
+          nullable: true
+        quantity:
+          type: string
+          default: "0"
+        priceCents:
+          type: integer
+          format: int64
+          nullable: true
+        priceCurrency:
+          type: string
+          nullable: true
+        totalCents:
+          type: integer
+          format: int64
+        feeCents:
+          type: integer
+          format: int64
+          default: 0
+        feeCurrency:
+          type: string
+          default: EUR
+        fxRate:
+          type: number
+          nullable: true
+        currency:
+          type: string
+          default: EUR
+        withholdingTaxCents:
+          type: integer
+          format: int64
+          default: 0
+        notes:
+          type: string
+          nullable: true
+        externalRef:
+          type: string
+          nullable: true
+
+    TransactionUpdate:
+      type: object
+      properties:
+        securityId:
+          type: integer
+          format: int64
+          nullable: true
+        type:
+          type: string
+          enum: [buy, sell, dividend, transfer_in, transfer_out, fee, interest, corporate_action, deposit, withdrawal]
+        tradeDate:
+          type: string
+          format: date
+        settlementDate:
+          type: string
+          format: date
+          nullable: true
+        quantity:
+          type: string
+        priceCents:
+          type: integer
+          format: int64
+          nullable: true
+        priceCurrency:
+          type: string
+          nullable: true
+        totalCents:
+          type: integer
+          format: int64
+        feeCents:
+          type: integer
+          format: int64
+        feeCurrency:
+          type: string
+        fxRate:
+          type: number
+          nullable: true
+        currency:
+          type: string
+        withholdingTaxCents:
+          type: integer
+          format: int64
+        notes:
+          type: string
+          nullable: true
+        externalRef:
+          type: string
+          nullable: true
+
+    TaxLot:
+      type: object
+      required: [id, accountId, securityId, openTransactionId, state, acquiredDate, originalQuantity, remainingQuantity, costBasisCents, costBasisCurrency, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        accountId:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        openTransactionId:
+          type: integer
+          format: int64
+        closeTransactionId:
+          type: integer
+          format: int64
+          nullable: true
+        state:
+          type: string
+          enum: [open, partially_closed, closed]
+        acquiredDate:
+          type: string
+          format: date
+        closedDate:
+          type: string
+          format: date
+          nullable: true
+        originalQuantity:
+          type: string
+        remainingQuantity:
+          type: string
+        costBasisCents:
+          type: integer
+          format: int64
+        costBasisCurrency:
+          type: string
+        proceedsCents:
+          type: integer
+          format: int64
+          nullable: true
+        realizedPnlCents:
+          type: integer
+          format: int64
+          nullable: true
+        fxRateAtOpen:
+          type: number
+          nullable: true
+        fxRateAtClose:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Price:
+      type: object
+      required: [securityId, date, closeCents, currency, source]
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        date:
+          type: string
+          format: date
+        openCents:
+          type: integer
+          format: int64
+          nullable: true
+        highCents:
+          type: integer
+          format: int64
+          nullable: true
+        lowCents:
+          type: integer
+          format: int64
+          nullable: true
+        closeCents:
+          type: integer
+          format: int64
+        adjustedCloseCents:
+          type: integer
+          format: int64
+          nullable: true
+        volume:
+          type: integer
+          format: int64
+          nullable: true
+        currency:
+          type: string
+        source:
+          type: string
+
+    CurrentPrice:
+      type: object
+      required: [securityId, price, timestamp]
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        price:
+          $ref: '#/components/schemas/Money'
+        change:
+          type: integer
+          format: int64
+          nullable: true
+        changePercent:
+          type: number
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+
+    RiskMetrics:
+      type: object
+      properties:
+        beta:
+          type: number
+          nullable: true
+        sharpeRatio:
+          type: number
+          nullable: true
+        sortinoRatio:
+          type: number
+          nullable: true
+        valueAtRisk:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        maxDrawdown:
+          type: number
+          nullable: true
+          description: Maximum drawdown as decimal (e.g. -0.15 = -15%)
+        volatility:
+          type: number
+          nullable: true
+        trackingError:
+          type: number
+          nullable: true
+
+    CorrelationMatrix:
+      type: object
+      properties:
+        securities:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                format: int64
+              ticker:
+                type: string
+        matrix:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+          description: NxN correlation matrix
+
+    StressTestResult:
+      type: object
+      properties:
+        scenario:
+          type: string
+        description:
+          type: string
+        portfolioImpact:
+          $ref: '#/components/schemas/Money'
+        portfolioImpactPct:
+          type: number
+        positionImpacts:
+          type: array
+          items:
+            type: object
+            properties:
+              securityId:
+                type: integer
+                format: int64
+              ticker:
+                type: string
+              impact:
+                $ref: '#/components/schemas/Money'
+              impactPct:
+                type: number
+
+    MacroIndicator:
+      type: object
+      required: [indicatorCode, date, value, source]
+      properties:
+        indicatorCode:
+          type: string
+        date:
+          type: string
+          format: date
+        value:
+          type: number
+        unit:
+          type: string
+          nullable: true
+        source:
+          type: string
+
+    MacroIndicatorSummary:
+      type: object
+      properties:
+        indicatorCode:
+          type: string
+        name:
+          type: string
+        latestValue:
+          type: number
+        latestDate:
+          type: string
+          format: date
+        unit:
+          type: string
+          nullable: true
+        source:
+          type: string
+
+    MacroRegime:
+      type: object
+      properties:
+        regime:
+          type: string
+          description: Current economic regime assessment
+        indicators:
+          type: object
+          additionalProperties: true
+        updatedAt:
+          type: string
+          format: date-time
+
+    Watchlist:
+      type: object
+      required: [id, name, isDefault, sortOrder, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+        sortOrder:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchlistItem'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WatchlistCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+          default: false
+        sortOrder:
+          type: integer
+          default: 0
+
+    WatchlistItem:
+      type: object
+      required: [id, watchlistId, securityId, sortOrder, addedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        watchlistId:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        security:
+          $ref: '#/components/schemas/Security'
+        notes:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        addedAt:
+          type: string
+          format: date-time
+
+    WatchlistItemCreate:
+      type: object
+      required: [securityId]
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        notes:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+          default: 0
+
+    ResearchNote:
+      type: object
+      required: [id, securityId, title, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        thesis:
+          type: string
+          nullable: true
+        bullCase:
+          type: string
+          nullable: true
+        bearCase:
+          type: string
+          nullable: true
+        baseCase:
+          type: string
+          nullable: true
+        intrinsicValue:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        marginOfSafetyPct:
+          type: number
+          nullable: true
+        moatRating:
+          type: string
+          nullable: true
+          enum: [none, narrow, wide]
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ResearchNoteCreate:
+      type: object
+      required: [securityId, title]
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        thesis:
+          type: string
+          nullable: true
+        bullCase:
+          type: string
+          nullable: true
+        bearCase:
+          type: string
+          nullable: true
+        baseCase:
+          type: string
+          nullable: true
+        intrinsicValueCents:
+          type: integer
+          format: int64
+          nullable: true
+        intrinsicValueCurrency:
+          type: string
+          nullable: true
+        marginOfSafetyPct:
+          type: number
+          nullable: true
+        moatRating:
+          type: string
+          nullable: true
+          enum: [none, narrow, wide]
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    ResearchNoteUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        thesis:
+          type: string
+          nullable: true
+        bullCase:
+          type: string
+          nullable: true
+        bearCase:
+          type: string
+          nullable: true
+        baseCase:
+          type: string
+          nullable: true
+        intrinsicValueCents:
+          type: integer
+          format: int64
+          nullable: true
+        intrinsicValueCurrency:
+          type: string
+          nullable: true
+        marginOfSafetyPct:
+          type: number
+          nullable: true
+        moatRating:
+          type: string
+          nullable: true
+          enum: [none, narrow, wide]
+        tags:
+          type: array
+          items:
+            type: string
+          nullable: true
+        isActive:
+          type: boolean
+
+    Alert:
+      type: object
+      required: [id, type, status, message, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [price_above, price_below, drift_threshold, staleness, dividend_announced, custom]
+        status:
+          type: string
+          enum: [active, triggered, dismissed, expired]
+        securityId:
+          type: integer
+          format: int64
+          nullable: true
+        accountId:
+          type: integer
+          format: int64
+          nullable: true
+        thresholdValue:
+          type: number
+          nullable: true
+        thresholdCurrency:
+          type: string
+          nullable: true
+        message:
+          type: string
+        triggeredAt:
+          type: string
+          format: date-time
+          nullable: true
+        dismissedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AlertCreate:
+      type: object
+      required: [type, message]
+      properties:
+        type:
+          type: string
+          enum: [price_above, price_below, drift_threshold, staleness, dividend_announced, custom]
+        securityId:
+          type: integer
+          format: int64
+          nullable: true
+        accountId:
+          type: integer
+          format: int64
+          nullable: true
+        thresholdValue:
+          type: number
+          nullable: true
+        thresholdCurrency:
+          type: string
+          nullable: true
+        message:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AlertUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, triggered, dismissed, expired]
+        thresholdValue:
+          type: number
+          nullable: true
+        thresholdCurrency:
+          type: string
+          nullable: true
+        message:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    RebalancingSuggestion:
+      type: object
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        ticker:
+          type: string
+        currentWeightPct:
+          type: number
+        targetWeightPct:
+          type: number
+        driftPct:
+          type: number
+        suggestedAction:
+          type: string
+          enum: [buy, sell, hold]
+        suggestedAmount:
+          $ref: '#/components/schemas/Money'
+        taxImpact:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+
+    EsgScore:
+      type: object
+      required: [id, securityId, asOfDate, source, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        asOfDate:
+          type: string
+          format: date
+        environmentScore:
+          type: number
+          nullable: true
+        socialScore:
+          type: number
+          nullable: true
+        governanceScore:
+          type: number
+          nullable: true
+        totalScore:
+          type: number
+          nullable: true
+        controversyLevel:
+          type: string
+          nullable: true
+          enum: [none, low, moderate, significant, severe]
+        controversyDetails:
+          type: string
+          nullable: true
+        euTaxonomyAligned:
+          type: boolean
+          nullable: true
+        sfdrClassification:
+          type: string
+          nullable: true
+          enum: [article_6, article_8, article_9]
+        source:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DividendEvent:
+      type: object
+      required: [id, accountId, securityId, exDate, amountPerShareCents, amountCurrency, sharesHeld, grossAmountCents, withholdingTaxCents, netAmountCents, netAmountEurCents, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        accountId:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        transactionId:
+          type: integer
+          format: int64
+          nullable: true
+        exDate:
+          type: string
+          format: date
+        payDate:
+          type: string
+          format: date
+          nullable: true
+        recordDate:
+          type: string
+          format: date
+          nullable: true
+        amountPerShareCents:
+          type: integer
+          format: int64
+        amountCurrency:
+          type: string
+        sharesHeld:
+          type: string
+          description: Decimal string
+        grossAmountCents:
+          type: integer
+          format: int64
+        withholdingTaxCents:
+          type: integer
+          format: int64
+        withholdingTaxPct:
+          type: number
+          nullable: true
+        netAmountCents:
+          type: integer
+          format: int64
+        netAmountEurCents:
+          type: integer
+          format: int64
+        fxRate:
+          type: number
+          nullable: true
+        isQualified:
+          type: boolean
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NewsItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+          nullable: true
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        source:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        summary:
+          type: string
+          nullable: true
+        sentiment:
+          type: string
+          nullable: true
+          enum: [positive, negative, neutral]
+
+    InsiderTrade:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        filerName:
+          type: string
+        filerTitle:
+          type: string
+          nullable: true
+        tradeType:
+          type: string
+          enum: [buy, sell, exercise]
+        tradeDate:
+          type: string
+          format: date
+        shares:
+          type: string
+        pricePerShare:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        totalValue:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        sharesOwnedAfter:
+          type: string
+          nullable: true
+        filingDate:
+          type: string
+          format: date
+        source:
+          type: string
+
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        securityId:
+          type: integer
+          format: int64
+        firm:
+          type: string
+        analyst:
+          type: string
+          nullable: true
+        rating:
+          type: string
+          enum: [strong_buy, buy, hold, sell, strong_sell]
+        targetPrice:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        previousRating:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date
+        source:
+          type: string
+
+    GlobalEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        eventDate:
+          type: string
+          format: date
+        eventType:
+          type: string
+        importance:
+          type: string
+          enum: [low, medium, high, critical]
+        country:
+          type: string
+          nullable: true
+        source:
+          type: string
+
+    PipelineStatus:
+      type: object
+      required: [id, source, pipelineName, status, startedAt, rowsAffected, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        source:
+          type: string
+          enum: [yahoo_finance, alpha_vantage, fred, ecb, coingecko, justetf, morningstar, manual]
+        pipelineName:
+          type: string
+        status:
+          type: string
+          enum: [running, success, failed, partial]
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        rowsAffected:
+          type: integer
+        errorMessage:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    # --- Portfolio composite schemas ---
+
+    PortfolioSummary:
+      type: object
+      properties:
+        totalValue:
+          $ref: '#/components/schemas/Money'
+        totalCostBasis:
+          $ref: '#/components/schemas/Money'
+        totalUnrealizedPnl:
+          $ref: '#/components/schemas/Money'
+        totalRealizedPnl:
+          $ref: '#/components/schemas/Money'
+        totalUnrealizedPnlPct:
+          type: number
+        dayChange:
+          $ref: '#/components/schemas/Money'
+        dayChangePct:
+          type: number
+        allocationVsTarget:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              currentPct:
+                type: number
+              targetPct:
+                type: number
+              driftPct:
+                type: number
+
+    AllocationBreakdown:
+      type: object
+      properties:
+        byAssetClass:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationSlice'
+        bySector:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationSlice'
+        byCountry:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationSlice'
+        byCurrency:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationSlice'
+        byAccount:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationSlice'
+
+    AllocationSlice:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          $ref: '#/components/schemas/Money'
+        currentPct:
+          type: number
+        targetPct:
+          type: number
+          nullable: true
+
+    GlidepathPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        targetStockPct:
+          type: number
+        actualStockPct:
+          type: number
+        targetBondPct:
+          type: number
+        actualBondPct:
+          type: number
+
+    PerformanceData:
+      type: object
+      properties:
+        period:
+          type: string
+        twr:
+          type: number
+          description: Time-weighted return
+        mwrr:
+          type: number
+          description: Money-weighted rate of return
+        benchmark:
+          type: number
+          nullable: true
+        timeSeries:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              cumulativeReturn:
+                type: number
+              benchmarkReturn:
+                type: number
+                nullable: true
+
+    TaxGains:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            fromDate:
+              type: string
+              format: date
+            toDate:
+              type: string
+              format: date
+        realizedGains:
+          $ref: '#/components/schemas/Money'
+        realizedLosses:
+          $ref: '#/components/schemas/Money'
+        netRealized:
+          $ref: '#/components/schemas/Money'
+        unrealizedGains:
+          $ref: '#/components/schemas/Money'
+        unrealizedLosses:
+          $ref: '#/components/schemas/Money'
+        netUnrealized:
+          $ref: '#/components/schemas/Money'
+
+    AnnualTaxSummary:
+      type: object
+      properties:
+        year:
+          type: integer
+        totalRealizedGains:
+          $ref: '#/components/schemas/Money'
+        totalRealizedLosses:
+          $ref: '#/components/schemas/Money'
+        netCapitalGains:
+          $ref: '#/components/schemas/Money'
+        totalDividends:
+          $ref: '#/components/schemas/Money'
+        totalWithholdingTax:
+          $ref: '#/components/schemas/Money'
+        taxableIncome:
+          $ref: '#/components/schemas/Money'
+        estimatedTax:
+          $ref: '#/components/schemas/Money'
+        deemedCostSavings:
+          allOf:
+            - $ref: '#/components/schemas/Money'
+          nullable: true
+        lots:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxLot'
+
+    HarvestingCandidate:
+      type: object
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        ticker:
+          type: string
+        unrealizedLoss:
+          $ref: '#/components/schemas/Money'
+        costBasis:
+          $ref: '#/components/schemas/Money'
+        marketValue:
+          $ref: '#/components/schemas/Money'
+        holdingPeriodDays:
+          type: integer
+        washSaleRisk:
+          type: boolean
+
+    OsakesaastotiliStatus:
+      type: object
+      properties:
+        accountId:
+          type: integer
+          format: int64
+        depositTotal:
+          $ref: '#/components/schemas/Money'
+        depositRemaining:
+          $ref: '#/components/schemas/Money'
+        currentValue:
+          $ref: '#/components/schemas/Money'
+        gainsPortion:
+          $ref: '#/components/schemas/Money'
+        gainsPct:
+          type: number
+
+    ScreenerRequest:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              operator:
+                type: string
+                enum: [eq, ne, gt, gte, lt, lte, in, between]
+              value: {}
+        sortBy:
+          type: string
+        sortOrder:
+          type: string
+          enum: [asc, desc]
+        limit:
+          type: integer
+          default: 50
+        offset:
+          type: integer
+          default: 0
+
+    ScreenerPreset:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        filters:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    ChartData:
+      type: object
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        interval:
+          type: string
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              openCents:
+                type: integer
+                format: int64
+              highCents:
+                type: integer
+                format: int64
+              lowCents:
+                type: integer
+                format: int64
+              closeCents:
+                type: integer
+                format: int64
+              volume:
+                type: integer
+                format: int64
+        indicators:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    FixedIncomeAnalysis:
+      type: object
+      properties:
+        securityId:
+          type: integer
+          format: int64
+        yieldToMaturity:
+          type: number
+        duration:
+          type: number
+        modifiedDuration:
+          type: number
+        convexity:
+          type: number
+        currentYield:
+          type: number
+        maturityDate:
+          type: string
+          format: date
+          nullable: true
+        couponRate:
+          type: number
+          nullable: true
+
+    BondLadder:
+      type: object
+      properties:
+        rungs:
+          type: array
+          items:
+            type: object
+            properties:
+              maturityYear:
+                type: integer
+              securities:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    securityId:
+                      type: integer
+                      format: int64
+                    ticker:
+                      type: string
+                    faceValue:
+                      $ref: '#/components/schemas/Money'
+                    yieldToMaturity:
+                      type: number
+        totalFaceValue:
+          $ref: '#/components/schemas/Money'
+        averageYield:
+          type: number
+        averageDuration:
+          type: number
+
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        database:
+          type: object
+          properties:
+            connected:
+              type: boolean
+            latencyMs:
+              type: integer
+        redis:
+          type: object
+          properties:
+            connected:
+              type: boolean
+            latencyMs:
+              type: integer
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Uptime in seconds
+
+    PipelineRunRequest:
+      type: object
+      properties:
+        parameters:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Optional pipeline-specific parameters
+
+    NordnetImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              message:
+                type: string
+
+  # -------------------------------------------------------------------------
+  # Reusable responses
+  # -------------------------------------------------------------------------
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Request body fails validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+# =============================================================================
+# Paths
+# =============================================================================
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Health
+  # ---------------------------------------------------------------------------
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check with DB and Redis status
+      tags: [Health]
+      responses:
+        '200':
+          description: System health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/HealthStatus'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Pipelines
+  # ---------------------------------------------------------------------------
+  /pipelines:
+    get:
+      operationId: listPipelines
+      summary: List all pipelines with last-run status
+      tags: [Pipelines]
+      responses:
+        '200':
+          description: Pipeline list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PipelineStatus'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /pipelines/{name}/run:
+    post:
+      operationId: triggerPipeline
+      summary: Manually trigger a pipeline
+      tags: [Pipelines]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineRunRequest'
+      responses:
+        '200':
+          description: Pipeline triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PipelineStatus'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Securities
+  # ---------------------------------------------------------------------------
+  /securities:
+    get:
+      operationId: listSecurities
+      summary: List securities (paginated, searchable)
+      tags: [Securities]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QuerySearch'
+        - name: assetClass
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [stock, bond, etf, crypto]
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/QuerySortBy'
+        - $ref: '#/components/parameters/QuerySortOrder'
+      responses:
+        '200':
+          description: Paginated security list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Security'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      operationId: createSecurity
+      summary: Add a security to the catalog
+      tags: [Securities]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityCreate'
+      responses:
+        '200':
+          description: Created security
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Security'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /securities/{id}:
+    get:
+      operationId: getSecurity
+      summary: Security detail with fundamentals
+      tags: [Securities]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Security detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Security'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Accounts
+  # ---------------------------------------------------------------------------
+  /accounts:
+    get:
+      operationId: listAccounts
+      summary: List all accounts
+      tags: [Accounts]
+      responses:
+        '200':
+          description: Account list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+    post:
+      operationId: createAccount
+      summary: Create an account
+      tags: [Accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
+      responses:
+        '200':
+          description: Created account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /accounts/{id}:
+    get:
+      operationId: getAccount
+      summary: Account detail with summary
+      tags: [Accounts]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Account detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Portfolio (F01)
+  # ---------------------------------------------------------------------------
+  /portfolio/summary:
+    get:
+      operationId: getPortfolioSummary
+      summary: Total value, P&L, allocation vs target
+      tags: [Portfolio]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Portfolio summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PortfolioSummary'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /portfolio/holdings:
+    get:
+      operationId: getPortfolioHoldings
+      summary: All current positions with market values
+      tags: [Portfolio]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+        - $ref: '#/components/parameters/QuerySortBy'
+        - $ref: '#/components/parameters/QuerySortOrder'
+      responses:
+        '200':
+          description: Holdings list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Holding'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /portfolio/allocation:
+    get:
+      operationId: getPortfolioAllocation
+      summary: Current vs target allocation breakdown
+      tags: [Portfolio]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Allocation breakdown
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AllocationBreakdown'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /portfolio/glidepath:
+    get:
+      operationId: getPortfolioGlidepath
+      summary: Glidepath target vs actual over time
+      tags: [Portfolio]
+      parameters:
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+      responses:
+        '200':
+          description: Glidepath data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GlidepathPoint'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /portfolio/performance:
+    get:
+      operationId: getPortfolioPerformance
+      summary: TWR and MWRR over configurable periods
+      tags: [Portfolio]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1d, 1w, 1m, 3m, 6m, ytd, 1y, 3y, 5y, max]
+      responses:
+        '200':
+          description: Performance data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PerformanceData'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Prices (F02)
+  # ---------------------------------------------------------------------------
+  /prices/{securityId}:
+    get:
+      operationId: getSecurityPrices
+      summary: Historical prices (OHLCV) with date range
+      tags: [Prices]
+      parameters:
+        - $ref: '#/components/parameters/PathSecurityId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+      responses:
+        '200':
+          description: Price history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Price'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /prices/current:
+    get:
+      operationId: getCurrentPrices
+      summary: Current prices for all held securities
+      tags: [Prices]
+      responses:
+        '200':
+          description: Current prices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CurrentPrice'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /prices/stream:
+    get:
+      operationId: streamPrices
+      summary: SSE stream of live price updates
+      tags: [Prices]
+      responses:
+        '200':
+          description: >
+            Server-Sent Events stream. Event types: price (price updates),
+            status (market status), heartbeat (keepalive every 30s).
+            Client should reconnect with Last-Event-ID header.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  # ---------------------------------------------------------------------------
+  # Transactions (F12)
+  # ---------------------------------------------------------------------------
+  /transactions:
+    get:
+      operationId: listTransactions
+      summary: List transactions (paginated, filterable)
+      tags: [Transactions]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QueryAccountId'
+        - $ref: '#/components/parameters/QuerySecurityId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - name: type
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [buy, sell, dividend, transfer_in, transfer_out, fee, interest, corporate_action, deposit, withdrawal]
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/QuerySortBy'
+        - $ref: '#/components/parameters/QuerySortOrder'
+      responses:
+        '200':
+          description: Paginated transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      operationId: createTransaction
+      summary: Record a new transaction
+      tags: [Transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreate'
+      responses:
+        '200':
+          description: Created transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transaction'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /transactions/{id}:
+    put:
+      operationId: updateTransaction
+      summary: Update a transaction
+      tags: [Transactions]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionUpdate'
+      responses:
+        '200':
+          description: Updated transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transaction'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: deleteTransaction
+      summary: Delete a transaction (cascades to tax lots)
+      tags: [Transactions]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Transaction deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Tax (F05)
+  # ---------------------------------------------------------------------------
+  /tax/lots:
+    get:
+      operationId: listTaxLots
+      summary: List tax lots (filterable by status, account, security)
+      tags: [Tax]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QueryAccountId'
+        - $ref: '#/components/parameters/QuerySecurityId'
+        - name: state
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [open, partially_closed, closed]
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/QuerySortBy'
+        - $ref: '#/components/parameters/QuerySortOrder'
+      responses:
+        '200':
+          description: Paginated tax lot list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TaxLot'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /tax/gains:
+    get:
+      operationId: getTaxGains
+      summary: Realized and unrealized gains by period
+      tags: [Tax]
+      parameters:
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Tax gains summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TaxGains'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /tax/gains/annual:
+    get:
+      operationId: getAnnualTaxSummary
+      summary: Annual tax summary for Vero.fi
+      tags: [Tax]
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Annual tax summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AnnualTaxSummary'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /tax/harvesting:
+    get:
+      operationId: getTaxHarvestingCandidates
+      summary: Loss harvesting candidates
+      tags: [Tax]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Harvesting candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HarvestingCandidate'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /tax/osakesaastotili:
+    get:
+      operationId: getOsakesaastotiliStatus
+      summary: Equity savings account status (deposits, value, gains portion)
+      tags: [Tax]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: OSA status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OsakesaastotiliStatus'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Risk (F04)
+  # ---------------------------------------------------------------------------
+  /risk/metrics:
+    get:
+      operationId: getRiskMetrics
+      summary: Portfolio risk metrics (beta, Sharpe, Sortino, VaR, drawdown)
+      tags: [Risk]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1m, 3m, 6m, 1y, 3y, 5y, max]
+      responses:
+        '200':
+          description: Risk metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RiskMetrics'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /risk/correlation:
+    get:
+      operationId: getRiskCorrelation
+      summary: Correlation matrix for held securities
+      tags: [Risk]
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1m, 3m, 6m, 1y, 3y, 5y]
+      responses:
+        '200':
+          description: Correlation matrix
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CorrelationMatrix'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /risk/stress-test:
+    get:
+      operationId: getStressTest
+      summary: Stress test results against predefined scenarios
+      tags: [Risk]
+      responses:
+        '200':
+          description: Stress test results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StressTestResult'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Watchlists (F03)
+  # ---------------------------------------------------------------------------
+  /watchlists:
+    get:
+      operationId: listWatchlists
+      summary: List all watchlists
+      tags: [Watchlists]
+      responses:
+        '200':
+          description: Watchlist list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Watchlist'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+    post:
+      operationId: createWatchlist
+      summary: Create a watchlist
+      tags: [Watchlists]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchlistCreate'
+      responses:
+        '200':
+          description: Created watchlist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Watchlist'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /watchlists/{id}/items:
+    post:
+      operationId: addWatchlistItem
+      summary: Add security to watchlist
+      tags: [Watchlists]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatchlistItemCreate'
+      responses:
+        '200':
+          description: Added item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WatchlistItem'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /watchlists/{id}/items/{securityId}:
+    delete:
+      operationId: removeWatchlistItem
+      summary: Remove security from watchlist
+      tags: [Watchlists]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+        - $ref: '#/components/parameters/PathSecurityId'
+      responses:
+        '200':
+          description: Item removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Screener (F03)
+  # ---------------------------------------------------------------------------
+  /screener/run:
+    post:
+      operationId: runScreener
+      summary: Run a screen with factor filters
+      tags: [Screener]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScreenerRequest'
+      responses:
+        '200':
+          description: Screener results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Security'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /screener/presets:
+    get:
+      operationId: listScreenerPresets
+      summary: List saved screener presets
+      tags: [Screener]
+      responses:
+        '200':
+          description: Screener presets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScreenerPreset'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Research (F06)
+  # ---------------------------------------------------------------------------
+  /research/notes:
+    get:
+      operationId: listResearchNotes
+      summary: List research notes
+      tags: [Research]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QuerySearch'
+        - name: tag
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/QuerySortBy'
+        - $ref: '#/components/parameters/QuerySortOrder'
+      responses:
+        '200':
+          description: Paginated research note list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResearchNote'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      operationId: createResearchNote
+      summary: Create a research note
+      tags: [Research]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchNoteCreate'
+      responses:
+        '200':
+          description: Created research note
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ResearchNote'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /research/notes/{securityId}:
+    get:
+      operationId: getResearchNotesForSecurity
+      summary: Research notes for a security
+      tags: [Research]
+      parameters:
+        - $ref: '#/components/parameters/PathSecurityId'
+      responses:
+        '200':
+          description: Research notes for the security
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResearchNote'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /research/notes/{id}:
+    put:
+      operationId: updateResearchNote
+      summary: Update a research note
+      tags: [Research]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchNoteUpdate'
+      responses:
+        '200':
+          description: Updated research note
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ResearchNote'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ---------------------------------------------------------------------------
+  # Macro (F07)
+  # ---------------------------------------------------------------------------
+  /macro/indicators:
+    get:
+      operationId: listMacroIndicators
+      summary: List available indicators with latest values
+      tags: [Macro]
+      responses:
+        '200':
+          description: Macro indicator summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MacroIndicatorSummary'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /macro/indicators/{code}:
+    get:
+      operationId: getMacroIndicatorHistory
+      summary: Historical values for an indicator
+      tags: [Macro]
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+      responses:
+        '200':
+          description: Indicator time series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MacroIndicator'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /macro/regime:
+    get:
+      operationId: getMacroRegime
+      summary: Current economic regime assessment
+      tags: [Macro]
+      responses:
+        '200':
+          description: Regime data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MacroRegime'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Charts (F08)
+  # ---------------------------------------------------------------------------
+  /charts/{securityId}:
+    get:
+      operationId: getChartData
+      summary: Chart data with technical indicators
+      tags: [Charts]
+      parameters:
+        - $ref: '#/components/parameters/PathSecurityId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [1d, 1w, 1m]
+            default: 1d
+        - name: indicators
+          in: query
+          description: Comma-separated technical indicator names (e.g. sma_50,rsi,macd)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Chart data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ChartData'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Fixed Income (F09)
+  # ---------------------------------------------------------------------------
+  /fixed-income/{securityId}:
+    get:
+      operationId: getFixedIncomeAnalysis
+      summary: Bond analysis (yield, duration, convexity)
+      tags: [FixedIncome]
+      parameters:
+        - $ref: '#/components/parameters/PathSecurityId'
+      responses:
+        '200':
+          description: Fixed income analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/FixedIncomeAnalysis'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /fixed-income/ladder:
+    get:
+      operationId: getBondLadder
+      summary: Bond ladder view
+      tags: [FixedIncome]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Bond ladder
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BondLadder'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Alerts (F10)
+  # ---------------------------------------------------------------------------
+  /alerts:
+    get:
+      operationId: listAlerts
+      summary: List all alerts
+      tags: [Alerts]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [active, triggered, dismissed, expired]
+          style: form
+          explode: true
+        - name: type
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [price_above, price_below, drift_threshold, staleness, dividend_announced, custom]
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+    post:
+      operationId: createAlert
+      summary: Create an alert
+      tags: [Alerts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertCreate'
+      responses:
+        '200':
+          description: Created alert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Alert'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /alerts/{id}:
+    put:
+      operationId: updateAlert
+      summary: Update an alert
+      tags: [Alerts]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertUpdate'
+      responses:
+        '200':
+          description: Updated alert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Alert'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: deleteAlert
+      summary: Delete an alert
+      tags: [Alerts]
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: Alert deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /alerts/rebalancing:
+    get:
+      operationId: getRebalancingSuggestions
+      summary: Current rebalancing suggestions with tax impact
+      tags: [Alerts]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Rebalancing suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RebalancingSuggestion'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # ESG (F11)
+  # ---------------------------------------------------------------------------
+  /esg/{securityId}:
+    get:
+      operationId: getEsgScores
+      summary: ESG scores for a security
+      tags: [ESG]
+      parameters:
+        - $ref: '#/components/parameters/PathSecurityId'
+      responses:
+        '200':
+          description: ESG score data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EsgScore'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /esg/portfolio:
+    get:
+      operationId: getPortfolioEsg
+      summary: Weighted ESG scores for the portfolio
+      tags: [ESG]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Portfolio ESG summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      weightedEnvironment:
+                        type: number
+                        nullable: true
+                      weightedSocial:
+                        type: number
+                        nullable: true
+                      weightedGovernance:
+                        type: number
+                        nullable: true
+                      weightedTotal:
+                        type: number
+                        nullable: true
+                      coveragePct:
+                        type: number
+                        description: Percentage of portfolio by value that has ESG data
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # Dividends
+  # ---------------------------------------------------------------------------
+  /dividends:
+    get:
+      operationId: listDividends
+      summary: List dividend events
+      tags: [Dividends]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QueryAccountId'
+        - $ref: '#/components/parameters/QuerySecurityId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - $ref: '#/components/parameters/QuerySortBy'
+        - $ref: '#/components/parameters/QuerySortOrder'
+      responses:
+        '200':
+          description: Paginated dividend list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DividendEvent'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /dividends/summary:
+    get:
+      operationId: getDividendSummary
+      summary: Dividend income summary by period
+      tags: [Dividends]
+      parameters:
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Dividend summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalGross:
+                        $ref: '#/components/schemas/Money'
+                      totalWithholdingTax:
+                        $ref: '#/components/schemas/Money'
+                      totalNet:
+                        $ref: '#/components/schemas/Money'
+                      bySecurity:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            securityId:
+                              type: integer
+                              format: int64
+                            ticker:
+                              type: string
+                            gross:
+                              $ref: '#/components/schemas/Money'
+                            net:
+                              $ref: '#/components/schemas/Money'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  # ---------------------------------------------------------------------------
+  # News
+  # ---------------------------------------------------------------------------
+  /news:
+    get:
+      operationId: listNews
+      summary: List news items
+      tags: [News]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QuerySecurityId'
+        - $ref: '#/components/parameters/QuerySearch'
+      responses:
+        '200':
+          description: Paginated news list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NewsItem'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ---------------------------------------------------------------------------
+  # Insider / Institutional
+  # ---------------------------------------------------------------------------
+  /insider-trades:
+    get:
+      operationId: listInsiderTrades
+      summary: List insider trades
+      tags: [InsiderInstitutional]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QuerySecurityId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+      responses:
+        '200':
+          description: Paginated insider trade list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InsiderTrade'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ---------------------------------------------------------------------------
+  # Recommendations
+  # ---------------------------------------------------------------------------
+  /recommendations:
+    get:
+      operationId: listRecommendations
+      summary: List analyst recommendations
+      tags: [Recommendations]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QuerySecurityId'
+      responses:
+        '200':
+          description: Paginated recommendation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Recommendation'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ---------------------------------------------------------------------------
+  # Nordnet Import
+  # ---------------------------------------------------------------------------
+  /nordnet/import:
+    post:
+      operationId: importNordnetTransactions
+      summary: Import transactions from Nordnet CSV export
+      tags: [NordnetImport]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [accountId, file]
+              properties:
+                accountId:
+                  type: integer
+                  format: int64
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NordnetImportResult'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ---------------------------------------------------------------------------
+  # Global Events
+  # ---------------------------------------------------------------------------
+  /global-events:
+    get:
+      operationId: listGlobalEvents
+      summary: List global economic and market events
+      tags: [GlobalEvents]
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - name: importance
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [low, medium, high, critical]
+          style: form
+          explode: true
+        - name: country
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated global events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GlobalEvent'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ---------------------------------------------------------------------------
+  # Reports (F12)
+  # ---------------------------------------------------------------------------
+  /reports/tax/{year}:
+    get:
+      operationId: getTaxReport
+      summary: Generate annual tax report
+      tags: [Reports]
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Annual tax report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AnnualTaxSummary'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /reports/performance:
+    get:
+      operationId: getPerformanceReport
+      summary: Performance attribution report
+      tags: [Reports]
+      parameters:
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+        - $ref: '#/components/parameters/QueryAccountId'
+      responses:
+        '200':
+          description: Performance report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PerformanceData'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+
+  /reports/transactions/export:
+    get:
+      operationId: exportTransactions
+      summary: Export transactions as CSV
+      tags: [Reports]
+      parameters:
+        - $ref: '#/components/parameters/QueryAccountId'
+        - $ref: '#/components/parameters/QueryFromDate'
+        - $ref: '#/components/parameters/QueryToDate'
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
