@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.accounts import router as accounts_router
+from app.api.v1.dividends import router as dividends_router
 from app.api.v1.health import router as health_router
 from app.api.v1.imports import router as imports_router
 from app.api.v1.pipelines import router as pipelines_router
@@ -19,6 +20,7 @@ import app.pipelines.ecb  # noqa: F401
 import app.pipelines.coingecko  # noqa: F401
 import app.pipelines.fred  # noqa: F401
 import app.pipelines.ecb_macro  # noqa: F401
+import app.pipelines.yahoo_dividends  # noqa: F401
 
 router = APIRouter()
 
@@ -34,3 +36,4 @@ router.include_router(charts_router, prefix="/charts", tags=["Charts"])
 router.include_router(macro_router, prefix="/macro", tags=["Macro"])
 router.include_router(transactions_router, prefix="/transactions", tags=["Transactions"])
 router.include_router(risk_router, prefix="/risk", tags=["Risk"])
+router.include_router(dividends_router, prefix="/dividends", tags=["Dividends"])

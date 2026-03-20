@@ -11,11 +11,47 @@ from sqlalchemy import (
     Index,
     Numeric,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+
+class DividendEvent(Base):
+    """Known dividend announcements for securities (from Yahoo Finance)."""
+    __tablename__ = "dividend_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    security_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("securities.id"), nullable=False
+    )
+    ex_date: Mapped[date] = mapped_column(Date, nullable=False)
+    payment_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    record_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    frequency: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="yahoo_finance"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=False
+    )
+
+    security = relationship("Security")
+
+    __table_args__ = (
+        UniqueConstraint("security_id", "ex_date", name="uq_dividend_events_security_ex_date"),
+        CheckConstraint("amount_cents > 0", name="chk_dividend_events_amount_positive"),
+        Index("idx_dividend_events_security_id", "security_id"),
+        Index("idx_dividend_events_ex_date", "ex_date"),
+        Index("idx_dividend_events_payment_date", "payment_date"),
+    )
 
 
 class Dividend(Base):

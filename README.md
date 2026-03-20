@@ -11,6 +11,7 @@ Personal Bloomberg-style terminal for investment tracking and analysis.
 - **Macro Dashboard** — Finland, Eurozone, and US macroeconomic indicators with yield curves
 - **Transactions** — filterable transaction log with type/account filters, search, pagination, and summary stats
 - **Risk Analysis** — portfolio volatility, Sharpe/Sortino ratios, max drawdown, VaR, correlation heatmap, stress tests, glidepath tracking
+- **Dividends** — upcoming dividend calendar, yield metrics (dividend yield, yield on cost), income projections, historical dividend events from Yahoo Finance
 - **Data Pipelines** — automated fetching from Yahoo Finance, ECB, CoinGecko, FRED
 
 ## Tech Stack
@@ -198,6 +199,7 @@ All API keys are stored in `.env` (never committed to git).
 | `coingecko_prices` | CoinGecko | Crypto prices (BTC, ETH) | Every 6 hours |
 | `fred_macro_indicators` | FRED | US + Eurozone + Finland macro data (30+ series) | Daily |
 | `ecb_macro_indicators` | ECB SDW | ECB rates, Euro yield curve, HICP inflation, unemployment | Daily (weekdays) |
+| `yahoo_dividends` | Yahoo Finance | Dividend events (ex-dates, amounts, frequency) for all stocks/ETFs | Daily |
 
 ### Manual Trigger
 
