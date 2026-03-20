@@ -71,18 +71,33 @@ async def upcoming_dividends(
     prices = await _get_latest_prices()
     fx_rates = await _get_fx_rates()
 
+    # Get TTM dividends per security for yield calculation
+    one_year_ago = date.today() - timedelta(days=365)
+    async with async_session() as session:
+        ttm_result = await session.execute(
+            select(
+                DividendEvent.security_id,
+                func.sum(DividendEvent.amount_cents).label("ttm_cents"),
+            )
+            .where(
+                DividendEvent.security_id.in_(list(holdings.keys())),
+                DividendEvent.ex_date >= one_year_ago,
+            )
+            .group_by(DividendEvent.security_id)
+        )
+        ttm_by_sec = {r.security_id: int(r.ttm_cents) for r in ttm_result.all()}
+
     data = []
     for event, sec in rows:
         qty = Decimal(str(holdings[sec.id]["qty"]))
         total_cents = int(event.amount_cents * qty)
 
-        # Current yield
+        # Current yield based on TTM dividends / current price
         price_data = prices.get(sec.id)
         current_yield = None
-        if price_data and price_data["close_cents"] > 0 and event.frequency:
-            freq_mult = {"quarterly": 4, "semi_annual": 2, "annual": 1, "monthly": 12}.get(event.frequency, 1)
-            annual_div = event.amount_cents * freq_mult
-            current_yield = round((annual_div / price_data["close_cents"]) * 100, 2)
+        ttm = ttm_by_sec.get(sec.id)
+        if price_data and price_data["close_cents"] > 0 and ttm:
+            current_yield = round((ttm / price_data["close_cents"]) * 100, 2)
 
         # Convert to EUR
         total_eur_cents = total_cents
@@ -171,31 +186,33 @@ async def yield_metrics():
     prices = await _get_latest_prices()
     fx_rates = await _get_fx_rates()
 
-    # Get latest dividend event per security to estimate annual dividend
+    one_year_ago = date.today() - timedelta(days=365)
+
     async with async_session() as session:
-        # Get most recent dividend event per security
-        subq = (
+        # Get trailing 12-month dividends per security (sum of per-share amounts)
+        result = await session.execute(
             select(
                 DividendEvent.security_id,
-                func.max(DividendEvent.ex_date).label("max_date"),
+                func.sum(DividendEvent.amount_cents).label("ttm_cents"),
+                func.count(DividendEvent.id).label("event_count"),
+                func.max(DividendEvent.frequency).label("frequency"),
             )
-            .where(DividendEvent.security_id.in_(sec_ids))
+            .where(
+                DividendEvent.security_id.in_(sec_ids),
+                DividendEvent.ex_date >= one_year_ago,
+            )
             .group_by(DividendEvent.security_id)
-            .subquery()
         )
-        result = await session.execute(
-            select(DividendEvent, Security)
-            .join(Security, DividendEvent.security_id == Security.id)
-            .join(
-                subq,
-                (DividendEvent.security_id == subq.c.security_id)
-                & (DividendEvent.ex_date == subq.c.max_date),
-            )
-        )
-        latest_events = {event.security_id: (event, sec) for event, sec in result.all()}
+        ttm_dividends = {
+            r.security_id: {
+                "ttm_cents": int(r.ttm_cents),
+                "event_count": r.event_count,
+                "frequency": r.frequency,
+            }
+            for r in result.all()
+        }
 
         # Get all events from last 12 months for monthly breakdown
-        one_year_ago = date.today() - timedelta(days=365)
         result = await session.execute(
             select(DividendEvent)
             .where(
@@ -264,21 +281,30 @@ async def yield_metrics():
         total_market_value_eur += market_value_eur
         total_cost_eur += cost_eur
 
-        # Annual dividend estimate
+        # Annual dividend estimate using trailing 12-month actual dividends
         annual_div_eur = 0
         div_yield = None
         yoc = None
+        frequency = None
 
-        if sid in latest_events:
-            event, _ = latest_events[sid]
-            freq_mult = {"quarterly": 4, "semi_annual": 2, "annual": 1, "monthly": 12}.get(event.frequency, 1)
-            annual_div_cents = int(event.amount_cents * freq_mult * float(qty))
+        if sid in ttm_dividends:
+            ttm = ttm_dividends[sid]
+            # TTM per-share dividend * quantity = total annual dividend
+            annual_div_cents = int(ttm["ttm_cents"] * float(qty))
+            frequency = ttm["frequency"]
 
-            # Convert to EUR
-            if event.currency == "EUR":
+            # Convert to EUR — need to know the dividend currency
+            # Find currency from recent events
+            div_currency = sec.currency
+            for ev in recent_events:
+                if ev.security_id == sid:
+                    div_currency = ev.currency
+                    break
+
+            if div_currency == "EUR":
                 annual_div_eur = annual_div_cents
             else:
-                fx = fx_rates.get(event.currency, Decimal("1"))
+                fx = fx_rates.get(div_currency, Decimal("1"))
                 annual_div_eur = int(annual_div_cents / float(fx))
 
             total_annual_div_eur += annual_div_eur
@@ -296,7 +322,7 @@ async def yield_metrics():
             "annualDividendEurCents": annual_div_eur,
             "dividendYield": div_yield,
             "yieldOnCost": yoc,
-            "frequency": latest_events[sid][0].frequency if sid in latest_events else None,
+            "frequency": frequency,
         })
 
     # Sort by annual dividend descending

@@ -19,12 +19,16 @@ logger = structlog.get_logger()
 
 
 def _guess_frequency(dates: list[date]) -> str | None:
-    """Guess dividend frequency from ex-dates."""
+    """Guess dividend frequency from ex-dates (sorted ascending)."""
     if len(dates) < 2:
         return "annual"
+    # Use recent dates only (last 5 years)
+    recent = [d for d in dates if d.year >= dates[-1].year - 5]
+    if len(recent) < 2:
+        return "annual"
     gaps = []
-    for i in range(1, min(len(dates), 6)):
-        gaps.append((dates[i] - dates[i - 1]).days)
+    for i in range(1, len(recent)):
+        gaps.append((recent[i] - recent[i - 1]).days)
     avg_gap = sum(gaps) / len(gaps)
     if avg_gap < 45:
         return "monthly"
@@ -110,10 +114,10 @@ class YahooDividends(PipelineAdapter):
                         "currency": currency,
                     })
 
-                # Add frequency info
-                freq = _guess_frequency(sorted(ex_dates, reverse=True))
+                # Determine frequency from date gaps and apply to all records for this security
+                freq = _guess_frequency(sorted(ex_dates))
                 for rec in raw_records:
-                    if rec["security_id"] == sec.id and "frequency" not in rec:
+                    if rec["security_id"] == sec.id:
                         rec["frequency"] = freq
 
             except Exception as e:
