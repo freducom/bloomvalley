@@ -1,0 +1,39 @@
+[project]
+name = "warren-cashett-backend"
+version = "0.1.0"
+description = "Warren Cashett Bloomberg terminal — backend API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg",
+    "alembic",
+    "redis[hiredis]",
+    "pydantic>=2.0",
+    "pydantic-settings",
+    "pandas",
+    "numpy",
+    "scipy",
+    "yfinance",
+    "fredapi",
+    "httpx",
+    "structlog",
+    "apscheduler>=3.10",
+    "beautifulsoup4",
+    "lxml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
