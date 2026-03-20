@@ -250,31 +250,45 @@ function UpcomingTab({
 }
 
 function YieldTab({ data }: { data: YieldMetrics }) {
-  const maxBar = Math.max(...data.monthlyBreakdown.map((m) => m.amountEurCents), 1);
+  // Build full 12-month grid (fill missing months with 0)
+  const monthMap = new Map(data.monthlyBreakdown.map((m) => [m.month, m.amountEurCents]));
+  const months: { month: string; label: string; amount: number }[] = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("en-US", { month: "short" });
+    months.push({ month: key, label, amount: monthMap.get(key) || 0 });
+  }
+  const maxBar = Math.max(...months.map((m) => m.amount), 1);
 
   return (
     <div className="space-y-6">
       {/* Monthly income chart */}
-      {data.monthlyBreakdown.length > 0 && (
-        <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
-          <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">
-            Monthly Dividend Income (trailing 12m)
-          </h3>
-          <div className="flex items-end gap-1 h-40">
-            {data.monthlyBreakdown.map((m) => (
-              <div key={m.month} className="flex-1 flex flex-col items-center">
+      <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
+        <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">
+          Monthly Dividend Income (trailing 12m)
+        </h3>
+        <div className="flex items-end gap-2 h-48">
+          {months.map((m) => {
+            const pct = (m.amount / maxBar) * 100;
+            return (
+              <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full">
+                {m.amount > 0 && (
+                  <div className="text-[10px] font-mono text-terminal-text-secondary mb-1">
+                    {(m.amount / 100).toFixed(0)}
+                  </div>
+                )}
                 <div
-                  className="w-full bg-green-500/60 rounded-t min-h-[2px]"
-                  style={{ height: `${(m.amountEurCents / maxBar) * 100}%` }}
+                  className={`w-full rounded-t ${m.amount > 0 ? "bg-green-500/70" : "bg-terminal-bg-tertiary"}`}
+                  style={{ height: `${Math.max(pct, m.amount > 0 ? 3 : 1)}%` }}
                 />
-                <div className="text-[10px] text-terminal-text-secondary mt-1 -rotate-45 origin-top-left">
-                  {m.month.slice(5)}
-                </div>
+                <div className="text-[10px] text-terminal-text-secondary mt-2">{m.label}</div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* Holdings yield table */}
       <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
