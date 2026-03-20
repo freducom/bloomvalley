@@ -140,6 +140,16 @@ class GoogleNewsPipeline(PipelineAdapter):
             headers={"User-Agent": "Mozilla/5.0 (compatible; WarrenCashett/1.0)"},
             follow_redirects=True,
         ) as client:
+            # Global news first (so they don't get rate-limited after security fetches)
+            for query in GLOBAL_QUERIES:
+                items = await _fetch_rss(query, client)
+                logger.info("google_news_global_query", query=query, items=len(items))
+                for item in items:
+                    item["security_ids"] = []
+                    item["is_global"] = True
+                raw.extend(items)
+                await asyncio.sleep(1.0)
+
             # Per-security news
             for sid, sec in securities.items():
                 query = f"{sec.ticker} {sec.name} stock"
@@ -147,15 +157,6 @@ class GoogleNewsPipeline(PipelineAdapter):
                 for item in items:
                     item["security_ids"] = [sid]
                     item["is_global"] = False
-                raw.extend(items)
-                await asyncio.sleep(0.5)  # Rate limiting
-
-            # Global news
-            for query in GLOBAL_QUERIES:
-                items = await _fetch_rss(query, client)
-                for item in items:
-                    item["security_ids"] = []
-                    item["is_global"] = True
                 raw.extend(items)
                 await asyncio.sleep(0.5)
 
