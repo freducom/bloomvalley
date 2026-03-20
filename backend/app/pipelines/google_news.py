@@ -55,7 +55,8 @@ def _clean_html(text: str) -> str:
 
 async def _fetch_rss(query: str, client: httpx.AsyncClient) -> list[dict]:
     """Fetch and parse a Google News RSS feed for a query."""
-    url = f"https://news.google.com/rss/search?q={query}&hl=en&gl=US&ceid=US:en"
+    encoded_query = query.replace(" ", "+")
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en&gl=US&ceid=US:en"
     try:
         resp = await client.get(url, timeout=15)
         resp.raise_for_status()
@@ -135,7 +136,10 @@ class GoogleNewsPipeline(PipelineAdapter):
             securities = {s.id: s for s in result.scalars().all()}
 
         raw: list[dict[str, Any]] = []
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": "Mozilla/5.0 (compatible; WarrenCashett/1.0)"},
+            follow_redirects=True,
+        ) as client:
             # Per-security news
             for sid, sec in securities.items():
                 query = f"{sec.ticker} {sec.name} stock"

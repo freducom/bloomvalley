@@ -32,7 +32,7 @@ pipeline_runs_status_enum = ENUM(
 
 pipeline_runs_source_enum = ENUM(
     "yahoo_finance", "alpha_vantage", "fred", "ecb",
-    "coingecko", "justetf", "morningstar", "manual",
+    "coingecko", "justetf", "morningstar", "manual", "google_news",
     name="pipeline_runs_source_enum",
     create_type=False,
 )
