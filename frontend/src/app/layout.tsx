@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+import { Providers } from "@/components/providers";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { StatusBar } from "@/components/layout/StatusBar";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Warren Cashett",
+  description: "Personal Bloomberg Terminal",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="h-full">
+      <body className="h-full overflow-hidden bg-terminal-bg-primary text-terminal-text-primary">
+        <Providers>
+          <div className="flex h-full">
+            <Sidebar />
+            <div className="flex flex-col flex-1 min-w-0">
+              <main className="flex-1 overflow-y-auto p-6">{children}</main>
+              <StatusBar />
+            </div>
+          </div>
+        </Providers>
+      </body>
+    </html>
+  );
+}
