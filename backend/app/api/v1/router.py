@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.accounts import router as accounts_router
 from app.api.v1.dividends import router as dividends_router
 from app.api.v1.health import router as health_router
+from app.api.v1.insider import router as insider_router
 from app.api.v1.imports import router as imports_router
 from app.api.v1.pipelines import router as pipelines_router
 from app.api.v1.portfolio import router as portfolio_router
@@ -44,3 +45,4 @@ router.include_router(dividends_router, prefix="/dividends", tags=["Dividends"])
 router.include_router(research_router, prefix="/research", tags=["Research"])
 router.include_router(news_router, prefix="/news", tags=["News"])
 router.include_router(tax_router, prefix="/tax", tags=["Tax"])
+router.include_router(insider_router, prefix="/insiders", tags=["Insiders"])

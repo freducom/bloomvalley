@@ -14,6 +14,7 @@ Personal Bloomberg-style terminal for investment tracking and analysis.
 - **Dividends** — upcoming dividend calendar, yield metrics (dividend yield, yield on cost), income projections, historical dividend events from Yahoo Finance
 - **Research** — per-security research notes with bull/bear/base cases, intrinsic value, margin of safety, moat ratings, tagging, full-text search
 - **Tax Analysis** — Finnish tax law (30/34% brackets), tax lot tracking with FIFO, deemed cost comparison (hankintameno-olettama), osakesäästötili tracker, loss harvesting candidates
+- **Insider Tracking** — insider trades (FI/SE/US), signal detection (cluster buying, CEO/CFO buys), congress trades (STOCK Act), share buyback programs
 - **News Feed** — aggregated financial news from Google News RSS, per-security linking, impact tagging, bookmarks, sentiment summary
 - **Data Pipelines** — automated fetching from Yahoo Finance, ECB, CoinGecko, FRED, Google News
 
