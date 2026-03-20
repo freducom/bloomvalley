@@ -12,6 +12,7 @@ Personal Bloomberg-style terminal for investment tracking and analysis.
 - **Transactions** — filterable transaction log with type/account filters, search, pagination, and summary stats
 - **Risk Analysis** — portfolio volatility, Sharpe/Sortino ratios, max drawdown, VaR, correlation heatmap, stress tests, glidepath tracking
 - **Dividends** — upcoming dividend calendar, yield metrics (dividend yield, yield on cost), income projections, historical dividend events from Yahoo Finance
+- **Research** — per-security research notes with bull/bear/base cases, intrinsic value, margin of safety, moat ratings, tagging, full-text search
 - **Data Pipelines** — automated fetching from Yahoo Finance, ECB, CoinGecko, FRED
 
 ## Tech Stack
@@ -313,6 +314,9 @@ warren-cashett/
 │   │   │   ├── watchlists.py
 │   │   │   ├── charts.py   # OHLC + technical indicators
 │   │   │   ├── macro.py    # Macro dashboard API
+│   │   │   ├── risk.py     # Risk analysis + stress tests
+│   │   │   ├── dividends.py # Dividend calendar + yield metrics
+│   │   │   ├── research.py # Research notes CRUD
 │   │   │   └── ...
 │   │   ├── pipelines/
 │   │   │   ├── runner.py   # Pipeline executor with retry

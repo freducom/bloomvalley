@@ -12,6 +12,7 @@ from app.api.v1.macro import router as macro_router
 from app.api.v1.transactions import router as transactions_router
 from app.api.v1.risk import router as risk_router
 from app.api.v1.securities import router as securities_router
+from app.api.v1.research import router as research_router
 from app.api.v1.watchlists import router as watchlists_router
 
 # Import pipelines to trigger registration
@@ -37,3 +38,4 @@ router.include_router(macro_router, prefix="/macro", tags=["Macro"])
 router.include_router(transactions_router, prefix="/transactions", tags=["Transactions"])
 router.include_router(risk_router, prefix="/risk", tags=["Risk"])
 router.include_router(dividends_router, prefix="/dividends", tags=["Dividends"])
+router.include_router(research_router, prefix="/research", tags=["Research"])
