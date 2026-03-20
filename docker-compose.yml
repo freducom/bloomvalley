@@ -1,0 +1,94 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-warren}
+      POSTGRES_USER: ${POSTGRES_USER:-warren}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-warren}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-warren} -d ${POSTGRES_DB:-warren}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    environment:
+      - TZ=Europe/Helsinki
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    restart: unless-stopped
+
+  # Cron service for scheduled pipeline runs
+  cron:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Helsinki
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "Installing cron schedules..."
+        cat > /etc/crontabs/root << 'CRON'
+        # Yahoo Finance prices — weekdays at 23:00 Helsinki time (after markets close)
+        0 23 * * 1-5 /usr/local/bin/python -c "import httpx; httpx.post('http://backend:8000/api/v1/pipelines/yahoo_daily_prices/run')" >> /proc/1/fd/1 2>&1
+        # ECB FX rates — weekdays at 17:00 Helsinki time (ECB publishes ~16:00 CET)
+        0 17 * * 1-5 /usr/local/bin/python -c "import httpx; httpx.post('http://backend:8000/api/v1/pipelines/ecb_fx_rates/run')" >> /proc/1/fd/1 2>&1
+        # CoinGecko crypto prices — every 6 hours
+        0 */6 * * * /usr/local/bin/python -c "import httpx; httpx.post('http://backend:8000/api/v1/pipelines/coingecko_prices/run')" >> /proc/1/fd/1 2>&1
+        # FRED macro indicators — daily at 15:00 Helsinki time (US data publishes morning ET)
+        0 15 * * * /usr/local/bin/python -c "import httpx; httpx.post('http://backend:8000/api/v1/pipelines/fred_macro_indicators/run')" >> /proc/1/fd/1 2>&1
+        # ECB macro indicators — weekdays at 12:00 Helsinki time
+        0 12 * * 1-5 /usr/local/bin/python -c "import httpx; httpx.post('http://backend:8000/api/v1/pipelines/ecb_macro_indicators/run')" >> /proc/1/fd/1 2>&1
+        CRON
+        crond -f -l 2
+    restart: unless-stopped

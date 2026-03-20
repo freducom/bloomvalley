@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+.eggs/
+*.whl
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+
+# Docker
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment — API keys and secrets
+.env
+backend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Personal data — Nordnet exports, portfolio files
+*.csv
+*.tsv
+imports/
+exports/
+data/personal/
+
+# Docker persistent data (postgres, redis)
+data/
+
+# Database dumps
+*.sql
+*.dump
+
+# Claude memory (project-specific, not relevant to repo)
+memory/
