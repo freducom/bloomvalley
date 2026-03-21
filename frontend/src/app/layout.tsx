@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
+import { CommandPalette } from "@/components/layout/CommandPalette";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default function RootLayout({
               <StatusBar />
             </div>
           </div>
+          <CommandPalette />
         </Providers>
       </body>
     </html>

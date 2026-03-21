@@ -25,6 +25,7 @@ import {
   Activity,
   ChevronLeft,
   ChevronRight,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 
@@ -223,6 +224,29 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Search button */}
+      <button
+        onClick={() => {
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
+        }}
+        className="
+          flex items-center gap-2.5 h-10 mx-1 px-2.5 rounded-sm
+          text-terminal-text-secondary hover:text-terminal-text-primary
+          hover:bg-terminal-bg-hover transition-colors duration-150
+        "
+        aria-label="Search (Cmd+K)"
+      >
+        <Search size={18} className={collapsed ? "mx-auto" : ""} />
+        {!collapsed && (
+          <>
+            <span className="text-sm flex-1">Search</span>
+            <kbd className="text-[10px] text-terminal-text-tertiary bg-terminal-bg-tertiary px-1.5 py-0.5 rounded font-mono">
+              {"\u2318"}K
+            </kbd>
+          </>
+        )}
+      </button>
 
       {/* Toggle button */}
       <button
