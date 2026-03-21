@@ -5,7 +5,7 @@ Personal Bloomberg-style terminal with AI-powered investment advisory.
 ## Project Overview
 
 Two AI teams collaborating:
-- **Investment Team** (10 roles): Portfolio Manager, Research Analyst, Risk Manager, Quant, Macro Strategist, Fixed Income Analyst, Tax Strategist, ESG Analyst, Technical Analyst, Compliance Officer
+- **Investment Team** (9 roles): Portfolio Manager, Research Analyst, Risk Manager, Quant, Macro Strategist, Fixed Income Analyst, Tax Strategist, Technical Analyst, Compliance Officer
 - **Development Team** (5 roles): Product Owner, Architect, DBA, Frontend Developer, Backend Developer
 
 The Investment Team defines strategy and analysis needs. The Development Team builds the terminal that operationalizes it.
@@ -56,3 +56,5 @@ See `AGENTS.md` for full team definitions, workflows, data sources, glidepath sc
 - No auth/multi-tenancy — single-user personal tool
 - Respect all API rate limits, implement backoff and caching
 - **Always update `README.md`** when adding/changing: new features, new pipelines, new API keys or config, new services in docker-compose, changed project structure, new dependencies, or setup/deployment steps. The README is the single source of truth for installation and usage.
+- **Keep `.claude/agents/` in sync with `AGENTS.md`** — when investment team roles, responsibilities, data sources, or workflows change in AGENTS.md, update the corresponding agent files in `.claude/agents/`. When agent files are modified, reflect changes back to AGENTS.md. The two must always be consistent.
+- **Always refresh data before analyst agents run** — before any investment team agent (portfolio-manager, research-analyst, risk-manager, quant-analyst, macro-strategist, fixed-income-analyst, tax-strategist, technical-analyst, compliance-officer) starts analyzing, trigger ALL data pipelines first to ensure the latest data is available: `POST /api/v1/pipelines/{name}/run` for yahoo_daily_prices, ecb_fx_rates, coingecko_prices, fred_macro_indicators, ecb_macro_indicators, yahoo_dividends, google_news, openinsider, nasdaq_nordic_insider, fi_se_insider. Wait for pipelines to complete before starting analysis.

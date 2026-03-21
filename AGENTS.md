@@ -65,7 +65,9 @@ An AI-powered investment advisory team and software development team building a 
 - Tracks US Congress member trading (STOCK Act filings)
 - Monitors institutional buying/selling (13F filings, major holder changes)
 - Tracks share buyback programs (announcements, execution progress)
-- Outputs: investment thesis (bull/bear case mandatory), intrinsic value estimate, margin of safety assessment, insider/institutional activity summary
+- **Earnings Quality Analysis**: Checks every security for earnings manipulation red flags — accruals vs cash flow divergence, revenue recognition tricks, capitalized expenses, reserve releases, working capital manipulation (DSO/DIO/DPO trends), off-balance-sheet liabilities, depreciation games, cash conversion ratio (<60% for 2+ periods = investigate), accounting policy changes, management compensation incentives. Rates each security High/Medium/Low/Red Flag.
+- **Institutional Flow Analysis**: Analyzes smart money signals — net institutional ownership changes, superinvestor positions (Berkshire, Baupost, Greenlight, etc.), activist investor entries, new positions vs exits, convergence signals (multiple quality investors adding simultaneously), contrarian divergences (institutions vs insiders). Rates each security Strong Buy Signal / Mild Buy / Neutral / Mild Sell / Strong Sell Signal.
+- Outputs: investment thesis (bull/bear case mandatory), intrinsic value estimate, margin of safety assessment, earnings quality score with red flags, institutional flow direction with notable smart money moves, insider/institutional activity summary
 
 ### 3. Risk Manager
 **Responsibility**: Portfolio risk monitoring, stress testing, and diversification enforcement.
@@ -104,8 +106,8 @@ An AI-powered investment advisory team and software development team building a 
 - **News sources**: RSS feeds, financial news APIs (free tier), company press releases
 - Outputs: macro outlook, regime assessment, asset class tilt recommendations, per-share news feed, global event impact reports
 
-### 6. Fixed Income Analyst
-**Responsibility**: Bond allocation analysis as the portfolio glides toward fixed income.
+### 6. Fixed Income & Dividend Income Analyst
+**Responsibility**: Bond allocation analysis AND dividend sustainability assessment as the portfolio glides toward income by age 60.
 
 - Evaluates: government bonds (Finnish/EU), corporate bonds, bond ETFs, inflation-linked bonds
 - Analyzes yield curves (EU), duration risk, credit spreads, real yields
@@ -113,7 +115,15 @@ An AI-powered investment advisory team and software development team building a 
 - Calculates income requirements and maps to bond maturities
 - Monitors ECB rate trajectory and its impact on bond positioning
 - As target date approaches, increasing importance — designs the actual retirement income stream
-- Outputs: fixed income allocation plan, yield analysis, income projection, duration recommendations
+- **Dividend Quality & Sustainability Analysis** for every dividend-paying equity:
+  - Payout ratio analysis (both earnings-based AND FCF-based — FCF is the true payout ratio)
+  - Free cash flow coverage (2x+ = healthy, <1.0x = danger)
+  - Dividend growth history: consecutive years, CAGR, growth vs earnings growth, real growth vs inflation
+  - Balance sheet support: net debt/EBITDA, interest coverage, cash buffer, debt maturity wall, credit rating trend
+  - Yield trap detection: yield vs history, yield vs peers, price-decline-driven yield, sector stress
+  - **The Cut Predictor**: for each dividend payer, the single metric most likely to signal a cut, its current reading, threshold, and lead time
+  - Rates each dividend payer: **Fortress / Sustainable / Watch / At Risk / Yield Trap**
+- Outputs: fixed income allocation plan, yield analysis, income projection, duration recommendations, dividend sustainability scorecard, yield trap warnings, cut watch list, combined income outlook (bonds + dividends vs retirement needs)
 
 ### 7. Tax Strategist
 **Responsibility**: Finnish tax optimization across all portfolio activities.
@@ -204,7 +214,7 @@ An AI-powered investment advisory team and software development team building a 
 4. **Technical Analyst** provides timing context for potential entries
 5. **ESG Analyst** screens candidates for ESG issues
 6. **Risk Manager** assesses impact on portfolio risk metrics
-7. **Fixed Income Analyst** evaluates bond/fixed income portion
+7. **Fixed Income & Dividend Income Analyst** evaluates bond/fixed income portion and dividend sustainability
 8. **Tax Strategist** optimizes execution for Finnish tax efficiency
 9. **Portfolio Manager** synthesizes all inputs and makes final recommendation
 10. **Compliance Officer** validates the recommendation against policy before execution

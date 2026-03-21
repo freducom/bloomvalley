@@ -57,5 +57,7 @@ data/
 *.sql
 *.dump
 
-# Claude memory (project-specific, not relevant to repo)
+# Claude Code (keep .claude/agents/ tracked, exclude user-specific files)
+.claude/settings*.json
+.claude/projects/
 memory/
