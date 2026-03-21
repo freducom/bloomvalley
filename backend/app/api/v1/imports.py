@@ -84,6 +84,28 @@ def _match_security(
     return None
 
 
+def _guess_asset_class(name: str) -> str:
+    """Guess asset class from the security name."""
+    n = name.lower()
+    etf_keywords = ["etf", "ucits", "ishares", "xtrackers", "vanguard", "amundi",
+                     "spdr", "lyxor", "wisdomtree", "invesco"]
+    fund_keywords = ["rahasto", "fond", "fund", "yrityskorko", "korkorahasto"]
+    if any(k in n for k in etf_keywords):
+        return "etf"
+    if any(k in n for k in fund_keywords):
+        return "etf"  # treat funds as etf for simplicity
+    return "stock"
+
+
+def _generate_ticker(name: str) -> str:
+    """Generate a placeholder ticker from the name (e.g. 'Kesko B' -> 'KESKO-B')."""
+    # Take first meaningful words, uppercase, join with dash
+    words = name.split()[:3]
+    ticker = "-".join(w.upper().rstrip(".,") for w in words if len(w) > 1)
+    # Limit length
+    return ticker[:20] if ticker else "UNKNOWN"
+
+
 def _build_name_index(securities: list) -> dict[str, list]:
     """Build a normalized-name -> [Security] index."""
     index: dict[str, list] = {}
@@ -231,6 +253,27 @@ async def parse_import(req: ParseRequest):
                 match = _match_security(name, currency, all_securities, name_index)
                 if match:
                     security, match_status = match
+
+            # Auto-create unknown securities so imports always succeed
+            if not security and name:
+                asset_class = _guess_asset_class(name)
+                new_sec = Security(
+                    ticker=_generate_ticker(name),
+                    name=name,
+                    asset_class=asset_class,
+                    currency=currency or "EUR",
+                )
+                session.add(new_sec)
+                await session.flush()  # get the id
+                security = new_sec
+                match_status = "auto_created"
+                # Update indexes for subsequent rows
+                all_securities.append(new_sec)
+                norm = _normalize_name(name)
+                name_index.setdefault(norm, []).append(new_sec)
+                ticker_map[new_sec.ticker.upper()] = new_sec
+                logger.info("security_auto_created", name=name, ticker=new_sec.ticker,
+                            currency=currency, asset_class=asset_class)
 
             # Determine action based on reconciliation
             action = "transfer_in"

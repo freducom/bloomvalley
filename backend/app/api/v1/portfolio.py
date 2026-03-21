@@ -295,9 +295,13 @@ async def get_portfolio_summary(
     )
 
     # Allocation by asset class
+    # Fixed income ETFs/funds (sector = "Fixed Income") count as fixed_income, not etf
     allocation: dict[str, int] = {}
     for h in holdings:
         ac = h["assetClass"] or "other"
+        sector = (h.get("sector") or "").lower()
+        if ac == "etf" and "fixed income" in sector:
+            ac = "fixed_income"
         allocation[ac] = allocation.get(ac, 0) + (h["marketValueEurCents"] or 0)
 
     # Account breakdown with cash balances

@@ -103,6 +103,22 @@ async def list_transactions(
     }
 
 
+@router.delete("/{transaction_id}")
+async def delete_transaction(transaction_id: int):
+    """Delete a single transaction."""
+    async with async_session() as session:
+        tx = await session.get(Transaction, transaction_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        await session.delete(tx)
+        await session.commit()
+
+    return {
+        "data": {"id": transaction_id, "deleted": True},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
 @router.get("/summary")
 async def transaction_summary():
     """Aggregate transaction stats."""

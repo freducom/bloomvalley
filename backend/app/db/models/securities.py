@@ -63,9 +63,11 @@ class Security(Base):
     )
     watchlist_items = relationship("WatchlistItem", back_populates="security")
     research_notes = relationship("ResearchNote", back_populates="security")
-    esg_scores = relationship("EsgScore", back_populates="security")
     holdings_snapshots = relationship("HoldingsSnapshot", back_populates="security")
     alerts = relationship("Alert", back_populates="security")
+    bond_detail = relationship("Bond", back_populates="security", uselist=False)
+    fundamentals = relationship("SecurityFundamentals", back_populates="security", uselist=False)
+    earnings_reports = relationship("EarningsReport", back_populates="security")
 
     __table_args__ = (
         CheckConstraint(

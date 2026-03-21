@@ -18,7 +18,7 @@ router = APIRouter()
 
 
 class NoteCreate(BaseModel):
-    securityId: int
+    securityId: int | None = None
     title: str
     thesis: str | None = None
     bullCase: str | None = None
@@ -53,10 +53,10 @@ def _note_to_dict(note: ResearchNote, sec: Security, price_cents: int | None = N
     return {
         "id": note.id,
         "securityId": note.security_id,
-        "ticker": sec.ticker,
-        "securityName": sec.name,
-        "sector": sec.sector,
-        "assetClass": sec.asset_class,
+        "ticker": sec.ticker if sec else None,
+        "securityName": sec.name if sec else None,
+        "sector": sec.sector if sec else None,
+        "assetClass": sec.asset_class if sec else None,
         "title": note.title,
         "thesis": note.thesis,
         "bullCase": note.bull_case,
@@ -152,9 +152,11 @@ async def get_note(note_id: int):
 async def create_note(body: NoteCreate):
     """Create a new research note."""
     async with async_session() as session:
-        sec = await session.get(Security, body.securityId)
-        if not sec:
-            raise HTTPException(404, "Security not found")
+        sec = None
+        if body.securityId is not None:
+            sec = await session.get(Security, body.securityId)
+            if not sec:
+                raise HTTPException(404, "Security not found")
 
         note = ResearchNote(
             security_id=body.securityId,
@@ -164,7 +166,7 @@ async def create_note(body: NoteCreate):
             bear_case=body.bearCase,
             base_case=body.baseCase,
             intrinsic_value_cents=body.intrinsicValueCents,
-            intrinsic_value_currency=body.intrinsicValueCurrency or sec.currency,
+            intrinsic_value_currency=body.intrinsicValueCurrency or (sec.currency if sec else None),
             margin_of_safety_pct=body.marginOfSafetyPct,
             moat_rating=body.moatRating,
             tags=body.tags,
@@ -174,7 +176,7 @@ async def create_note(body: NoteCreate):
         await session.refresh(note)
 
     prices = await _get_latest_prices()
-    pc = prices.get(sec.id, {}).get("close_cents")
+    pc = prices.get(sec.id, {}).get("close_cents") if sec else None
     return {"data": _note_to_dict(note, sec, pc), "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
 
 

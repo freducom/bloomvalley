@@ -22,8 +22,8 @@ class ResearchNote(Base):
     __tablename__ = "research_notes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    security_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("securities.id"), nullable=False
+    security_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("securities.id"), nullable=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     thesis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
