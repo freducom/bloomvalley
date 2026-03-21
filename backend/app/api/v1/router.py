@@ -2,9 +2,13 @@ from fastapi import APIRouter
 
 from app.api.v1.accounts import router as accounts_router
 from app.api.v1.alerts import router as alerts_router
+from app.api.v1.backtest import router as backtest_router
+from app.api.v1.factors import router as factors_router
 from app.api.v1.dividends import router as dividends_router
 from app.api.v1.fixed_income import router as fixed_income_router
 from app.api.v1.fundamentals import router as fundamentals_router
+from app.api.v1.optimization import router as optimization_router
+from app.api.v1.projections import router as projections_router
 from app.api.v1.health import router as health_router
 from app.api.v1.insider import router as insider_router
 from app.api.v1.imports import router as imports_router
@@ -39,6 +43,7 @@ import app.pipelines.sec_edgar  # noqa: F401
 import app.pipelines.quiver_congress  # noqa: F401
 import app.pipelines.gdelt  # noqa: F401
 import app.pipelines.morningstar  # noqa: F401
+import app.pipelines.french_factors  # noqa: F401
 
 router = APIRouter()
 
@@ -63,3 +68,7 @@ router.include_router(recommendations_router, prefix="/recommendations", tags=["
 router.include_router(alerts_router, prefix="/alerts", tags=["Alerts"])
 router.include_router(fixed_income_router, prefix="/fixed-income", tags=["Fixed Income"])
 router.include_router(fundamentals_router, prefix="/fundamentals", tags=["Fundamentals"])
+router.include_router(projections_router, prefix="/projections", tags=["Projections"])
+router.include_router(factors_router, prefix="/factors", tags=["Factors"])
+router.include_router(optimization_router, prefix="/optimization", tags=["Optimization"])
+router.include_router(backtest_router, prefix="/backtest", tags=["Backtest"])

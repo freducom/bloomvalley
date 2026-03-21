@@ -93,6 +93,11 @@ def main() -> None:
                       day_of_week="sun", hour=11, minute=0,
                       id="morningstar_ratings")
 
+    # Kenneth French factor data — weekly on Sunday at 12:00
+    scheduler.add_job(trigger, "cron", args=["french_factors"],
+                      day_of_week="sun", hour=12, minute=0,
+                      id="french_factors")
+
     # GDELT global events — every 6 hours
     scheduler.add_job(trigger, "interval", args=["gdelt_events"],
                       hours=6, id="gdelt_events")
