@@ -7,6 +7,7 @@ from app.api.v1.factors import router as factors_router
 from app.api.v1.dividends import router as dividends_router
 from app.api.v1.fixed_income import router as fixed_income_router
 from app.api.v1.fundamentals import router as fundamentals_router
+from app.api.v1.global_events import router as global_events_router
 from app.api.v1.optimization import router as optimization_router
 from app.api.v1.projections import router as projections_router
 from app.api.v1.health import router as health_router
@@ -78,3 +79,4 @@ router.include_router(backtest_router, prefix="/backtest", tags=["Backtest"])
 router.include_router(reports_router, prefix="/reports", tags=["Reports"])
 router.include_router(technical_router, prefix="/technical", tags=["Technical Analysis"])
 router.include_router(screener_router, prefix="/screener", tags=["Screener"])
+router.include_router(global_events_router, prefix="/global-events", tags=["Global Events"])

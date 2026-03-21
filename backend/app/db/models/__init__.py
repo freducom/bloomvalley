@@ -16,4 +16,5 @@ from app.db.models.research_notes import ResearchNote  # noqa: F401
 from app.db.models.securities import Security  # noqa: F401
 from app.db.models.tax_lots import TaxLot  # noqa: F401
 from app.db.models.transactions import Transaction  # noqa: F401
+from app.db.models.global_events import GlobalEvent, EventSectorImpact  # noqa: F401
 from app.db.models.watchlists import Watchlist, WatchlistItem  # noqa: F401

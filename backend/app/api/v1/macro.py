@@ -350,3 +350,326 @@ async def yield_curve(
         },
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
+
+
+# ---------------------------------------------------------------------------
+# Macro Regime Assessment (F07)
+# ---------------------------------------------------------------------------
+
+# Maps regime signal names to numeric scores
+_REGIME_SCORES: dict[str, float] = {
+    "expansion": 1.0,
+    "recovery": 0.5,
+    "neutral": 0.0,
+    "slowdown": -0.5,
+    "recession": -1.0,
+}
+
+# Static asset-class implications per regime
+_ASSET_IMPLICATIONS: dict[str, dict[str, str]] = {
+    "expansion": {
+        "equities": "Overweight — expansionary conditions favor risk assets",
+        "fixedIncome": "Underweight — rising rates likely",
+        "crypto": "Neutral — follow risk sentiment",
+        "cash": "Underweight — opportunity cost high",
+    },
+    "recovery": {
+        "equities": "Overweight — early cycle recovery favors equities",
+        "fixedIncome": "Neutral — rates stabilizing",
+        "crypto": "Neutral — improving sentiment",
+        "cash": "Underweight — deploy into risk assets",
+    },
+    "slowdown": {
+        "equities": "Neutral — reduce cyclical exposure, favor defensives",
+        "fixedIncome": "Overweight — flight to quality likely",
+        "crypto": "Underweight — risk-off environment",
+        "cash": "Neutral — preserve optionality",
+    },
+    "recession": {
+        "equities": "Underweight — earnings contraction expected",
+        "fixedIncome": "Overweight — rate cuts and flight to safety",
+        "crypto": "Underweight — risk assets under pressure",
+        "cash": "Overweight — capital preservation priority",
+    },
+}
+
+# Indicator codes used by the regime model (DB codes)
+_REGIME_INDICATORS = {
+    "pmi": "EZ_PMI_COMPOSITE",
+    "treasury_10y": "DGS10",
+    "treasury_2y": "DGS2",
+    "hy_oas": "BAMLH0A0HYM2",
+    "unemployment": "EZ_UNEMP",
+    "hicp": "EZ_HICP",
+}
+
+
+async def _fetch_indicator_history(
+    session, code: str, months: int = 6,
+) -> list[tuple[date, float]]:
+    """Fetch recent data points for an indicator, ordered by date ascending."""
+    from_date = date.today() - timedelta(days=months * 31)
+    result = await session.execute(
+        select(MacroIndicator.date, MacroIndicator.value)
+        .where(
+            MacroIndicator.indicator_code == code,
+            MacroIndicator.date >= from_date,
+        )
+        .order_by(MacroIndicator.date)
+    )
+    return [(r[0], float(r[1])) for r in result.all()]
+
+
+def _latest_and_3m_avg(
+    history: list[tuple[date, float]],
+) -> tuple[float | None, float | None]:
+    """Return (latest_value, 3-month average) from a history list."""
+    if not history:
+        return None, None
+    latest = history[-1][1]
+    cutoff = date.today() - timedelta(days=90)
+    three_month = [v for d, v in history if d >= cutoff]
+    avg = sum(three_month) / len(three_month) if three_month else None
+    return latest, avg
+
+
+def _classify_pmi(latest: float, avg_3m: float) -> tuple[str, str]:
+    """PMI regime signal and detail text."""
+    rising = latest > avg_3m
+    if latest > 50:
+        if rising:
+            return "expansion", f"Above 50 ({latest:.1f}) and rising"
+        return "slowdown", f"Above 50 ({latest:.1f}) but falling"
+    else:
+        if rising:
+            return "recovery", f"Below 50 ({latest:.1f}) but rising"
+        return "recession", f"Below 50 ({latest:.1f}) and falling"
+
+
+def _classify_yield_curve(spread_bps: float) -> tuple[str, str]:
+    """Yield curve spread signal. spread_bps is in basis points."""
+    if spread_bps < 0:
+        return "recession", f"Inverted ({spread_bps:.0f}bps)"
+    if spread_bps <= 50:
+        return "slowdown", f"Flat ({spread_bps:.0f}bps)"
+    if spread_bps <= 150:
+        return "neutral", f"Normal slope ({spread_bps:.0f}bps)"
+    return "expansion", f"Steep ({spread_bps:.0f}bps)"
+
+
+def _classify_credit(latest: float, avg_3m: float | None) -> tuple[str, str]:
+    """Credit spread signal. latest is OAS in bps (stored as percentage, multiply by 100)."""
+    # BAMLH0A0HYM2 is stored in percentage points (e.g. 3.5 = 350bps)
+    bps = latest * 100
+    widening = avg_3m is not None and latest > avg_3m
+    trend = "widening" if widening else "stable/tightening"
+    if bps < 300:
+        return "expansion", f"Tight ({bps:.0f}bps, {trend})"
+    if bps <= 500:
+        if widening:
+            return "slowdown", f"Normal but widening ({bps:.0f}bps)"
+        return "neutral", f"Normal ({bps:.0f}bps, {trend})"
+    return "recession", f"Wide ({bps:.0f}bps, {trend})"
+
+
+def _classify_unemployment(latest: float, avg_3m: float | None) -> tuple[str, str]:
+    """Unemployment regime signal."""
+    if avg_3m is None:
+        return "neutral", f"Unemployment at {latest:.1f}% (no trend data)"
+    diff = latest - avg_3m
+    if diff >= 0.5:
+        return "recession", f"Rising ({latest:.1f}%, +{diff:.1f}pp vs 3M avg)"
+    if diff <= -0.2:
+        return "expansion", f"Falling ({latest:.1f}%, {diff:.1f}pp vs 3M avg)"
+    return "neutral", f"Stable ({latest:.1f}%, {diff:+.1f}pp vs 3M avg)"
+
+
+def _classify_inflation(latest: float, avg_3m: float | None) -> tuple[str, str]:
+    """HICP inflation regime signal."""
+    rising = avg_3m is not None and latest > avg_3m
+    if latest > 3 and rising:
+        return "slowdown", f"Overheating ({latest:.1f}% and rising)"
+    if latest < 1:
+        return "recession", f"Deflation risk ({latest:.1f}%)"
+    if avg_3m is not None and (avg_3m - latest) > 0.5:
+        return "recession", f"Falling fast ({latest:.1f}%, was {avg_3m:.1f}%)"
+    return "neutral", f"Stable ({latest:.1f}%)"
+
+
+@router.get("/regime")
+async def macro_regime():
+    """Classify the current macro regime using a weighted composite of indicators."""
+    async with async_session() as session:
+        # Fetch history for all regime indicators
+        histories: dict[str, list[tuple[date, float]]] = {}
+        for key, code in _REGIME_INDICATORS.items():
+            histories[key] = await _fetch_indicator_history(session, code)
+
+    signals: list[dict] = []
+    signal_scores: list[tuple[float, float]] = []  # (weight, score)
+
+    # 1. PMI (30%)
+    pmi_latest, pmi_avg = _latest_and_3m_avg(histories["pmi"])
+    if pmi_latest is not None and pmi_avg is not None:
+        sig, detail = _classify_pmi(pmi_latest, pmi_avg)
+        signals.append({
+            "name": "PMI",
+            "weight": 0.30,
+            "signal": sig,
+            "value": round(pmi_latest, 1),
+            "detail": detail,
+        })
+        signal_scores.append((0.30, _REGIME_SCORES[sig]))
+    else:
+        signals.append({
+            "name": "PMI",
+            "weight": 0.30,
+            "signal": "unavailable",
+            "value": None,
+            "detail": "No PMI data available (EZ_PMI_COMPOSITE not in database)",
+        })
+
+    # 2. Yield Curve (25%)
+    t10_latest, _ = _latest_and_3m_avg(histories["treasury_10y"])
+    t2_latest, _ = _latest_and_3m_avg(histories["treasury_2y"])
+    if t10_latest is not None and t2_latest is not None:
+        spread_pct = t10_latest - t2_latest  # in percentage points
+        spread_bps = spread_pct * 100
+        sig, detail = _classify_yield_curve(spread_bps)
+        signals.append({
+            "name": "Yield Curve",
+            "weight": 0.25,
+            "signal": sig,
+            "value": round(spread_pct, 4),
+            "detail": detail,
+        })
+        signal_scores.append((0.25, _REGIME_SCORES[sig]))
+    else:
+        signals.append({
+            "name": "Yield Curve",
+            "weight": 0.25,
+            "signal": "unavailable",
+            "value": None,
+            "detail": "Insufficient treasury yield data",
+        })
+
+    # 3. Credit Spreads (20%)
+    hy_latest, hy_avg = _latest_and_3m_avg(histories["hy_oas"])
+    if hy_latest is not None:
+        sig, detail = _classify_credit(hy_latest, hy_avg)
+        signals.append({
+            "name": "Credit Spreads",
+            "weight": 0.20,
+            "signal": sig,
+            "value": round(hy_latest, 2),
+            "detail": detail,
+        })
+        signal_scores.append((0.20, _REGIME_SCORES[sig]))
+    else:
+        signals.append({
+            "name": "Credit Spreads",
+            "weight": 0.20,
+            "signal": "unavailable",
+            "value": None,
+            "detail": "No HY OAS data available",
+        })
+
+    # 4. Unemployment (15%)
+    unemp_latest, unemp_avg = _latest_and_3m_avg(histories["unemployment"])
+    if unemp_latest is not None:
+        sig, detail = _classify_unemployment(unemp_latest, unemp_avg)
+        signals.append({
+            "name": "Unemployment",
+            "weight": 0.15,
+            "signal": sig,
+            "value": round(unemp_latest, 1),
+            "detail": detail,
+        })
+        signal_scores.append((0.15, _REGIME_SCORES[sig]))
+    else:
+        signals.append({
+            "name": "Unemployment",
+            "weight": 0.15,
+            "signal": "unavailable",
+            "value": None,
+            "detail": "No unemployment data available",
+        })
+
+    # 5. Inflation (10%)
+    hicp_latest, hicp_avg = _latest_and_3m_avg(histories["hicp"])
+    if hicp_latest is not None:
+        sig, detail = _classify_inflation(hicp_latest, hicp_avg)
+        signals.append({
+            "name": "Inflation",
+            "weight": 0.10,
+            "signal": sig,
+            "value": round(hicp_latest, 1),
+            "detail": detail,
+        })
+        signal_scores.append((0.10, _REGIME_SCORES[sig]))
+    else:
+        signals.append({
+            "name": "Inflation",
+            "weight": 0.10,
+            "signal": "unavailable",
+            "value": None,
+            "detail": "No HICP data available",
+        })
+
+    # Compute weighted composite score
+    if signal_scores:
+        total_weight = sum(w for w, _ in signal_scores)
+        composite = sum(w * s for w, s in signal_scores) / total_weight if total_weight > 0 else 0.0
+    else:
+        composite = 0.0
+
+    # Determine regime from composite score
+    if composite > 0.4:
+        regime = "expansion"
+    elif composite > 0:
+        regime = "recovery"
+    elif composite > -0.4:
+        regime = "slowdown"
+    else:
+        regime = "recession"
+
+    # Confidence: percentage of available signals that agree with the regime
+    available_signals = [s for s in signals if s["signal"] != "unavailable"]
+    if available_signals:
+        # Map regime to its score, count signals on the same side
+        regime_score = _REGIME_SCORES[regime]
+        agreeing = sum(
+            1 for s in available_signals
+            if _REGIME_SCORES.get(s["signal"], 0) * regime_score > 0
+            or s["signal"] == regime
+        )
+        agreement_pct = agreeing / len(available_signals)
+        if agreement_pct >= 0.7:
+            confidence = "high"
+        elif agreement_pct >= 0.5:
+            confidence = "medium"
+        else:
+            confidence = "low"
+    else:
+        confidence = "low"
+
+    # Previous regime and regime start date — computed from 1-month-ago snapshot
+    # by re-evaluating historical data as of ~30 days ago
+    previous_regime = None
+    regime_start_date = None
+    # We approximate by checking if the regime would differ with data from 30 days ago
+    # For simplicity, return null — a full implementation would store regime history
+    # TODO: persist regime assessments for historical tracking
+
+    return {
+        "data": {
+            "regime": regime,
+            "confidence": confidence,
+            "compositeScore": round(composite, 4),
+            "signals": signals,
+            "assetClassImplications": _ASSET_IMPLICATIONS[regime],
+            "previousRegime": previous_regime,
+            "regimeStartDate": regime_start_date,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }

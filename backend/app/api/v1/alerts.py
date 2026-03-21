@@ -1,4 +1,4 @@
-"""Alert management — CRUD, evaluation, and history."""
+"""Alert management — CRUD, evaluation, history, and rebalancing suggestions."""
 
 from datetime import datetime, timezone
 
@@ -12,6 +12,7 @@ from app.db.engine import async_session
 from app.db.models.alerts import Alert, AlertHistory
 from app.db.models.securities import Security
 from app.services.alert_evaluator import evaluate_all
+from app.services.rebalancer import compute_rebalancing
 
 logger = structlog.get_logger()
 
@@ -139,6 +140,73 @@ async def alert_history(
     return {
         "data": [_history_to_dict(h) for h in rows],
         "pagination": {"total": total, "limit": limit, "offset": offset},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.get("/rebalancing")
+async def rebalancing_suggestions(
+    mode: str = Query("minimize_tax", regex="^(minimize_tax|exact_target)$"),
+):
+    """Compute tax-aware rebalancing suggestions.
+
+    Modes:
+    - minimize_tax (default): prioritise tax-efficient sells (OST first,
+      then losses, then smallest gains, then >10yr deemed cost).
+    - exact_target: FIFO lot selection, hits exact target regardless of tax.
+    """
+    async with async_session() as session:
+        result = await compute_rebalancing(session, mode=mode)
+
+    def _money(cents: int, currency: str = "EUR") -> dict:
+        return {"amount": cents, "currency": currency}
+
+    def _trade_to_dict(t) -> dict:
+        d: dict = {
+            "action": t.action,
+            "securityId": t.security_id,
+            "securityName": t.security_name,
+            "ticker": t.ticker,
+            "accountId": t.account_id,
+            "accountName": t.account_name,
+            "quantity": float(t.quantity),
+            "estimatedProceeds": _money(t.estimated_proceeds_cents, t.estimated_proceeds_currency),
+            "estimatedProceedsEur": _money(t.estimated_proceeds_eur_cents, "EUR"),
+        }
+        if t.tax_impact is not None:
+            d["taxImpact"] = {
+                "realizedGain": _money(t.tax_impact.realized_gain_cents, "EUR"),
+                "estimatedTax": _money(t.tax_impact.estimated_tax_cents, "EUR"),
+                "taxRate": t.tax_impact.tax_rate,
+                "usedDeemedCost": t.tax_impact.used_deemed_cost,
+                "isOsakesaastotili": t.tax_impact.is_osakesaastotili,
+            }
+        else:
+            d["taxImpact"] = None
+        return d
+
+    def _allocation_to_dict(alloc) -> dict:
+        return {
+            key: {"actual": entry.actual, "target": entry.target, "drift": entry.drift}
+            for key, entry in alloc.items()
+        }
+
+    data: dict = {
+        "currentAllocation": _allocation_to_dict(result.current_allocation),
+        "suggestedTrades": [_trade_to_dict(t) for t in result.suggested_trades],
+        "summary": {
+            "totalSells": _money(result.summary.total_sells_eur_cents),
+            "totalBuys": _money(result.summary.total_buys_eur_cents),
+            "netCashFlow": _money(result.summary.net_cash_flow_eur_cents),
+            "totalEstimatedTax": _money(result.summary.total_estimated_tax_eur_cents),
+        },
+        "mode": result.mode,
+    }
+    if result.message:
+        data["message"] = result.message
+
+    return {
+        "data": data,
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
 
