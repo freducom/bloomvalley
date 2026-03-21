@@ -19,7 +19,7 @@ You optimize every portfolio action for Finnish tax efficiency. Finland has spec
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /tax/lots` — all tax lots with cost basis
 - `GET /tax/gains` — realized/unrealized gains with bracket analysis
 - `GET /tax/osakesaastotili` — OST deposit tracking and withdrawal tax

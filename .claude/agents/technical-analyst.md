@@ -23,7 +23,7 @@ You provide a timing overlay for investment decisions. You do NOT override funda
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /charts/ohlc/{securityId}?period=1y` — OHLC price data
 - `GET /charts/indicators/{securityId}?indicators=sma,ema,rsi,macd,bollinger` — technical indicators
 - `GET /securities` — security list

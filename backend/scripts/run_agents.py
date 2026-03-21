@@ -35,7 +35,7 @@ WAVE_1_AGENTS = [
     {
         "name": "research-analyst",
         "file": "research-analyst.md",
-        "task": f"""You are the Research Analyst for the Warren Cashett investment terminal.
+        "task": f"""You are the Research Analyst for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Analyze all securities on the watchlists and portfolio holdings.
 For each security, produce a research note with bull/bear cases.
@@ -75,7 +75,7 @@ Work through as many securities as you can. Be thorough but efficient.""",
     {
         "name": "quant-analyst",
         "file": "quant-analyst.md",
-        "task": f"""You are the Quantitative Analyst for the Warren Cashett investment terminal.
+        "task": f"""You are the Quantitative Analyst for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Screen all watchlist securities, compute factor scores, and update fundamentals.
 
@@ -107,7 +107,7 @@ Focus on computing quantitative metrics. Use price history to estimate momentum 
     {
         "name": "technical-analyst",
         "file": "technical-analyst.md",
-        "task": f"""You are the Technical Analyst for the Warren Cashett investment terminal.
+        "task": f"""You are the Technical Analyst for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Provide technical signals for all holdings and key watchlist stocks.
 
@@ -129,7 +129,7 @@ Key signals: 50/200 MA crossovers, RSI overbought/oversold, support/resistance l
     {
         "name": "macro-strategist",
         "file": "macro-strategist.md",
-        "task": f"""You are the Macro Strategist / Sector Rotation Analyst for the Warren Cashett investment terminal.
+        "task": f"""You are the Macro Strategist / Sector Rotation Analyst for the Bloomvalley investment terminal.
 
 You have called every major sector rotation of the last 20 years before it became obvious. Now do it again.
 
@@ -163,7 +163,7 @@ Be specific. Name securities from the portfolio and watchlists. Give numbers and
     {
         "name": "fixed-income-analyst",
         "file": "fixed-income-analyst.md",
-        "task": f"""You are the Fixed Income Analyst for the Warren Cashett investment terminal.
+        "task": f"""You are the Fixed Income Analyst for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Assess fixed income allocation and recommend bond positioning.
 
@@ -187,7 +187,7 @@ Assess: Are we on track? What bonds should we add? Duration positioning given ra
     {
         "name": "tax-strategist",
         "file": "tax-strategist.md",
-        "task": f"""You are the Tax Strategist for the Warren Cashett investment terminal.
+        "task": f"""You are the Tax Strategist for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Analyze tax position and identify optimization opportunities.
 
@@ -211,7 +211,7 @@ WAVE_2_AGENTS = [
     {
         "name": "risk-manager",
         "file": "risk-manager.md",
-        "task": f"""You are the Risk Manager for the Warren Cashett investment terminal.
+        "task": f"""You are the Risk Manager for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Assess portfolio risk and flag any policy violations.
 
@@ -243,7 +243,7 @@ WAVE_3_AGENTS = [
     {
         "name": "portfolio-manager",
         "file": "portfolio-manager.md",
-        "task": f"""You are the Portfolio Manager (Lead) for the Warren Cashett investment terminal.
+        "task": f"""You are the Portfolio Manager (Lead) for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Review all analyst inputs and generate actionable recommendations.
 
@@ -285,7 +285,7 @@ WAVE_4_AGENTS = [
     {
         "name": "compliance-officer",
         "file": "compliance-officer.md",
-        "task": f"""You are the Compliance Officer for the Warren Cashett investment terminal.
+        "task": f"""You are the Compliance Officer for the Bloomvalley investment terminal.
 
 Your job RIGHT NOW: Validate all new recommendations against investment policy.
 
@@ -418,7 +418,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  Warren Cashett — Investment Team Orchestrator")
+    print("  Bloomvalley — Investment Team Orchestrator")
     print("=" * 60)
 
     # Single agent mode

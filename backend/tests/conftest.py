@@ -1,4 +1,4 @@
-"""Test fixtures for the Warren Cashett backend.
+"""Test fixtures for the Bloomvalley backend.
 
 Uses a separate test database (warren_test) with async support.
 """

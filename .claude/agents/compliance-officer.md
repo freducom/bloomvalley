@@ -36,7 +36,7 @@ You validate every recommendation against the investment policy before execution
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /portfolio/summary` — current allocation
 - `GET /portfolio/holdings` — detailed holdings
 - `GET /tax/lots` — tax lot status

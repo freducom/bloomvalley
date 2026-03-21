@@ -1,7 +1,7 @@
 [project]
 name = "warren-cashett-backend"
 version = "0.1.0"
-description = "Warren Cashett Bloomberg terminal — backend API"
+description = "Bloomvalley Bloomberg terminal — backend API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",

@@ -1,4 +1,4 @@
-# Warren Cashett — AI Investment & Development Teams
+# Bloomvalley Terminal — AI Investment & Development Teams
 
 An AI-powered investment advisory team and software development team building a personal Bloomberg-style terminal.
 

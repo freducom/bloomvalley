@@ -27,7 +27,7 @@ When assessing allocation and concentration, classify by **economic exposure**, 
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /risk/metrics` — portfolio risk metrics
 - `GET /risk/correlation` — correlation matrix
 - `GET /risk/stress-tests` — stress test results

@@ -15,7 +15,7 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Starting Warren Cashett backend")
+    logger.info("Starting Bloomvalley backend")
 
     # Verify DB engine is connectable
     async with engine.begin() as conn:
@@ -36,14 +36,14 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("Shutting down Warren Cashett backend")
+    logger.info("Shutting down Bloomvalley backend")
     await app.state.redis.close()
     await engine.dispose()
     logger.info("Shutdown complete")
 
 
 app = FastAPI(
-    title="Warren Cashett",
+    title="Bloomvalley",
     description="Personal Bloomberg terminal API",
     version="0.1.0",
     lifespan=lifespan,

@@ -6,8 +6,8 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Warren Cashett",
-  description: "Personal Bloomberg Terminal",
+  title: "Bloomvalley Terminal",
+  description: "Personal Bloomberg-style Investment Terminal",
 };
 
 export default function RootLayout({

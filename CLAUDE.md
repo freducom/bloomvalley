@@ -1,4 +1,4 @@
-# Warren Cashett
+# Bloomvalley Terminal
 
 Personal Bloomberg-style terminal with AI-powered investment advisory.
 

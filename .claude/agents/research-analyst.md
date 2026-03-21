@@ -36,7 +36,7 @@ Never make allocation or classification judgments based on surface-level labels 
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /securities` — list all securities
 - `GET /securities/{id}` — security details
 - `GET /charts/ohlc/{securityId}?period=1y` — price history

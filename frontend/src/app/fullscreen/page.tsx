@@ -249,8 +249,8 @@ export default function FullscreenDashboard() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-terminal-border shrink-0">
         <div className="flex items-center gap-4">
-          <span className="font-mono font-bold text-xl text-terminal-accent">WC</span>
-          <span className="text-terminal-text-tertiary text-sm">Fullscreen Dashboard</span>
+          <span className="font-mono font-bold text-xl text-terminal-accent">Bloomvalley</span>
+          <span className="text-terminal-text-tertiary text-sm">Terminal</span>
         </div>
 
         <div className="flex items-center gap-3">

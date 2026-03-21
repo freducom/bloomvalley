@@ -27,7 +27,7 @@ You are the Portfolio Manager for a Finnish investor (age 45, target fixed incom
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /portfolio/summary` — current holdings, allocation, P&L
 - `GET /portfolio/holdings` — detailed holdings with values
 - `GET /risk/metrics` — portfolio risk metrics (beta, Sharpe, VaR)

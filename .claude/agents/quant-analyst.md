@@ -23,7 +23,7 @@ You screen for investment candidates using quantitative factors, backtest strate
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /securities?assetClass=stock` — all tracked securities
 - `GET /watchlists/` — all watchlists with items
 - `GET /watchlists/{id}` — watchlist details with prices

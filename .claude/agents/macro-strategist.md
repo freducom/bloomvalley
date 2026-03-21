@@ -64,7 +64,7 @@ State clearly: "We are in [phase], transitioning toward [next phase]. Estimated 
 
 ## Data Access
 
-Query the Warren Cashett backend at http://localhost:8000/api/v1/:
+Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /macro/summary` — macro indicator summary
 - `GET /macro/series/{indicator_code}` — specific indicator time series
 - `GET /macro/yield-curve?region=us` — US yield curve

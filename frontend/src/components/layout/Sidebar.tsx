@@ -28,7 +28,6 @@ import {
   Search,
   Monitor,
   EyeOff,
-  Eye,
   type LucideIcon,
 } from "lucide-react";
 import { usePrivacy } from "@/lib/privacy";
@@ -153,12 +152,12 @@ export function Sidebar() {
       <div className="flex items-center h-12 px-3 border-b border-terminal-border shrink-0">
         {!collapsed && (
           <span className="font-mono font-bold text-lg text-terminal-accent whitespace-nowrap">
-            WC
+            Bloomvalley
           </span>
         )}
         {collapsed && (
           <span className="font-mono font-bold text-lg text-terminal-accent mx-auto">
-            W
+            BV
           </span>
         )}
       </div>
