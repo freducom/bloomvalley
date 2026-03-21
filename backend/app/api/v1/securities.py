@@ -41,7 +41,7 @@ async def list_securities(
     securities = result.scalars().all()
 
     return {
-        "data": [SecurityResponse.model_validate(s).model_dump() for s in securities],
+        "data": [SecurityResponse.model_validate(s).model_dump(by_alias=True) for s in securities],
         "meta": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "cacheAge": None,
@@ -80,7 +80,7 @@ async def get_security(
         )
 
     return {
-        "data": SecurityResponse.model_validate(security).model_dump(),
+        "data": SecurityResponse.model_validate(security).model_dump(by_alias=True),
         "meta": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "cacheAge": None,
@@ -101,7 +101,7 @@ async def create_security(
     await session.refresh(security)
 
     return {
-        "data": SecurityResponse.model_validate(security).model_dump(),
+        "data": SecurityResponse.model_validate(security).model_dump(by_alias=True),
         "meta": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "cacheAge": None,
