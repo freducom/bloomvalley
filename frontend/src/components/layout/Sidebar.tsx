@@ -12,6 +12,8 @@ import {
   CandlestickChart,
   ShieldAlert,
   BookOpen,
+  BarChart3,
+  Grid3X3,
   Receipt,
   Landmark,
   Coins,
@@ -20,7 +22,6 @@ import {
   UserSearch,
   ThumbsUp,
   Bell,
-  Leaf,
   Activity,
   ChevronLeft,
   ChevronRight,
@@ -53,6 +54,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Data Feeds", href: "/market", icon: Radio },
       { label: "Watchlist", href: "/watchlist", icon: Eye },
       { label: "Charts", href: "/charts", icon: CandlestickChart },
+      { label: "Heatmap", href: "/heatmap", icon: Grid3X3 },
     ],
   },
   {
@@ -60,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Risk", href: "/risk", icon: ShieldAlert },
       { label: "Research", href: "/research", icon: BookOpen },
+      { label: "Fundamentals", href: "/fundamentals", icon: BarChart3 },
     ],
   },
   {
@@ -85,10 +88,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Recommendations", href: "/recommendations", icon: ThumbsUp },
       { label: "Alerts", href: "/alerts", icon: Bell },
     ],
-  },
-  {
-    title: "Other",
-    items: [{ label: "ESG", href: "/esg", icon: Leaf }],
   },
 ];
 

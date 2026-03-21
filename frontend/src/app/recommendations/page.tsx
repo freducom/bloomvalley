@@ -1,10 +1,741 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { apiGetRaw, apiPost, apiPut } from "@/lib/api";
+import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
+
+/* ── Types ── */
+
+interface Recommendation {
+  id: number;
+  securityId: number;
+  ticker: string | null;
+  securityName: string | null;
+  action: string;
+  confidence: string;
+  targetPriceCents: number | null;
+  entryPriceCents: number | null;
+  currency: string;
+  rationale: string;
+  bullCase: string | null;
+  bearCase: string | null;
+  source: string | null;
+  timeHorizon: string | null;
+  status: string;
+  recommendedDate: string;
+  closedDate: string | null;
+  expiryDate: string | null;
+  exitPriceCents: number | null;
+  returnPct: number | null;
+  outcomeNotes: string | null;
+  unrealizedReturnPct?: number;
+  currentPriceCents?: number;
+}
+
+interface Retrospective {
+  totalClosed: number;
+  activeCount: number;
+  hitRate: number | null;
+  avgReturnPct: number | null;
+  totalWins: number;
+  totalLosses: number;
+  byAction: Record<string, { count: number; hitRate: number; avgReturnPct: number }>;
+  byConfidence: Record<string, { count: number; hitRate: number; avgReturnPct: number }>;
+  bySource: Record<string, { count: number; hitRate: number; avgReturnPct: number }>;
+  bestCalls: { id: number; securityId: number; action: string; returnPct: number }[];
+  worstCalls: { id: number; securityId: number; action: string; returnPct: number }[];
+}
+
+interface SecurityOption {
+  id: number;
+  ticker: string;
+  name: string;
+}
+
+type Tab = "active" | "closed" | "retrospective" | "create";
+
+const ACTION_COLORS: Record<string, string> = {
+  buy: "text-terminal-positive bg-terminal-positive/10",
+  sell: "text-terminal-negative bg-terminal-negative/10",
+  hold: "text-terminal-warning bg-terminal-warning/10",
+};
+
+const CONFIDENCE_COLORS: Record<string, string> = {
+  high: "text-terminal-positive",
+  medium: "text-terminal-warning",
+  low: "text-terminal-text-secondary",
+};
+
+const HORIZON_LABELS: Record<string, string> = {
+  short: "< 3m",
+  medium: "3-12m",
+  long: "> 12m",
+};
+
 export default function RecommendationsPage() {
+  const [tab, setTab] = useState<Tab>("active");
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "active", label: "Active" },
+    { key: "closed", label: "Closed" },
+    { key: "retrospective", label: "Retrospective" },
+    { key: "create", label: "+ New" },
+  ];
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">Recommendations</h1>
-      <div className="flex items-center justify-center h-64 border border-terminal-border rounded-md bg-terminal-bg-secondary">
-        <p className="text-terminal-text-secondary">Investment recommendations will appear here.</p>
+
+      <div className="flex gap-1 mb-4 border-b border-terminal-border">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === t.key
+                ? "border-terminal-accent text-terminal-accent"
+                : "border-transparent text-terminal-text-secondary hover:text-terminal-text-primary"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "active" && <ActiveTab />}
+      {tab === "closed" && <ClosedTab />}
+      {tab === "retrospective" && <RetroTab />}
+      {tab === "create" && <CreateTab onCreated={() => setTab("active")} />}
+    </div>
+  );
+}
+
+/* ── Active Recommendations ── */
+
+function ActiveTab() {
+  const [recs, setRecs] = useState<Recommendation[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [closing, setClosing] = useState<number | null>(null);
+  const [closeNotes, setCloseNotes] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiGetRaw<{ data: Recommendation[]; pagination: { total: number } }>(
+        "/recommendations?status=active&limit=200"
+      );
+      setRecs(res.data);
+      setTotal(res.pagination.total);
+    } catch { /* */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleClose = async (recId: number) => {
+    try {
+      await apiPut(`/recommendations/${recId}/close`, {
+        outcome_notes: closeNotes || undefined,
+      });
+      setClosing(null);
+      setCloseNotes("");
+      load();
+    } catch { /* */ }
+  };
+
+  if (loading) return <div className="text-terminal-text-secondary text-sm p-4">Loading...</div>;
+
+  if (recs.length === 0) {
+    return (
+      <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-8 text-center">
+        <p className="text-terminal-text-secondary text-sm">
+          No active recommendations. Create one to start tracking.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-terminal-text-secondary mb-3">{total} active recommendation{total !== 1 ? "s" : ""}</p>
+      <div className="space-y-3">
+        {recs.map((r) => (
+          <div
+            key={r.id}
+            className="border border-terminal-border rounded bg-terminal-bg-secondary"
+          >
+            <div
+              className="flex items-center gap-3 p-4 cursor-pointer hover:bg-terminal-bg-tertiary"
+              onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+            >
+              <span className={`text-xs px-2 py-0.5 rounded font-medium uppercase ${ACTION_COLORS[r.action] || ""}`}>
+                {r.action}
+              </span>
+              <span className="font-mono text-terminal-accent">{r.ticker}</span>
+              <span className="text-xs text-terminal-text-secondary">{r.securityName}</span>
+              <span className={`text-xs ml-1 ${CONFIDENCE_COLORS[r.confidence] || ""}`}>
+                {r.confidence}
+              </span>
+              {r.timeHorizon && (
+                <span className="text-xs text-terminal-text-secondary">
+                  {HORIZON_LABELS[r.timeHorizon] || r.timeHorizon}
+                </span>
+              )}
+              <div className="ml-auto flex items-center gap-4">
+                {r.entryPriceCents && (
+                  <span className="text-xs font-mono text-terminal-text-secondary">
+                    Entry: {formatCurrency(r.entryPriceCents, r.currency)}
+                  </span>
+                )}
+                {r.targetPriceCents && (
+                  <span className="text-xs font-mono text-terminal-text-secondary">
+                    Target: {formatCurrency(r.targetPriceCents, r.currency)}
+                  </span>
+                )}
+                {r.unrealizedReturnPct !== undefined && (
+                  <span className={`text-sm font-mono font-medium ${
+                    r.unrealizedReturnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"
+                  }`}>
+                    {formatPercent(r.unrealizedReturnPct, true)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {expanded === r.id && (
+              <div className="border-t border-terminal-border p-4 space-y-3">
+                <p className="text-sm text-terminal-text-primary">{r.rationale}</p>
+                {(r.bullCase || r.bearCase) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {r.bullCase && (
+                      <div>
+                        <span className="text-xs text-terminal-positive font-medium">Bull Case</span>
+                        <p className="text-xs text-terminal-text-secondary mt-1">{r.bullCase}</p>
+                      </div>
+                    )}
+                    {r.bearCase && (
+                      <div>
+                        <span className="text-xs text-terminal-negative font-medium">Bear Case</span>
+                        <p className="text-xs text-terminal-text-secondary mt-1">{r.bearCase}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-4 text-xs text-terminal-text-secondary">
+                  <span>Recommended: {formatDate(r.recommendedDate)}</span>
+                  {r.expiryDate && <span>Expires: {formatDate(r.expiryDate)}</span>}
+                  {r.source && <span>Source: {r.source}</span>}
+                  {r.currentPriceCents && (
+                    <span>Current: {formatCurrency(r.currentPriceCents, r.currency)}</span>
+                  )}
+                </div>
+
+                {closing === r.id ? (
+                  <div className="flex items-center gap-2 pt-2 border-t border-terminal-border/50">
+                    <input
+                      value={closeNotes}
+                      onChange={(e) => setCloseNotes(e.target.value)}
+                      placeholder="Outcome notes (optional)"
+                      className="flex-1 px-3 py-1.5 bg-terminal-bg-primary border border-terminal-border rounded text-sm text-terminal-text-primary"
+                    />
+                    <button
+                      onClick={() => handleClose(r.id)}
+                      className="px-3 py-1.5 bg-terminal-accent text-terminal-bg-primary text-sm rounded font-medium hover:opacity-90"
+                    >
+                      Confirm Close
+                    </button>
+                    <button
+                      onClick={() => { setClosing(null); setCloseNotes(""); }}
+                      className="px-3 py-1.5 text-terminal-text-secondary text-sm hover:text-terminal-text-primary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-terminal-border/50">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setClosing(r.id); }}
+                      className="text-xs text-terminal-text-secondary hover:text-terminal-text-primary"
+                    >
+                      Close recommendation
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
+  );
+}
+
+/* ── Closed Recommendations ── */
+
+function ClosedTab() {
+  const [recs, setRecs] = useState<Recommendation[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await apiGetRaw<{ data: Recommendation[]; pagination: { total: number } }>(
+          "/recommendations?status=closed&limit=200"
+        );
+        setRecs(res.data);
+        setTotal(res.pagination.total);
+      } catch { /* */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <div className="text-terminal-text-secondary text-sm p-4">Loading...</div>;
+
+  if (recs.length === 0) {
+    return (
+      <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-8 text-center">
+        <p className="text-terminal-text-secondary text-sm">No closed recommendations yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-terminal-text-secondary mb-3">{total} closed recommendation{total !== 1 ? "s" : ""}</p>
+      <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-terminal-border text-terminal-text-secondary text-xs">
+              <th className="text-left p-3">Security</th>
+              <th className="text-center p-3">Action</th>
+              <th className="text-center p-3">Confidence</th>
+              <th className="text-right p-3">Entry</th>
+              <th className="text-right p-3">Exit</th>
+              <th className="text-right p-3">Return</th>
+              <th className="text-left p-3">Opened</th>
+              <th className="text-left p-3">Closed</th>
+              <th className="text-left p-3">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recs.map((r) => (
+              <tr key={r.id} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
+                <td className="p-3">
+                  <span className="font-mono text-terminal-accent mr-2">{r.ticker}</span>
+                  <span className="text-xs text-terminal-text-secondary">{r.securityName}</span>
+                </td>
+                <td className="text-center p-3">
+                  <span className={`text-xs px-2 py-0.5 rounded uppercase ${ACTION_COLORS[r.action] || ""}`}>
+                    {r.action}
+                  </span>
+                </td>
+                <td className={`text-center p-3 text-xs capitalize ${CONFIDENCE_COLORS[r.confidence] || ""}`}>
+                  {r.confidence}
+                </td>
+                <td className="text-right p-3 font-mono text-xs">
+                  {r.entryPriceCents ? formatCurrency(r.entryPriceCents, r.currency) : "-"}
+                </td>
+                <td className="text-right p-3 font-mono text-xs">
+                  {r.exitPriceCents ? formatCurrency(r.exitPriceCents, r.currency) : "-"}
+                </td>
+                <td className={`text-right p-3 font-mono text-xs font-medium ${
+                  r.returnPct !== null
+                    ? r.returnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"
+                    : ""
+                }`}>
+                  {r.returnPct !== null ? formatPercent(r.returnPct, true) : "-"}
+                </td>
+                <td className="p-3 text-xs">{formatDate(r.recommendedDate)}</td>
+                <td className="p-3 text-xs">{r.closedDate ? formatDate(r.closedDate) : "-"}</td>
+                <td className="p-3 text-xs text-terminal-text-secondary">{r.source || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── Retrospective ── */
+
+function RetroTab() {
+  const [data, setData] = useState<Retrospective | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiGetRaw<{ data: Retrospective }>("/recommendations/retrospective");
+        setData(res.data);
+      } catch { /* */ }
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return <div className="text-terminal-text-secondary text-sm p-4">Loading...</div>;
+  if (!data) return null;
+
+  if (data.totalClosed === 0) {
+    return (
+      <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-8 text-center">
+        <p className="text-terminal-text-secondary text-sm">
+          No closed recommendations to analyze. Close some recommendations to see retrospective accuracy.
+        </p>
+        <p className="text-xs text-terminal-text-secondary mt-2">
+          {data.activeCount} active recommendation{data.activeCount !== 1 ? "s" : ""} pending.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard label="Total Closed" value={String(data.totalClosed)} />
+        <MetricCard label="Active" value={String(data.activeCount)} />
+        <MetricCard
+          label="Hit Rate"
+          value={data.hitRate !== null ? `${data.hitRate}%` : "-"}
+          color={data.hitRate !== null && data.hitRate >= 50 ? "positive" : "negative"}
+        />
+        <MetricCard
+          label="Avg Return"
+          value={data.avgReturnPct !== null ? formatPercent(data.avgReturnPct, true) : "-"}
+          color={data.avgReturnPct !== null && data.avgReturnPct >= 0 ? "positive" : "negative"}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard label="Wins" value={String(data.totalWins)} color="positive" />
+        <MetricCard label="Losses" value={String(data.totalLosses)} color="negative" />
+      </div>
+
+      {/* Breakdowns */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <BreakdownTable title="By Action" data={data.byAction} />
+        <BreakdownTable title="By Confidence" data={data.byConfidence} />
+        <BreakdownTable title="By Source" data={data.bySource} />
+      </div>
+
+      {/* Best / Worst */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
+          <h3 className="text-sm font-medium text-terminal-positive mb-3">Best Calls</h3>
+          {data.bestCalls.length === 0 ? (
+            <p className="text-xs text-terminal-text-secondary">No data</p>
+          ) : (
+            <div className="space-y-1">
+              {data.bestCalls.map((c) => (
+                <div key={c.id} className="flex justify-between text-xs">
+                  <span>
+                    <span className={`uppercase mr-2 ${ACTION_COLORS[c.action]?.split(" ")[0] || ""}`}>{c.action}</span>
+                    #{c.id}
+                  </span>
+                  <span className="font-mono text-terminal-positive">{formatPercent(c.returnPct, true)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
+          <h3 className="text-sm font-medium text-terminal-negative mb-3">Worst Calls</h3>
+          {data.worstCalls.length === 0 ? (
+            <p className="text-xs text-terminal-text-secondary">No data</p>
+          ) : (
+            <div className="space-y-1">
+              {data.worstCalls.map((c) => (
+                <div key={c.id} className="flex justify-between text-xs">
+                  <span>
+                    <span className={`uppercase mr-2 ${ACTION_COLORS[c.action]?.split(" ")[0] || ""}`}>{c.action}</span>
+                    #{c.id}
+                  </span>
+                  <span className="font-mono text-terminal-negative">{formatPercent(c.returnPct, true)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, color }: { label: string; value: string; color?: "positive" | "negative" }) {
+  const colorClass = color === "positive"
+    ? "text-terminal-positive"
+    : color === "negative"
+      ? "text-terminal-negative"
+      : "text-terminal-text-primary";
+
+  return (
+    <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
+      <p className="text-xs text-terminal-text-secondary mb-1">{label}</p>
+      <p className={`text-2xl font-mono font-bold ${colorClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function BreakdownTable({
+  title,
+  data,
+}: {
+  title: string;
+  data: Record<string, { count: number; hitRate: number; avgReturnPct: number }>;
+}) {
+  const entries = Object.entries(data);
+  if (entries.length === 0) {
+    return (
+      <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
+        <h3 className="text-sm font-medium text-terminal-text-primary mb-2">{title}</h3>
+        <p className="text-xs text-terminal-text-secondary">No data</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
+      <h3 className="text-sm font-medium text-terminal-text-primary mb-3">{title}</h3>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-terminal-text-secondary">
+            <th className="text-left pb-2"></th>
+            <th className="text-right pb-2">#</th>
+            <th className="text-right pb-2">Hit %</th>
+            <th className="text-right pb-2">Avg Ret</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([key, val]) => (
+            <tr key={key} className="border-t border-terminal-border/30">
+              <td className="py-1.5 capitalize">{key}</td>
+              <td className="text-right py-1.5 font-mono">{val.count}</td>
+              <td className={`text-right py-1.5 font-mono ${val.hitRate >= 50 ? "text-terminal-positive" : "text-terminal-negative"}`}>
+                {val.hitRate}%
+              </td>
+              <td className={`text-right py-1.5 font-mono ${val.avgReturnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
+                {formatPercent(val.avgReturnPct, true)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ── Create Recommendation ── */
+
+function CreateTab({ onCreated }: { onCreated: () => void }) {
+  const [securities, setSecurities] = useState<SecurityOption[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const [securityId, setSecurityId] = useState("");
+  const [action, setAction] = useState("buy");
+  const [confidence, setConfidence] = useState("medium");
+  const [targetPrice, setTargetPrice] = useState("");
+  const [entryPrice, setEntryPrice] = useState("");
+  const [currency, setCurrency] = useState("EUR");
+  const [rationale, setRationale] = useState("");
+  const [bullCase, setBullCase] = useState("");
+  const [bearCase, setBearCase] = useState("");
+  const [source, setSource] = useState("");
+  const [timeHorizon, setTimeHorizon] = useState("medium");
+  const [expiryDate, setExpiryDate] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiGetRaw<{ data: SecurityOption[] }>("/securities?limit=500");
+        setSecurities(res.data);
+      } catch { /* */ }
+    })();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!securityId || !rationale) {
+      setError("Security and rationale are required.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiPost("/recommendations", {
+        security_id: parseInt(securityId),
+        action,
+        confidence,
+        target_price_cents: targetPrice ? Math.round(parseFloat(targetPrice) * 100) : undefined,
+        entry_price_cents: entryPrice ? Math.round(parseFloat(entryPrice) * 100) : undefined,
+        currency,
+        rationale,
+        bull_case: bullCase || undefined,
+        bear_case: bearCase || undefined,
+        source: source || undefined,
+        time_horizon: timeHorizon || undefined,
+        expiry_date: expiryDate || undefined,
+      });
+      onCreated();
+    } catch {
+      setError("Failed to create recommendation.");
+    }
+    setSubmitting(false);
+  };
+
+  const inputCls = "w-full px-3 py-2 bg-terminal-bg-primary border border-terminal-border rounded text-sm text-terminal-text-primary focus:border-terminal-accent focus:outline-none";
+  const labelCls = "block text-xs text-terminal-text-secondary mb-1";
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-4">
+      {error && (
+        <div className="text-sm text-terminal-negative bg-terminal-negative/10 px-3 py-2 rounded">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Security *</label>
+          <select value={securityId} onChange={(e) => setSecurityId(e.target.value)} className={inputCls}>
+            <option value="">Select security...</option>
+            {securities.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.ticker} — {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Currency</label>
+          <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputCls}>
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="SEK">SEK</option>
+            <option value="GBP">GBP</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className={labelCls}>Action *</label>
+          <select value={action} onChange={(e) => setAction(e.target.value)} className={inputCls}>
+            <option value="buy">Buy</option>
+            <option value="sell">Sell</option>
+            <option value="hold">Hold</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Confidence *</label>
+          <select value={confidence} onChange={(e) => setConfidence(e.target.value)} className={inputCls}>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Time Horizon</label>
+          <select value={timeHorizon} onChange={(e) => setTimeHorizon(e.target.value)} className={inputCls}>
+            <option value="short">Short (&lt; 3m)</option>
+            <option value="medium">Medium (3-12m)</option>
+            <option value="long">Long (&gt; 12m)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Entry Price (auto-filled if empty)</label>
+          <input
+            type="number"
+            step="0.01"
+            value={entryPrice}
+            onChange={(e) => setEntryPrice(e.target.value)}
+            placeholder="e.g. 45.50"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Target Price</label>
+          <input
+            type="number"
+            step="0.01"
+            value={targetPrice}
+            onChange={(e) => setTargetPrice(e.target.value)}
+            placeholder="e.g. 55.00"
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className={labelCls}>Rationale *</label>
+        <textarea
+          value={rationale}
+          onChange={(e) => setRationale(e.target.value)}
+          rows={3}
+          placeholder="Why this recommendation?"
+          className={inputCls}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Bull Case</label>
+          <textarea
+            value={bullCase}
+            onChange={(e) => setBullCase(e.target.value)}
+            rows={2}
+            placeholder="Best case scenario"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Bear Case</label>
+          <textarea
+            value={bearCase}
+            onChange={(e) => setBearCase(e.target.value)}
+            rows={2}
+            placeholder="Worst case scenario"
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Source</label>
+          <input
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder="e.g. research-analyst, manual"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Expiry Date</label>
+          <input
+            type="date"
+            value={expiryDate}
+            onChange={(e) => setExpiryDate(e.target.value)}
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={submitting}
+        className="px-6 py-2 bg-terminal-accent text-terminal-bg-primary rounded font-medium text-sm hover:opacity-90 disabled:opacity-50"
+      >
+        {submitting ? "Creating..." : "Create Recommendation"}
+      </button>
+    </form>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiGet, apiGetRaw } from "@/lib/api";
+import { apiGet, apiGetRaw, apiDelete } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 
 interface Transaction {
@@ -109,6 +109,17 @@ export default function TransactionsPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this transaction?")) return;
+    try {
+      await apiDelete(`/transactions/${id}`);
+      fetchTransactions();
+      apiGet<TransactionSummary>("/transactions/summary").then(setSummary).catch(console.error);
+    } catch (e) {
+      console.error("Failed to delete transaction", e);
+    }
+  };
+
   // Unique types from summary for filter dropdown
   const types = summary ? Object.keys(summary.byType).sort() : [];
 
@@ -210,18 +221,19 @@ export default function TransactionsPage() {
                 <th className="px-3 py-2 font-medium text-right">Price</th>
                 <th className="px-3 py-2 font-medium text-right">Total</th>
                 <th className="px-3 py-2 font-medium text-right">Fee</th>
+                <th className="px-3 py-2 w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-terminal-border">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-terminal-text-secondary">
+                  <td colSpan={10} className="px-3 py-8 text-center text-terminal-text-secondary">
                     Loading...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-terminal-text-secondary">
+                  <td colSpan={10} className="px-3 py-8 text-center text-terminal-text-secondary">
                     No transactions found.
                   </td>
                 </tr>
@@ -290,6 +302,15 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs text-terminal-text-secondary">
                       {t.feeCents ? formatCurrency(t.feeCents, t.feeCurrency) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => handleDelete(t.id)}
+                        className="text-terminal-text-secondary hover:text-red-400 transition-colors text-xs"
+                        title="Delete transaction"
+                      >
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 ))
