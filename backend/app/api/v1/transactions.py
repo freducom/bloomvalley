@@ -1,9 +1,12 @@
-"""Transaction list and detail endpoints."""
+"""Transaction list, create, and detail endpoints."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from typing import Optional
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
@@ -15,6 +18,62 @@ from app.db.models.transactions import Transaction
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+class TransactionCreate(BaseModel):
+    account_id: int
+    security_id: Optional[int] = None
+    type: str
+    trade_date: date
+    settlement_date: Optional[date] = None
+    quantity: str = "0"
+    price_cents: Optional[int] = None
+    price_currency: Optional[str] = None
+    total_cents: int = 0
+    fee_cents: int = 0
+    fee_currency: str = "EUR"
+    currency: str = "EUR"
+    notes: Optional[str] = None
+    external_ref: Optional[str] = None
+
+
+@router.post("", status_code=201)
+async def create_transaction(body: TransactionCreate):
+    """Create a new transaction."""
+    async with async_session() as session:
+        tx = Transaction(
+            account_id=body.account_id,
+            security_id=body.security_id,
+            type=body.type,
+            trade_date=body.trade_date,
+            settlement_date=body.settlement_date,
+            quantity=Decimal(body.quantity),
+            price_cents=body.price_cents,
+            price_currency=body.price_currency,
+            total_cents=body.total_cents,
+            fee_cents=body.fee_cents,
+            fee_currency=body.fee_currency,
+            currency=body.currency,
+            notes=body.notes,
+            external_ref=body.external_ref,
+        )
+        session.add(tx)
+        await session.commit()
+        await session.refresh(tx)
+
+    return {
+        "data": {
+            "id": tx.id,
+            "accountId": tx.account_id,
+            "securityId": tx.security_id,
+            "type": tx.type,
+            "tradeDate": tx.trade_date.isoformat(),
+            "quantity": str(tx.quantity),
+            "totalCents": tx.total_cents,
+            "currency": tx.currency,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
 
 
 @router.get("")
