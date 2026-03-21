@@ -9,6 +9,7 @@ import {
   Upload,
   Radio,
   Eye,
+  EyeOff,
   CandlestickChart,
   ShieldAlert,
   BookOpen,
@@ -25,6 +26,7 @@ import {
   Activity,
   Play,
   Plus,
+  Monitor,
   type LucideIcon,
 } from "lucide-react";
 
@@ -73,6 +75,7 @@ const FEATURES: PaletteItem[] = [
 ];
 
 const ACTIONS: PaletteItem[] = [
+  { id: "a-fullscreen", label: "Fullscreen Dashboard", category: "action", icon: Monitor, href: "/fullscreen", badge: "\u2318\u21E7F" },
   { id: "a-add-transaction", label: "Add Transaction", category: "action", icon: Plus, href: "/transactions" },
   { id: "a-import", label: "Import from Nordnet", category: "action", icon: Upload, href: "/import" },
   { id: "a-create-alert", label: "Create Alert", category: "action", icon: Bell, href: "/alerts" },

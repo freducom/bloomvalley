@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 type MarketStatusType = "open" | "closed" | "pre-market" | "after-hours";
 
@@ -153,7 +154,7 @@ export function StatusBar() {
       <div className="flex items-center gap-2">
         <span className="text-terminal-text-secondary">Portfolio:</span>
         <span className="font-semibold text-terminal-text-primary">
-          {portfolioValue !== null ? formatCurrency(portfolioValue) : "—"}
+          <Private>{portfolioValue !== null ? formatCurrency(portfolioValue) : "—"}</Private>
         </span>
       </div>
     </footer>
