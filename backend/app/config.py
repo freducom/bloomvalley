@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     ALPHA_VANTAGE_API_KEY: str = ""
     FRED_API_KEY: str = ""
+    FINNHUB_API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     FRONTEND_URL: str = "http://localhost:3000"
 
