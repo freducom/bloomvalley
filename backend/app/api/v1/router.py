@@ -1,7 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.v1.accounts import router as accounts_router
+from app.api.v1.alerts import router as alerts_router
 from app.api.v1.dividends import router as dividends_router
+from app.api.v1.fixed_income import router as fixed_income_router
+from app.api.v1.fundamentals import router as fundamentals_router
 from app.api.v1.health import router as health_router
 from app.api.v1.insider import router as insider_router
 from app.api.v1.imports import router as imports_router
@@ -16,6 +19,7 @@ from app.api.v1.risk import router as risk_router
 from app.api.v1.securities import router as securities_router
 from app.api.v1.research import router as research_router
 from app.api.v1.tax import router as tax_router
+from app.api.v1.recommendations import router as recommendations_router
 from app.api.v1.watchlists import router as watchlists_router
 
 # Import pipelines to trigger registration
@@ -26,6 +30,9 @@ import app.pipelines.fred  # noqa: F401
 import app.pipelines.ecb_macro  # noqa: F401
 import app.pipelines.yahoo_dividends  # noqa: F401
 import app.pipelines.google_news  # noqa: F401
+import app.pipelines.openinsider  # noqa: F401
+import app.pipelines.nasdaq_nordic_insider  # noqa: F401
+import app.pipelines.fi_se_insider  # noqa: F401
 
 router = APIRouter()
 
@@ -46,3 +53,7 @@ router.include_router(research_router, prefix="/research", tags=["Research"])
 router.include_router(news_router, prefix="/news", tags=["News"])
 router.include_router(tax_router, prefix="/tax", tags=["Tax"])
 router.include_router(insider_router, prefix="/insiders", tags=["Insiders"])
+router.include_router(recommendations_router, prefix="/recommendations", tags=["Recommendations"])
+router.include_router(alerts_router, prefix="/alerts", tags=["Alerts"])
+router.include_router(fixed_income_router, prefix="/fixed-income", tags=["Fixed Income"])
+router.include_router(fundamentals_router, prefix="/fundamentals", tags=["Fundamentals"])

@@ -8,9 +8,14 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
+from sqlalchemy import func
+
 from app.db.engine import async_session
+from app.db.models.holdings_snapshot import HoldingsSnapshot
 from app.db.models.prices import Price
 from app.db.models.securities import Security
+from app.db.models.transactions import Transaction
+from app.db.models.watchlists import Watchlist, WatchlistItem
 
 logger = structlog.get_logger()
 
@@ -265,5 +270,195 @@ async def get_ohlc(
             "candles": candles,
             "indicators": indicator_data,
         },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.get("/heatmap")
+async def get_heatmap(
+    source: str = Query("holdings", description="holdings, watchlist, or watchlist ID"),
+    period: str = Query("1D", description="1D, 1W, 1M, 3M, 6M, 1Y, YTD"),
+    watchlist_id: int | None = Query(None, alias="watchlistId"),
+):
+    """Heatmap data — % change per security for a given period and source.
+
+    source=holdings: securities currently held in portfolio (weight = portfolio value)
+    source=watchlist: all watchlist securities (weight = market cap proxy via volume * price)
+    source=all: all securities with price data
+    """
+    from sqlalchemy import case as sa_case
+    from decimal import Decimal
+    from app.db.models.prices import FxRate
+
+    async with async_session() as session:
+        # Determine which securities to include
+        security_ids: list[int] = []
+        # Holdings weights: security_id -> market value in EUR cents
+        holdings_weights: dict[int, int] = {}
+
+        if source == "holdings":
+            # Get net quantity per security from transactions
+            result = await session.execute(
+                select(
+                    Transaction.security_id,
+                    func.sum(
+                        sa_case(
+                            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
+                            (Transaction.type.in_(["sell", "transfer_out"]), -Transaction.quantity),
+                            else_=0,
+                        )
+                    ).label("net_qty"),
+                )
+                .where(Transaction.security_id.isnot(None))
+                .group_by(Transaction.security_id)
+                .having(
+                    func.sum(
+                        sa_case(
+                            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
+                            (Transaction.type.in_(["sell", "transfer_out"]), -Transaction.quantity),
+                            else_=0,
+                        )
+                    ) > 0
+                )
+            )
+            qty_rows = result.all()
+            holdings_qty: dict[int, float] = {r[0]: float(r[1]) for r in qty_rows}
+            security_ids = list(holdings_qty.keys())
+
+        elif source == "watchlist":
+            query = select(WatchlistItem.security_id)
+            if watchlist_id:
+                query = query.where(WatchlistItem.watchlist_id == watchlist_id)
+            result = await session.execute(query)
+            security_ids = list({r[0] for r in result.all()})
+
+        else:  # "all"
+            result = await session.execute(select(Security.id).where(Security.is_active == True))
+            security_ids = [r[0] for r in result.all()]
+
+        if not security_ids:
+            return {
+                "data": [],
+                "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+            }
+
+        # Determine lookback period
+        today = date.today()
+        if period == "YTD":
+            from_date = date(today.year, 1, 1)
+        else:
+            period_days = {
+                "1D": 5,
+                "1W": 10,
+                "1M": 35,
+                "3M": 100,
+                "6M": 200,
+                "1Y": 370,
+            }.get(period, 5)
+            from_date = date.fromordinal(max(1, today.toordinal() - period_days))
+
+        # Get prices for all securities in one go
+        result = await session.execute(
+            select(Price.security_id, Price.date, Price.close_cents, Price.volume)
+            .where(Price.security_id.in_(security_ids), Price.date >= from_date)
+            .order_by(Price.security_id, Price.date)
+        )
+        price_rows = result.all()
+
+        # Group by security
+        prices_by_sec: dict[int, list[tuple]] = {}
+        for sid, dt, close, vol in price_rows:
+            prices_by_sec.setdefault(sid, []).append((dt, close, vol))
+
+        # Get security metadata
+        result = await session.execute(
+            select(Security).where(Security.id.in_(security_ids))
+        )
+        sec_map = {s.id: s for s in result.scalars().all()}
+
+        # Get FX rates for EUR conversion
+        fx_rates: dict[str, Decimal] = {"EUR": Decimal("1.0")}
+        subq = (
+            select(FxRate.quote_currency, func.max(FxRate.date).label("max_date"))
+            .where(FxRate.base_currency == "EUR")
+            .group_by(FxRate.quote_currency)
+            .subquery()
+        )
+        fx_result = await session.execute(
+            select(FxRate).join(
+                subq,
+                (FxRate.quote_currency == subq.c.quote_currency)
+                & (FxRate.date == subq.c.max_date)
+                & (FxRate.base_currency == "EUR"),
+            )
+        )
+        for fx in fx_result.scalars().all():
+            fx_rates[fx.quote_currency] = fx.rate
+
+    # Calculate holdings weights (portfolio value in EUR cents)
+    if source == "holdings":
+        for sid, qty in holdings_qty.items():
+            if sid in prices_by_sec and prices_by_sec[sid]:
+                latest_price = prices_by_sec[sid][-1][1]  # close_cents
+                sec = sec_map.get(sid)
+                if sec:
+                    fx = float(fx_rates.get(sec.currency, Decimal("1")))
+                    value_eur = int(qty * latest_price / fx) if fx > 0 else int(qty * latest_price)
+                    holdings_weights[sid] = value_eur
+
+    # Calculate % change and build heatmap data
+    heatmap_data = []
+    for sid, price_list in prices_by_sec.items():
+        if len(price_list) < 2:
+            continue
+        sec = sec_map.get(sid)
+        if not sec:
+            continue
+
+        if period == "1D":
+            end_price = price_list[-1][1]
+            start_price = price_list[-2][1]
+        elif period == "YTD":
+            start_price = price_list[0][1]
+            end_price = price_list[-1][1]
+        else:
+            start_price = price_list[0][1]
+            end_price = price_list[-1][1]
+
+        if start_price == 0:
+            continue
+
+        change_pct = round((end_price - start_price) / start_price * 100, 2)
+
+        # Weight calculation
+        if source == "holdings":
+            # Weight = portfolio market value in EUR cents
+            weight = holdings_weights.get(sid, 0)
+        else:
+            # Weight = market cap proxy: latest price * average daily volume
+            # This gives relative sizing proportional to market cap
+            volumes = [v for _, _, v in price_list if v and v > 0]
+            avg_vol = sum(volumes) / len(volumes) if volumes else 1
+            weight = int(end_price * avg_vol)
+
+        heatmap_data.append({
+            "securityId": sid,
+            "ticker": sec.ticker,
+            "name": sec.name,
+            "sector": sec.sector,
+            "assetClass": sec.asset_class,
+            "currency": sec.currency,
+            "currentPriceCents": end_price,
+            "changePct": change_pct,
+            "startPriceCents": start_price,
+            "endPriceCents": end_price,
+            "weight": weight,
+        })
+
+    # Sort by weight descending (largest positions first)
+    heatmap_data.sort(key=lambda x: x["weight"], reverse=True)
+
+    return {
+        "data": heatmap_data,
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
