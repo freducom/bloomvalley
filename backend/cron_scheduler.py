@@ -44,6 +44,59 @@ def main() -> None:
                       day_of_week="mon-fri", hour=12, minute=0,
                       id="ecb_macro_indicators")
 
+    # Yahoo dividends — weekdays at 23:30 Helsinki time
+    scheduler.add_job(trigger, "cron", args=["yahoo_dividends"],
+                      day_of_week="mon-fri", hour=23, minute=30,
+                      id="yahoo_dividends")
+
+    # Google News — every 4 hours
+    scheduler.add_job(trigger, "interval", args=["google_news"],
+                      hours=4, id="google_news")
+
+    # OpenInsider — weekdays at 22:00 Helsinki time
+    scheduler.add_job(trigger, "cron", args=["openinsider"],
+                      day_of_week="mon-fri", hour=22, minute=0,
+                      id="openinsider")
+
+    # Nasdaq Nordic insider trades — weekdays at 19:00 Helsinki time
+    scheduler.add_job(trigger, "cron", args=["nasdaq_nordic_insider"],
+                      day_of_week="mon-fri", hour=19, minute=0,
+                      id="nasdaq_nordic_insider")
+
+    # FI/SE insider trades — weekdays at 19:30 Helsinki time
+    scheduler.add_job(trigger, "cron", args=["fi_se_insider"],
+                      day_of_week="mon-fri", hour=19, minute=30,
+                      id="fi_se_insider")
+
+    # Alpha Vantage backup prices — weekdays at 00:00 (fills gaps from Yahoo)
+    scheduler.add_job(trigger, "cron", args=["alpha_vantage_prices"],
+                      day_of_week="mon-fri", hour=0, minute=0,
+                      id="alpha_vantage_prices")
+
+    # justETF profiles — weekly on Sunday at 10:00
+    scheduler.add_job(trigger, "cron", args=["justetf_profiles"],
+                      day_of_week="sun", hour=10, minute=0,
+                      id="justetf_profiles")
+
+    # SEC EDGAR filings — weekdays at 21:00 Helsinki time
+    scheduler.add_job(trigger, "cron", args=["sec_edgar_filings"],
+                      day_of_week="mon-fri", hour=21, minute=0,
+                      id="sec_edgar_filings")
+
+    # Quiver Congress trades — weekdays at 20:00 Helsinki time
+    scheduler.add_job(trigger, "cron", args=["quiver_congress_trades"],
+                      day_of_week="mon-fri", hour=20, minute=0,
+                      id="quiver_congress_trades")
+
+    # Morningstar ratings — weekly on Sunday at 11:00
+    scheduler.add_job(trigger, "cron", args=["morningstar_ratings"],
+                      day_of_week="sun", hour=11, minute=0,
+                      id="morningstar_ratings")
+
+    # GDELT global events — every 6 hours
+    scheduler.add_job(trigger, "interval", args=["gdelt_events"],
+                      hours=6, id="gdelt_events")
+
     jobs = scheduler.get_jobs()
     print(f"[cron] Starting scheduler with {len(jobs)} jobs (TZ=Europe/Helsinki):", flush=True)
     for job in jobs:

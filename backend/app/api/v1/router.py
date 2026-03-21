@@ -33,6 +33,12 @@ import app.pipelines.google_news  # noqa: F401
 import app.pipelines.openinsider  # noqa: F401
 import app.pipelines.nasdaq_nordic_insider  # noqa: F401
 import app.pipelines.fi_se_insider  # noqa: F401
+import app.pipelines.alpha_vantage  # noqa: F401
+import app.pipelines.justetf  # noqa: F401
+import app.pipelines.sec_edgar  # noqa: F401
+import app.pipelines.quiver_congress  # noqa: F401
+import app.pipelines.gdelt  # noqa: F401
+import app.pipelines.morningstar  # noqa: F401
 
 router = APIRouter()
 

@@ -27,12 +27,17 @@ class PipelineSource(str, enum.Enum):
     COINGECKO = "coingecko"
     JUSTETF = "justetf"
     MORNINGSTAR = "morningstar"
+    GOOGLE_NEWS = "google_news"
+    SEC_EDGAR = "sec_edgar"
+    QUIVER = "quiver"
+    GDELT = "gdelt"
     MANUAL = "manual"
 
 
 pipeline_runs_source_enum = ENUM(
     "yahoo_finance", "alpha_vantage", "fred", "ecb",
     "coingecko", "justetf", "morningstar", "manual",
+    "google_news", "sec_edgar", "quiver", "gdelt",
     name="pipeline_runs_source_enum",
     create_type=False,
 )
