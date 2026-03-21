@@ -24,6 +24,9 @@ from app.api.v1.securities import router as securities_router
 from app.api.v1.research import router as research_router
 from app.api.v1.tax import router as tax_router
 from app.api.v1.recommendations import router as recommendations_router
+from app.api.v1.reports import router as reports_router
+from app.api.v1.screener import router as screener_router
+from app.api.v1.technical import router as technical_router
 from app.api.v1.watchlists import router as watchlists_router
 
 # Import pipelines to trigger registration
@@ -72,3 +75,6 @@ router.include_router(projections_router, prefix="/projections", tags=["Projecti
 router.include_router(factors_router, prefix="/factors", tags=["Factors"])
 router.include_router(optimization_router, prefix="/optimization", tags=["Optimization"])
 router.include_router(backtest_router, prefix="/backtest", tags=["Backtest"])
+router.include_router(reports_router, prefix="/reports", tags=["Reports"])
+router.include_router(technical_router, prefix="/technical", tags=["Technical Analysis"])
+router.include_router(screener_router, prefix="/screener", tags=["Screener"])

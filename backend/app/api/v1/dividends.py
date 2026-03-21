@@ -15,6 +15,18 @@ from app.db.models.accounts import Account
 from app.db.models.prices import FxRate
 from app.api.v1.portfolio import _get_fx_rates, _get_latest_prices
 
+# Withholding tax rates for a Finnish tax resident by country of domicile.
+# OST (osakesaastotili) holdings are tax-deferred — 0% withholding inside the wrapper.
+_WHT_RATES: dict[str, float] = {
+    "FI": 0.30,
+    "US": 0.15,
+    "SE": 0.30,
+    "DE": 0.26375,
+    "IE": 0.0,
+    "LU": 0.0,
+}
+_WHT_DEFAULT = 0.30
+
 logger = structlog.get_logger()
 
 router = APIRouter()
@@ -401,3 +413,424 @@ async def dividend_calendar(
         })
 
     return {"data": data, "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
+
+
+# ---------------------------------------------------------------------------
+# Helper: holdings with account-level detail (needed for tax-summary)
+# ---------------------------------------------------------------------------
+
+async def _get_holdings_with_accounts() -> list[dict]:
+    """Return held positions with account type info.
+
+    Each entry: {security_id, qty, account_id, account_type}.
+    A single security may appear multiple times if held in different accounts.
+    """
+    async with async_session() as session:
+        qty_case = case(
+            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
+            (Transaction.type.in_(["sell", "transfer_out"]), -Transaction.quantity),
+            else_=literal_column("0"),
+        )
+        result = await session.execute(
+            select(
+                Transaction.account_id,
+                Transaction.security_id,
+                func.sum(qty_case).label("qty"),
+            )
+            .where(
+                Transaction.security_id.isnot(None),
+                Transaction.type.in_(["buy", "sell", "transfer_in", "transfer_out"]),
+            )
+            .group_by(Transaction.account_id, Transaction.security_id)
+            .having(func.sum(qty_case) > 0)
+        )
+        rows = result.all()
+
+    if not rows:
+        return []
+
+    # Load account types
+    acct_ids = {r.account_id for r in rows}
+    async with async_session() as session:
+        acct_result = await session.execute(
+            select(Account).where(Account.id.in_(acct_ids))
+        )
+        accounts = {a.id: a for a in acct_result.scalars().all()}
+
+    return [
+        {
+            "security_id": r.security_id,
+            "qty": float(r.qty),
+            "account_id": r.account_id,
+            "account_type": accounts[r.account_id].type if r.account_id in accounts else "regular",
+        }
+        for r in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Income projection endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/income-projection")
+async def income_projection(
+    years: int = Query(5, ge=1, le=20),
+):
+    """Project annual dividend income for the next N years.
+
+    Uses historical dividend data (up to 3 years) to compute a per-share
+    annual dividend and its CAGR, then projects forward.
+    """
+    holdings = await _get_held_security_ids()
+    if not holdings:
+        return {
+            "data": {
+                "currentAnnualIncomeCents": 0,
+                "projections": [],
+                "byHolding": [],
+                "byMonth": [{"month": m, "expectedIncomeCents": 0} for m in range(1, 13)],
+            },
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    sec_ids = list(holdings.keys())
+    prices = await _get_latest_prices()
+    fx_rates = await _get_fx_rates()
+    today = date.today()
+
+    # Fetch up to 3 years of dividend history per security
+    three_years_ago = today - timedelta(days=3 * 365)
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(DividendEvent, Security)
+            .join(Security, DividendEvent.security_id == Security.id)
+            .where(
+                DividendEvent.security_id.in_(sec_ids),
+                DividendEvent.ex_date >= three_years_ago,
+            )
+            .order_by(DividendEvent.security_id, DividendEvent.ex_date)
+        )
+        rows = result.all()
+
+        # Also load securities that may have no events
+        sec_result = await session.execute(
+            select(Security).where(Security.id.in_(sec_ids))
+        )
+        all_securities = {s.id: s for s in sec_result.scalars().all()}
+
+    # Group dividend events by security and calendar year
+    # events_by_sec: {security_id: {year: total_per_share_cents}}
+    events_by_sec: dict[int, dict[int, int]] = {}
+    event_list_by_sec: dict[int, list[dict]] = {}
+    div_currency_by_sec: dict[int, str] = {}
+
+    for event, sec in rows:
+        sid = event.security_id
+        yr = event.ex_date.year
+        events_by_sec.setdefault(sid, {})
+        events_by_sec[sid][yr] = events_by_sec[sid].get(yr, 0) + event.amount_cents
+        div_currency_by_sec[sid] = event.currency
+
+        event_list_by_sec.setdefault(sid, [])
+        event_list_by_sec[sid].append({
+            "exDate": event.ex_date.isoformat(),
+            "amountCents": event.amount_cents,
+            "currency": event.currency,
+        })
+
+    # Build month-level breakdown from last 12 months of events
+    one_year_ago = today - timedelta(days=365)
+    monthly_totals: dict[int, int] = {m: 0 for m in range(1, 13)}
+    for event, sec in rows:
+        if event.ex_date < one_year_ago:
+            continue
+        qty = Decimal(str(holdings.get(event.security_id, {}).get("qty", 0)))
+        total = int(event.amount_cents * qty)
+        ccy = event.currency
+        if ccy != "EUR":
+            fx = fx_rates.get(ccy, Decimal("1"))
+            total = int(total / float(fx))
+        monthly_totals[event.ex_date.month] = monthly_totals.get(event.ex_date.month, 0) + total
+
+    # Compute per-holding projection data
+    by_holding: list[dict] = []
+    total_current_annual_eur = 0
+    # Accumulate per-year projected totals across all holdings
+    year_totals: dict[int, int] = {}
+
+    for sid, h in holdings.items():
+        sec = all_securities.get(sid)
+        if not sec:
+            continue
+
+        yearly = events_by_sec.get(sid)
+        if not yearly:
+            continue  # No dividend history — skip
+
+        qty = Decimal(str(h["qty"]))
+        div_ccy = div_currency_by_sec.get(sid, sec.currency)
+
+        # Compute average annual dividend per share (cents in dividend currency)
+        sorted_years = sorted(yearly.keys())
+        # Exclude current incomplete year from averages if it exists
+        complete_years = [y for y in sorted_years if y < today.year]
+        if not complete_years:
+            # Only current year data — use it as-is
+            annual_per_share = yearly[sorted_years[0]]
+            growth_rate = 0.0
+        else:
+            annual_per_share = sum(yearly[y] for y in complete_years) // len(complete_years)
+
+            # CAGR from earliest to latest complete year
+            if len(complete_years) >= 2:
+                first_yr_div = yearly[complete_years[0]]
+                last_yr_div = yearly[complete_years[-1]]
+                n_periods = complete_years[-1] - complete_years[0]
+                if first_yr_div > 0 and n_periods > 0:
+                    growth_rate = round(
+                        (last_yr_div / first_yr_div) ** (1 / n_periods) - 1, 4
+                    )
+                else:
+                    growth_rate = 0.0
+            else:
+                growth_rate = 0.0
+
+        # Current annual income in div currency cents
+        annual_income_cents = int(annual_per_share * float(qty))
+
+        # Convert to EUR
+        if div_ccy == "EUR":
+            annual_income_eur = annual_income_cents
+        else:
+            fx = fx_rates.get(div_ccy, Decimal("1"))
+            annual_income_eur = int(annual_income_cents / float(fx))
+
+        total_current_annual_eur += annual_income_eur
+
+        # Yield on cost (using current price as proxy)
+        yoc = None
+        price_data = prices.get(sid)
+        if price_data and price_data["close_cents"] > 0:
+            price_cents = price_data["close_cents"]
+            price_ccy = price_data["currency"]
+            if div_ccy == price_ccy:
+                yoc = round((annual_per_share / price_cents) * 100, 2)
+
+        # Project forward per year
+        for i in range(years):
+            proj_year = today.year + i
+            factor = (1 + growth_rate) ** i
+            projected_eur = int(annual_income_eur * factor)
+            year_totals[proj_year] = year_totals.get(proj_year, 0) + projected_eur
+
+        by_holding.append({
+            "securityId": sid,
+            "ticker": sec.ticker,
+            "annualDividendPerShare": round(annual_per_share / 100, 2),
+            "quantity": str(qty),
+            "annualIncomeCents": annual_income_eur,
+            "yieldOnCost": yoc,
+            "growthRate": growth_rate,
+            "dividendHistory": event_list_by_sec.get(sid, []),
+        })
+
+    # Sort by income descending
+    by_holding.sort(key=lambda x: x["annualIncomeCents"], reverse=True)
+
+    # Build projections list with yield %
+    total_portfolio_value_eur = 0
+    for sid, h in holdings.items():
+        price_data = prices.get(sid)
+        if not price_data:
+            continue
+        qty_f = float(h["qty"])
+        mv = int(price_data["close_cents"] * qty_f)
+        ccy = price_data["currency"]
+        if ccy == "EUR":
+            total_portfolio_value_eur += mv
+        else:
+            fx = fx_rates.get(ccy, Decimal("1"))
+            total_portfolio_value_eur += int(mv / float(fx))
+
+    projections = []
+    for i in range(years):
+        proj_year = today.year + i
+        est = year_totals.get(proj_year, 0)
+        yield_pct = round((est / total_portfolio_value_eur) * 100, 2) if total_portfolio_value_eur > 0 else None
+        projections.append({
+            "year": proj_year,
+            "estimatedIncomeCents": est,
+            "yieldPct": yield_pct,
+        })
+
+    by_month = [{"month": m, "expectedIncomeCents": monthly_totals.get(m, 0)} for m in range(1, 13)]
+
+    return {
+        "data": {
+            "currentAnnualIncomeCents": total_current_annual_eur,
+            "projections": projections,
+            "byHolding": by_holding,
+            "byMonth": by_month,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tax summary endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/tax-summary")
+async def dividend_tax_summary():
+    """Dividend withholding tax summary by holding and country.
+
+    Takes into account:
+    - Country-specific withholding rates for Finnish investors
+    - Account type (osakesaastotili is tax-deferred => 0% withholding)
+    - Reclaimable excess withholding where applicable
+    """
+    positions = await _get_holdings_with_accounts()
+    if not positions:
+        return {
+            "data": {
+                "totalGrossCents": 0,
+                "totalWithholdingCents": 0,
+                "totalNetCents": 0,
+                "totalReclaimableCents": 0,
+                "byHolding": [],
+                "byCountry": [],
+            },
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    sec_ids = list({p["security_id"] for p in positions})
+    fx_rates = await _get_fx_rates()
+
+    # Load securities
+    async with async_session() as session:
+        sec_result = await session.execute(
+            select(Security).where(Security.id.in_(sec_ids))
+        )
+        securities = {s.id: s for s in sec_result.scalars().all()}
+
+    # Get TTM dividend per share per security (in dividend currency cents)
+    one_year_ago = date.today() - timedelta(days=365)
+    async with async_session() as session:
+        result = await session.execute(
+            select(
+                DividendEvent.security_id,
+                func.sum(DividendEvent.amount_cents).label("ttm_cents"),
+                func.max(DividendEvent.currency).label("currency"),
+            )
+            .where(
+                DividendEvent.security_id.in_(sec_ids),
+                DividendEvent.ex_date >= one_year_ago,
+            )
+            .group_by(DividendEvent.security_id)
+        )
+        ttm_by_sec = {
+            r.security_id: {"ttm_cents": int(r.ttm_cents), "currency": r.currency}
+            for r in result.all()
+        }
+
+    total_gross_eur = 0
+    total_wht_eur = 0
+    total_net_eur = 0
+    total_reclaimable_eur = 0
+    by_holding: list[dict] = []
+    country_agg: dict[str, dict] = {}
+
+    for pos in positions:
+        sid = pos["security_id"]
+        sec = securities.get(sid)
+        if not sec:
+            continue
+
+        ttm = ttm_by_sec.get(sid)
+        if not ttm:
+            continue  # No dividend history — skip
+
+        qty = Decimal(str(pos["qty"]))
+        account_type = pos["account_type"]
+        country = sec.country or "FI"
+        div_ccy = ttm["currency"]
+
+        # Gross annual dividend in dividend currency cents
+        gross_cents = int(ttm["ttm_cents"] * float(qty))
+
+        # Convert to EUR
+        if div_ccy == "EUR":
+            gross_eur = gross_cents
+        else:
+            fx = fx_rates.get(div_ccy, Decimal("1"))
+            gross_eur = int(gross_cents / float(fx))
+
+        # Determine withholding rate
+        if account_type == "osakesaastotili":
+            wht_rate = 0.0
+        else:
+            wht_rate = _WHT_RATES.get(country, _WHT_DEFAULT)
+
+        wht_eur = int(gross_eur * wht_rate)
+        net_eur = gross_eur - wht_eur
+
+        # Reclaimable: excess withholding above Finnish tax treaty rate (15%).
+        # E.g. Germany withholds 26.375% but treaty allows 15% => 11.375% reclaimable.
+        # Finland domestic 30% is NOT reclaimable (it's domestic tax, not foreign WHT).
+        reclaimable_eur = 0
+        reclaimable = False
+        treaty_rate = 0.15
+        if account_type != "osakesaastotili" and wht_rate > treaty_rate and country not in ("FI",):
+            excess_rate = wht_rate - treaty_rate
+            reclaimable_eur = int(gross_eur * excess_rate)
+            reclaimable = True
+
+        total_gross_eur += gross_eur
+        total_wht_eur += wht_eur
+        total_net_eur += net_eur
+        total_reclaimable_eur += reclaimable_eur
+
+        by_holding.append({
+            "securityId": sid,
+            "ticker": sec.ticker,
+            "country": country,
+            "accountType": account_type,
+            "grossCents": gross_eur,
+            "withholdingRate": round(wht_rate, 5),
+            "withholdingCents": wht_eur,
+            "netCents": net_eur,
+            "reclaimable": reclaimable,
+            "reclaimableCents": reclaimable_eur,
+        })
+
+        # Country aggregation
+        if country not in country_agg:
+            country_agg[country] = {"grossCents": 0, "withholdingCents": 0, "rate": wht_rate}
+        country_agg[country]["grossCents"] += gross_eur
+        country_agg[country]["withholdingCents"] += wht_eur
+
+    # Sort by gross descending
+    by_holding.sort(key=lambda x: x["grossCents"], reverse=True)
+
+    by_country = [
+        {
+            "country": c,
+            "grossCents": v["grossCents"],
+            "withholdingCents": v["withholdingCents"],
+            "rate": round(v["rate"], 5),
+        }
+        for c, v in sorted(country_agg.items(), key=lambda x: x[1]["grossCents"], reverse=True)
+    ]
+
+    return {
+        "data": {
+            "totalGrossCents": total_gross_eur,
+            "totalWithholdingCents": total_wht_eur,
+            "totalNetCents": total_net_eur,
+            "totalReclaimableCents": total_reclaimable_eur,
+            "byHolding": by_holding,
+            "byCountry": by_country,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
