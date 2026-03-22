@@ -1,6 +1,6 @@
 # System Architecture
 
-Defines the component architecture, deployment topology, data flow, and cross-cutting concerns for the Warren Cashett terminal.
+Defines the component architecture, deployment topology, data flow, and cross-cutting concerns for the Bloomvalley terminal.
 
 ## Dependencies
 
@@ -124,7 +124,7 @@ Frontend opens SSE connection to /api/v1/prices/stream
 ## Project Structure
 
 ```
-warren-cashett/
+bloomvalley/
 ├── AGENTS.md                    # Team definitions, domain requirements
 ├── CLAUDE.md                    # Project conventions for Claude Code
 ├── specs/                       # All specification documents

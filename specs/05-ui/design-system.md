@@ -1,6 +1,6 @@
 # Design System
 
-Visual language, color palette, typography, spacing, and formatting rules for the Warren Cashett terminal.
+Visual language, color palette, typography, spacing, and formatting rules for the Bloomvalley terminal.
 
 ## Dependencies
 

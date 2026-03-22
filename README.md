@@ -1,4 +1,4 @@
-# Warren Cashett
+# Bloomvalley Terminal
 
 Personal Bloomberg-style terminal for investment tracking and analysis.
 
@@ -42,8 +42,8 @@ Personal Bloomberg-style terminal for investment tracking and analysis.
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url> warren-cashett
-cd warren-cashett
+git clone <repo-url> bloomvalley
+cd bloomvalley
 cp .env.example .env
 ```
 
@@ -53,11 +53,11 @@ Edit `.env` and add your API keys (see [API Keys](#api-keys) below).
 
 ```bash
 # Create database
-createdb warren_cashett
+createdb bloomvalley
 
 # Enable TimescaleDB extension
-psql warren_cashett -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
-psql warren_cashett -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+psql bloomvalley -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+psql bloomvalley -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 ```
 
 ### 3. Backend
@@ -65,7 +65,7 @@ psql warren_cashett -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 ```bash
 cd backend
 cp ../.env .env   # Or create a local .env with localhost URLs:
-# DATABASE_URL=postgresql+asyncpg://youruser@localhost:5432/warren_cashett
+# DATABASE_URL=postgresql+asyncpg://youruser@localhost:5432/bloomvalley
 # REDIS_URL=redis://localhost:6379/0
 # FRED_API_KEY=your_key_here
 
@@ -100,8 +100,8 @@ Open http://localhost:3000.
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url> warren-cashett
-cd warren-cashett
+git clone <repo-url> bloomvalley
+cd bloomvalley
 cp .env.example .env
 ```
 
@@ -249,7 +249,7 @@ crontab -e
 Add these lines (adjust paths and timezone):
 
 ```cron
-# Warren Cashett data pipelines (times in server local timezone)
+# Bloomvalley data pipelines (times in server local timezone)
 # Yahoo Finance prices — weekdays at 23:00
 0 23 * * 1-5 curl -s -X POST http://localhost:8000/api/v1/pipelines/yahoo_daily_prices/run > /dev/null 2>&1
 # ECB FX rates — weekdays at 17:00
@@ -273,7 +273,7 @@ Add these lines (adjust paths and timezone):
 docker compose exec db pg_dump -U warren warren > backup_$(date +%Y%m%d).sql
 
 # Local
-pg_dump warren_cashett > backup_$(date +%Y%m%d).sql
+pg_dump bloomvalley > backup_$(date +%Y%m%d).sql
 ```
 
 ### Restore
@@ -283,7 +283,7 @@ pg_dump warren_cashett > backup_$(date +%Y%m%d).sql
 docker compose exec -T db psql -U warren warren < backup_20260320.sql
 
 # Local
-psql warren_cashett < backup_20260320.sql
+psql bloomvalley < backup_20260320.sql
 ```
 
 ---
@@ -291,7 +291,7 @@ psql warren_cashett < backup_20260320.sql
 ## Project Structure
 
 ```
-warren-cashett/
+bloomvalley/
 ├── .env.example            # Template for environment variables
 ├── .env                    # Your API keys (git-ignored)
 ├── .gitignore

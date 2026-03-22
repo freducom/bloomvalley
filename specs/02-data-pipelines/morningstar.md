@@ -1,6 +1,6 @@
 # Morningstar Adapter
 
-Fund ratings and analysis adapter for the Warren Cashett terminal. Provides Morningstar star ratings (1-5), style box classification (value/blend/growth by large/mid/small cap), Morningstar category, analyst ratings (Gold/Silver/Bronze/Neutral/Negative), and expense ratio data. Very limited free access — no official free API. Strategy: try morningstar.com basic pages first, fall back to Yahoo Finance for overlapping data.
+Fund ratings and analysis adapter for the Bloomvalley terminal. Provides Morningstar star ratings (1-5), style box classification (value/blend/growth by large/mid/small cap), Morningstar category, analyst ratings (Gold/Silver/Bronze/Neutral/Negative), and expense ratio data. Very limited free access — no official free API. Strategy: try morningstar.com basic pages first, fall back to Yahoo Finance for overlapping data.
 
 **Status: DRAFT**
 

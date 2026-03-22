@@ -1,6 +1,6 @@
 # FRED Adapter
 
-Federal Reserve Economic Data (FRED) adapter for the Warren Cashett terminal. Provides macroeconomic indicators including interest rates, inflation metrics, GDP, unemployment, yield curves, and manufacturing indices. These data series feed the Macro Dashboard and inform the Macro Strategist's regime assessment.
+Federal Reserve Economic Data (FRED) adapter for the Bloomvalley terminal. Provides macroeconomic indicators including interest rates, inflation metrics, GDP, unemployment, yield curves, and manufacturing indices. These data series feed the Macro Dashboard and inform the Macro Strategist's regime assessment.
 
 **Status: DRAFT**
 

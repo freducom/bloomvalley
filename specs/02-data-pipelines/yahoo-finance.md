@@ -1,6 +1,6 @@
 # Yahoo Finance Adapter
 
-Primary data source for the Warren Cashett terminal. Provides daily OHLCV prices, company fundamentals, dividend history, ESG scores, and sector/industry classification for stocks and ETFs. Uses the `yfinance` Python library, which wraps Yahoo Finance's unofficial API endpoints.
+Primary data source for the Bloomvalley terminal. Provides daily OHLCV prices, company fundamentals, dividend history, ESG scores, and sector/industry classification for stocks and ETFs. Uses the `yfinance` Python library, which wraps Yahoo Finance's unofficial API endpoints.
 
 **Status: DRAFT**
 

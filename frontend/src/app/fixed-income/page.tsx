@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGetRaw, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 /* ── Types ── */
 
@@ -179,9 +180,9 @@ function PortfolioTab() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Bonds" value={String(summary.bondCount)} />
-        <MetricCard label="Total Face Value" value={formatCurrency(summary.totalFaceValueCents)} />
-        <MetricCard label="Market Value" value={formatCurrency(summary.totalMarketValueCents)} />
-        <MetricCard label="Annual Income" value={formatCurrency(summary.totalAnnualIncomeCents)} color="positive" />
+        <MetricCard label="Total Face Value" value={<Private>{formatCurrency(summary.totalFaceValueCents)}</Private>} />
+        <MetricCard label="Market Value" value={<Private>{formatCurrency(summary.totalMarketValueCents)}</Private>} />
+        <MetricCard label="Annual Income" value={<Private>{formatCurrency(summary.totalAnnualIncomeCents)}</Private>} color="positive" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
@@ -233,10 +234,10 @@ function PortfolioTab() {
                 </td>
                 <td className="p-3 text-xs">{formatDate(b.maturityDate)}</td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {formatCurrency(Math.round(b.quantity * b.faceValueCents), b.currency)}
+                  <Private>{formatCurrency(Math.round(b.quantity * b.faceValueCents), b.currency)}</Private>
                 </td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {formatCurrency(b.marketValueCents, b.currency)}
+                  <Private>{formatCurrency(b.marketValueCents, b.currency)}</Private>
                 </td>
                 <td className="text-right p-3 font-mono text-xs">
                   {b.yieldToMaturity !== null ? `${b.yieldToMaturity}%` : "-"}
@@ -302,12 +303,12 @@ function LadderTab() {
             return (
               <div key={bucket.label} className="flex-1 flex flex-col items-center">
                 <span className="text-xs font-mono text-terminal-text-secondary mb-1">
-                  {bucket.count > 0 ? formatCurrency(bucket.totalFaceValueCents) : ""}
+                  {bucket.count > 0 ? <Private>{formatCurrency(bucket.totalFaceValueCents)}</Private> : ""}
                 </span>
                 <div
                   className="w-full rounded-t bg-terminal-accent/60 hover:bg-terminal-accent/80 transition-colors"
                   style={{ height: `${height}%` }}
-                  title={`${bucket.count} bond(s), ${formatCurrency(bucket.totalFaceValueCents)}`}
+                  title={`${bucket.count} bond(s)`}
                 />
                 <span className="text-xs text-terminal-text-secondary mt-2">{bucket.label}</span>
                 <span className="text-[10px] text-terminal-text-secondary">{bucket.count} bond{bucket.count !== 1 ? "s" : ""}</span>
@@ -337,7 +338,7 @@ function LadderTab() {
                 <div className="flex gap-4">
                   {b.couponRate !== null && <span className="font-mono">{b.couponRate}%</span>}
                   <span className="text-terminal-text-secondary">{formatDate(b.maturityDate)}</span>
-                  <span className="font-mono">{formatCurrency(b.faceValueCents)}</span>
+                  <span className="font-mono"><Private>{formatCurrency(b.faceValueCents)}</Private></span>
                   {b.creditRating && (
                     <span className={RATING_COLORS[b.creditRating] || ""}>{b.creditRating}</span>
                   )}
@@ -388,8 +389,8 @@ function IncomeTab() {
     <div className="space-y-6">
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Current Annual Income" value={formatCurrency(data.currentAnnualIncomeCents)} color="positive" />
-        <MetricCard label="Target Monthly" value={formatCurrency(data.targetMonthlyCents)} />
+        <MetricCard label="Current Annual Income" value={<Private>{formatCurrency(data.currentAnnualIncomeCents)}</Private>} color="positive" />
+        <MetricCard label="Target Monthly" value={<Private>{formatCurrency(data.targetMonthlyCents)}</Private>} />
         <MetricCard
           label="Coverage"
           value={data.projection[0] ? `${data.projection[0].coveragePct}%` : "-"}
@@ -397,7 +398,7 @@ function IncomeTab() {
         />
         <MetricCard
           label="Annual Gap"
-          value={data.projection[0] ? formatCurrency(data.projection[0].gapCents) : "-"}
+          value={data.projection[0] ? <Private>{formatCurrency(data.projection[0].gapCents)}</Private> : "-"}
           color={data.projection[0]?.gapCents <= 0 ? "positive" : "negative"}
         />
       </div>
@@ -420,20 +421,20 @@ function IncomeTab() {
             {data.projection.map((yr) => (
               <tr key={yr.year} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
                 <td className="p-3 font-mono text-xs">{yr.year}</td>
-                <td className="text-right p-3 font-mono text-xs">{formatCurrency(yr.annualIncomeCents)}</td>
+                <td className="text-right p-3 font-mono text-xs"><Private>{formatCurrency(yr.annualIncomeCents)}</Private></td>
                 <td className="text-center p-3 text-xs">
                   {yr.bondsMaturing > 0 && (
                     <span className="text-terminal-warning">{yr.bondsMaturing}</span>
                   )}
                 </td>
-                <td className="text-right p-3 font-mono text-xs">{formatCurrency(yr.remainingAnnualIncomeCents)}</td>
+                <td className="text-right p-3 font-mono text-xs"><Private>{formatCurrency(yr.remainingAnnualIncomeCents)}</Private></td>
                 <td className="text-right p-3 font-mono text-xs text-terminal-text-secondary">
-                  {formatCurrency(yr.targetAnnualCents)}
+                  <Private>{formatCurrency(yr.targetAnnualCents)}</Private>
                 </td>
                 <td className={`text-right p-3 font-mono text-xs ${
                   yr.gapCents <= 0 ? "text-terminal-positive" : "text-terminal-negative"
                 }`}>
-                  {yr.gapCents <= 0 ? "Covered" : formatCurrency(yr.gapCents)}
+                  {yr.gapCents <= 0 ? "Covered" : <Private>{formatCurrency(yr.gapCents)}</Private>}
                 </td>
                 <td className="p-3">
                   <div className="relative h-3 bg-terminal-bg-tertiary rounded overflow-hidden">
@@ -487,14 +488,14 @@ function GlidepathTab() {
         />
         <MetricCard
           label="Gap to Target"
-          value={data.gapCents > 0 ? formatCurrency(data.gapCents) : "On track"}
+          value={data.gapCents > 0 ? <Private>{formatCurrency(data.gapCents)}</Private> : "On track"}
           color={data.gapCents <= 0 ? "positive" : "negative"}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <MetricCard label="FI Holdings" value={formatCurrency(data.currentFixedIncomeCents)} />
-        <MetricCard label="Portfolio Total" value={formatCurrency(data.portfolioTotalCents)} />
+        <MetricCard label="FI Holdings" value={<Private>{formatCurrency(data.currentFixedIncomeCents)}</Private>} />
+        <MetricCard label="Portfolio Total" value={<Private>{formatCurrency(data.portfolioTotalCents)}</Private>} />
       </div>
 
       {/* Glidepath Schedule */}
@@ -516,9 +517,9 @@ function GlidepathTab() {
                   </div>
                   <div className="flex items-center gap-4 text-xs">
                     <span className="text-terminal-text-secondary">Target: {s.targetFixedIncomePct}%</span>
-                    <span className="font-mono">{formatCurrency(s.targetFixedIncomeCents)}</span>
+                    <span className="font-mono"><Private>{formatCurrency(s.targetFixedIncomeCents)}</Private></span>
                     {s.gapCents > 0 && (
-                      <span className="text-terminal-warning font-mono">Gap: {formatCurrency(s.gapCents)}</span>
+                      <span className="text-terminal-warning font-mono">Gap: <Private>{formatCurrency(s.gapCents)}</Private></span>
                     )}
                   </div>
                 </div>
@@ -724,7 +725,7 @@ function AddBondTab({ onCreated }: { onCreated: () => void }) {
 
 /* ── Shared MetricCard ── */
 
-function MetricCard({ label, value, color }: { label: string; value: string; color?: "positive" | "negative" }) {
+function MetricCard({ label, value, color }: { label: string; value: React.ReactNode; color?: "positive" | "negative" }) {
   const colorClass = color === "positive"
     ? "text-terminal-positive"
     : color === "negative"

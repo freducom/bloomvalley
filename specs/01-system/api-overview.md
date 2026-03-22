@@ -1,6 +1,6 @@
 # API Overview
 
-Design principles, conventions, and standard patterns for the Warren Cashett REST API.
+Design principles, conventions, and standard patterns for the Bloomvalley REST API.
 
 ## Dependencies
 

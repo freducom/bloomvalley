@@ -1,6 +1,6 @@
 # Data Model
 
-The complete database schema for the Warren Cashett terminal. This is the foundational spec: every feature, pipeline, calculation, and API endpoint depends on these table definitions. The schema runs on PostgreSQL 16 with TimescaleDB 2.x, managed through SQLAlchemy 2.0 and Alembic migrations.
+The complete database schema for the Bloomvalley terminal. This is the foundational spec: every feature, pipeline, calculation, and API endpoint depends on these table definitions. The schema runs on PostgreSQL 16 with TimescaleDB 2.x, managed through SQLAlchemy 2.0 and Alembic migrations.
 
 **Status: DRAFT**
 

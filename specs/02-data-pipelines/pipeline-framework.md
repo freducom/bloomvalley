@@ -1,6 +1,6 @@
 # Data Pipeline Framework
 
-Defines the common framework that all data pipeline adapters must implement, including the adapter interface, scheduling, rate limiting, retry logic, validation, idempotency, staleness tracking, and API endpoints for monitoring and manual control. Every external data source in Warren Cashett is ingested through this framework.
+Defines the common framework that all data pipeline adapters must implement, including the adapter interface, scheduling, rate limiting, retry logic, validation, idempotency, staleness tracking, and API endpoints for monitoring and manual control. Every external data source in Bloomvalley is ingested through this framework.
 
 **Status: DRAFT**
 

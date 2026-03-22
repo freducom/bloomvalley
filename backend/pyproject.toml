@@ -1,5 +1,5 @@
 [project]
-name = "warren-cashett-backend"
+name = "bloomvalley-backend"
 version = "0.1.0"
 description = "Bloomvalley Bloomberg terminal — backend API"
 requires-python = ">=3.12"

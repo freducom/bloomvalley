@@ -1,6 +1,6 @@
 # justETF Adapter
 
-European ETF data source for the Warren Cashett terminal. Provides ETF profiles including total expense ratio (TER), assets under management (AUM), replication method, distribution policy, domicile, ISIN, top holdings, performance history, and fund size. No official API is available — data is obtained by web scraping with `requests` + `BeautifulSoup`, targeting `justetf.com/en/etf-profile.html?isin={ISIN}`. This is the primary source for Boglehead-style ETF screening criteria (low TER, accumulating, physical replication, Ireland/Luxembourg domicile).
+European ETF data source for the Bloomvalley terminal. Provides ETF profiles including total expense ratio (TER), assets under management (AUM), replication method, distribution policy, domicile, ISIN, top holdings, performance history, and fund size. No official API is available — data is obtained by web scraping with `requests` + `BeautifulSoup`, targeting `justetf.com/en/etf-profile.html?isin={ISIN}`. This is the primary source for Boglehead-style ETF screening criteria (low TER, accumulating, physical replication, Ireland/Luxembourg domicile).
 
 **Status: DRAFT**
 

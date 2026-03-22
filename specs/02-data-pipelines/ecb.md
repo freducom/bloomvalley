@@ -1,6 +1,6 @@
 # ECB Adapter
 
-European Central Bank data adapter for the Warren Cashett terminal. Provides ECB key interest rates, eurozone inflation (HICP), EUR exchange rates, and money supply data via the ECB's SDMX RESTful API. Critical for a EUR-denominated portfolio — ECB rates directly impact eurozone fixed income, and ECB-published FX rates are the authoritative source for EUR conversion.
+European Central Bank data adapter for the Bloomvalley terminal. Provides ECB key interest rates, eurozone inflation (HICP), EUR exchange rates, and money supply data via the ECB's SDMX RESTful API. Critical for a EUR-denominated portfolio — ECB rates directly impact eurozone fixed income, and ECB-published FX rates are the authoritative source for EUR conversion.
 
 **Status: DRAFT**
 

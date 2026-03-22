@@ -1,6 +1,6 @@
 # Portfolio Valuation & Return Calculations
 
-This spec defines every portfolio valuation and return calculation used in the Warren Cashett terminal. It is the computational backbone for the Portfolio Dashboard, Risk Dashboard, Performance Attribution, and Tax Module features. Every formula is expressed in both mathematical notation and Python pseudocode using integer cents or `Decimal` — never floating-point for money (per spec conventions).
+This spec defines every portfolio valuation and return calculation used in the Bloomvalley terminal. It is the computational backbone for the Portfolio Dashboard, Risk Dashboard, Performance Attribution, and Tax Module features. Every formula is expressed in both mathematical notation and Python pseudocode using integer cents or `Decimal` — never floating-point for money (per spec conventions).
 
 **Status: DRAFT**
 

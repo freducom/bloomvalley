@@ -1,6 +1,6 @@
 # Component Catalog
 
-Reusable UI component specifications for the Warren Cashett terminal. Each component defines its purpose, props, visual description, states, and sizing. All components follow the design system tokens and are implemented as React/TypeScript components with TailwindCSS.
+Reusable UI component specifications for the Bloomvalley terminal. Each component defines its purpose, props, visual description, states, and sizing. All components follow the design system tokens and are implemented as React/TypeScript components with TailwindCSS.
 
 ## Dependencies
 

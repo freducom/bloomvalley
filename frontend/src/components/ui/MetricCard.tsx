@@ -1,8 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 interface MetricCardProps {
   label: string;
-  value: string;
+  value: ReactNode;
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   size?: "sm" | "md" | "lg";

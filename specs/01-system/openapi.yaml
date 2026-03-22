@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Warren Cashett API
+  title: Bloomvalley API
   version: 1.0.0
   description: >
     Personal Bloomberg-style terminal API for portfolio management,

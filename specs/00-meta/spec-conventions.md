@@ -1,6 +1,6 @@
 # Spec Conventions
 
-Standards and vocabulary for all Warren Cashett specification documents.
+Standards and vocabulary for all Bloomvalley specification documents.
 
 ## Terminology Glossary
 

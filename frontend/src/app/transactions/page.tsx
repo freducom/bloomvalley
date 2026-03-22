@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiGetRaw, apiDelete } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 interface Transaction {
   id: number;
@@ -272,10 +273,10 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
                       {parseFloat(t.quantity) !== 0
-                        ? parseFloat(t.quantity).toLocaleString(undefined, {
+                        ? <Private>{parseFloat(t.quantity).toLocaleString(undefined, {
                             minimumFractionDigits: 0,
                             maximumFractionDigits: 4,
-                          })
+                          })}</Private>
                         : "—"}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
@@ -294,14 +295,14 @@ export default function TransactionsPage() {
                               : ""
                           }
                         >
-                          {formatCurrency(t.totalCents, t.currency)}
+                          <Private>{formatCurrency(t.totalCents, t.currency)}</Private>
                         </span>
                       ) : (
                         "—"
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs text-terminal-text-secondary">
-                      {t.feeCents ? formatCurrency(t.feeCents, t.feeCurrency) : "—"}
+                      {t.feeCents ? <Private>{formatCurrency(t.feeCents, t.feeCurrency)}</Private> : "—"}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <button

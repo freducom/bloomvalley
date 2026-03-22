@@ -1,6 +1,6 @@
 # Alpha Vantage Adapter
 
-Backup price source, primary forex rate provider, and technical indicator engine for the Warren Cashett terminal. Alpha Vantage provides a structured REST API with free-tier access, but the free plan is severely limited at 25 API calls per day. This adapter is used strategically: primarily for forex rates and as a fallback when Yahoo Finance fails for price data.
+Backup price source, primary forex rate provider, and technical indicator engine for the Bloomvalley terminal. Alpha Vantage provides a structured REST API with free-tier access, but the free plan is severely limited at 25 API calls per day. This adapter is used strategically: primarily for forex rates and as a fallback when Yahoo Finance fails for price data.
 
 **Status: DRAFT**
 

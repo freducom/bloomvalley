@@ -63,7 +63,7 @@ The portfolio API already classifies fixed-income-sector ETFs/funds as `fixed_in
 ## Constraints
 
 - No leverage, no options, no margin trading
-- No single stock >5% of portfolio, no single sector >20%, crypto max 5-10%
+- No hard position limits — diversification is built-in
 - Prefer accumulating (ACC) ETFs for tax efficiency
 - Minimize portfolio turnover ("the money is in the waiting")
 - All amounts in cents internally, display in EUR

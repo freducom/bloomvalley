@@ -75,7 +75,7 @@ An AI-powered investment advisory team and software development team building a 
 - Tracks: portfolio beta, Sharpe ratio, Sortino ratio, max drawdown, Value at Risk (VaR)
 - Monitors correlation between holdings — flags when diversification breaks down
 - Stress tests against scenarios: 2008-style crash, rate shock, crypto winter, stagflation, Nordic housing crisis
-- Enforces position limits: no single stock >5% of portfolio, no single sector >20%, crypto max 5-10%
+- Monitors position sizing and diversification — no hard limits, diversification is built-in
 - Monitors the glidepath — ensures risk reduction is on track for the 60-year target
 - Outputs: risk dashboard, stress test results, concentration alerts
 
@@ -162,7 +162,7 @@ An AI-powered investment advisory team and software development team building a 
 **Responsibility**: Ensures portfolio adheres to the investment policy and all constraints.
 
 - Validates all recommendations against the investment policy defined in this document
-- Enforces: position limits, asset class limits, glidepath schedule, no-leverage rule
+- Enforces: glidepath schedule, no-leverage rule. Monitors concentrations for awareness (no hard position limits)
 - Checks that tax implications have been considered before any trade recommendation
 - Monitors regulatory changes in Finnish investment taxation
 - Verifies account structure optimization (osakesaastotili limits, etc.)

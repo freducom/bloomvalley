@@ -1,6 +1,6 @@
 # CoinGecko Adapter
 
-Crypto data source for the Warren Cashett terminal. Provides cryptocurrency prices, market capitalization, trading volume, and historical price data via the CoinGecko REST API. Crypto markets operate 24/7/365, so this adapter has different scheduling patterns than the equity-focused adapters.
+Crypto data source for the Bloomvalley terminal. Provides cryptocurrency prices, market capitalization, trading volume, and historical price data via the CoinGecko REST API. Crypto markets operate 24/7/365, so this adapter has different scheduling patterns than the equity-focused adapters.
 
 **Status: DRAFT**
 

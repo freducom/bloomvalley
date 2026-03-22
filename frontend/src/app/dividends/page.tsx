@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 interface UpcomingDividend {
   securityId: number;
@@ -114,7 +115,7 @@ export default function DividendsPage() {
           <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-3">
             <div className="text-xs text-terminal-text-secondary">Annual Income (est.)</div>
             <div className="text-xl font-mono font-bold text-green-400">
-              {formatCurrency(yieldData.annualDividendIncomeCents)}
+              <Private>{formatCurrency(yieldData.annualDividendIncomeCents)}</Private>
             </div>
           </div>
           <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-3">
@@ -180,7 +181,7 @@ function UpcomingTab({
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-terminal-text-secondary">
-          Expected income: <span className="text-green-400 font-mono font-medium">{formatCurrency(totalEur)}</span>
+          Expected income: <span className="text-green-400 font-mono font-medium"><Private>{formatCurrency(totalEur)}</Private></span>
         </div>
         <div className="flex gap-1 bg-terminal-bg-secondary rounded p-0.5 border border-terminal-border">
           {[30, 60, 90].map((d) => (
@@ -232,9 +233,9 @@ function UpcomingTab({
                   <td className="px-3 py-2 text-right font-mono">
                     {formatCurrency(d.amountPerShareCents, d.currency)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono">{parseFloat(d.sharesHeld).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right font-mono"><Private>{parseFloat(d.sharesHeld).toLocaleString()}</Private></td>
                   <td className="px-3 py-2 text-right font-mono text-green-400">
-                    {formatCurrency(d.totalEurCents)}
+                    <Private>{formatCurrency(d.totalEurCents)}</Private>
                   </td>
                   <td className="px-3 py-2 text-right font-mono">
                     {d.currentYield != null ? formatPercent(d.currentYield) : "—"}
@@ -276,7 +277,7 @@ function YieldTab({ data }: { data: YieldMetrics }) {
               <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full">
                 {m.amount > 0 && (
                   <div className="text-[10px] font-mono text-terminal-text-secondary mb-1">
-                    {(m.amount / 100).toFixed(0)}
+                    <Private>{(m.amount / 100).toFixed(0)}</Private>
                   </div>
                 )}
                 <div
@@ -325,10 +326,10 @@ function YieldTab({ data }: { data: YieldMetrics }) {
                       {h.frequency ? FREQ_LABELS[h.frequency] || h.frequency : "—"}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
-                      {parseFloat(h.sharesHeld).toLocaleString()}
+                      <Private>{parseFloat(h.sharesHeld).toLocaleString()}</Private>
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-green-400">
-                      {formatCurrency(h.annualDividendEurCents)}
+                      <Private>{formatCurrency(h.annualDividendEurCents)}</Private>
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
                       {h.dividendYield != null ? formatPercent(h.dividendYield) : "—"}
@@ -345,7 +346,7 @@ function YieldTab({ data }: { data: YieldMetrics }) {
                   Total
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-green-400">
-                  {formatCurrency(data.annualDividendIncomeCents)}
+                  <Private>{formatCurrency(data.annualDividendIncomeCents)}</Private>
                 </td>
                 <td className="px-3 py-2 text-right font-mono">
                   {data.portfolioDividendYield != null ? formatPercent(data.portfolioDividendYield) : "—"}
@@ -393,7 +394,7 @@ function CalendarTab({ data }: { data: CalendarEvent[] }) {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-medium">{monthLabel}</h3>
                 {total > 0 && (
-                  <span className="text-sm font-mono text-green-400">{formatCurrency(total)}</span>
+                  <span className="text-sm font-mono text-green-400"><Private>{formatCurrency(total)}</Private></span>
                 )}
               </div>
               <div className="space-y-2">
@@ -415,7 +416,7 @@ function CalendarTab({ data }: { data: CalendarEvent[] }) {
                     </span>
                     {ev.totalCents != null && (
                       <span className="font-mono text-green-400 text-right w-24">
-                        {formatCurrency(ev.totalCents, ev.currency)}
+                        <Private>{formatCurrency(ev.totalCents, ev.currency)}</Private>
                       </span>
                     )}
                   </div>

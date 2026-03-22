@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 interface ResearchNote {
   id: number;
@@ -505,10 +506,10 @@ function NoteDetail({
         {note.intrinsicValueCents !== null && (
           <MetricBox
             label="Intrinsic Value"
-            value={formatCurrency(
+            value={<Private>{formatCurrency(
               note.intrinsicValueCents,
               note.intrinsicValueCurrency || "EUR"
-            )}
+            )}</Private>}
           />
         )}
         {note.currentPriceCents !== null && (
@@ -853,7 +854,7 @@ function MetricBox({
   valueClass,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   valueClass?: string;
 }) {
   return (

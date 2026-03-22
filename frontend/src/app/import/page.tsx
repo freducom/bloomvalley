@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 interface ImportRow {
   id: number;
@@ -368,19 +369,19 @@ export default function ImportPage() {
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
                       {row.quantity
-                        ? parseFloat(row.quantity).toLocaleString("en-US", {
+                        ? <Private>{parseFloat(row.quantity).toLocaleString("en-US", {
                             maximumFractionDigits: 4,
-                          })
+                          })}</Private>
                         : "--"}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
                       {row.avgPriceCents != null
-                        ? formatCurrency(row.avgPriceCents, row.currency || "EUR")
+                        ? <Private>{formatCurrency(row.avgPriceCents, row.currency || "EUR")}</Private>
                         : "--"}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
                       {row.marketValueCents != null
-                        ? formatCurrency(row.marketValueCents, "EUR")
+                        ? <Private>{formatCurrency(row.marketValueCents, "EUR")}</Private>
                         : "--"}
                     </td>
                     <td className="px-4 py-2">{matchBadge(row.matchStatus)}</td>

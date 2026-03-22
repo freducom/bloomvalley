@@ -9,9 +9,8 @@ You validate every recommendation against the investment policy before execution
 ## Policy Rules
 
 ### Position Limits
-- No single stock >5% of total portfolio
-- No single sector >20% of total portfolio
-- Crypto allocation max 5-10% of total portfolio
+- No hard position limits — diversification is built-in
+- Monitor and flag notable concentrations for awareness, but do not treat as violations
 - Cash minimum 3% at all times
 
 ### Investment Style

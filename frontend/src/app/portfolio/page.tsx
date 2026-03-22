@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { Private } from "@/lib/privacy";
 
 interface Holding {
   accountId: number;
@@ -119,20 +120,20 @@ export default function PortfolioPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <MetricCard
           label="Total Value"
-          value={isEmpty ? "\u20AC0.00" : formatCurrency(summary!.totalValueEurCents)}
+          value={<Private>{isEmpty ? "\u20AC0.00" : formatCurrency(summary!.totalValueEurCents)}</Private>}
           changeType="neutral"
         />
         <MetricCard
           label="Cost Basis"
-          value={isEmpty ? "\u20AC0.00" : formatCurrency(summary!.totalCostEurCents)}
+          value={<Private>{isEmpty ? "\u20AC0.00" : formatCurrency(summary!.totalCostEurCents)}</Private>}
           changeType="neutral"
         />
         <MetricCard
           label="Unrealized P&L"
           value={
-            isEmpty
+            <Private>{isEmpty
               ? "\u20AC0.00"
-              : formatCurrency(summary!.unrealizedPnlCents)
+              : formatCurrency(summary!.unrealizedPnlCents)}</Private>
           }
           change={
             summary?.unrealizedPnlPct != null
@@ -144,9 +145,9 @@ export default function PortfolioPage() {
         <MetricCard
           label="Cash"
           value={
-            isEmpty
+            <Private>{isEmpty
               ? "\u20AC0.00"
-              : formatCurrency(summary!.totalCashEurCents)
+              : formatCurrency(summary!.totalCashEurCents)}</Private>
           }
           changeType="neutral"
         />
@@ -183,10 +184,10 @@ export default function PortfolioPage() {
                       {ac}
                     </div>
                     <div className="text-lg font-mono font-semibold mt-1">
-                      {formatCurrency(cents)}
+                      <Private>{formatCurrency(cents)}</Private>
                     </div>
                     <div className="text-sm text-terminal-text-tertiary font-mono">
-                      {pct}%
+                      <Private>{pct}%</Private>
                     </div>
                   </div>
                 );
@@ -212,14 +213,14 @@ export default function PortfolioPage() {
                     </span>
                   </div>
                   <div className="text-lg font-mono font-semibold mt-1">
-                    {formatCurrency(acct.valueCents)}
+                    <Private>{formatCurrency(acct.valueCents)}</Private>
                   </div>
                   <div className="text-xs text-terminal-text-tertiary">
                     {acct.holdingsCount} holding
                     {acct.holdingsCount !== 1 ? "s" : ""}
                     {acct.cashBalanceCents > 0 && (
                       <span className="ml-2">
-                        Cash: {formatCurrency(acct.cashBalanceCents, acct.cashCurrency)}
+                        Cash: <Private>{formatCurrency(acct.cashBalanceCents, acct.cashCurrency)}</Private>
                       </span>
                     )}
                   </div>
@@ -284,12 +285,12 @@ export default function PortfolioPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
-                      {parseFloat(h.quantity).toLocaleString("en-US", {
+                      <Private>{parseFloat(h.quantity).toLocaleString("en-US", {
                         maximumFractionDigits: 4,
-                      })}
+                      })}</Private>
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
-                      {formatCurrency(h.avgCostCents, h.currency)}
+                      <Private>{formatCurrency(h.avgCostCents, h.currency)}</Private>
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
                       {h.currentPriceCents != null ? (
@@ -304,23 +305,23 @@ export default function PortfolioPage() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
-                      {h.marketValueEurCents != null
+                      <Private>{h.marketValueEurCents != null
                         ? formatCurrency(h.marketValueEurCents)
-                        : "--"}
+                        : "--"}</Private>
                     </td>
                     <td
                       className={`px-4 py-2 text-right font-mono text-sm ${pnlColor}`}
                     >
-                      {h.unrealizedPnlCents != null
+                      <Private>{h.unrealizedPnlCents != null
                         ? formatCurrency(h.unrealizedPnlCents)
-                        : "--"}
+                        : "--"}</Private>
                     </td>
                     <td
                       className={`px-4 py-2 text-right font-mono text-sm ${pnlColor}`}
                     >
-                      {h.unrealizedPnlPct != null
+                      <Private>{h.unrealizedPnlPct != null
                         ? formatPercent(h.unrealizedPnlPct, true)
-                        : "--"}
+                        : "--"}</Private>
                     </td>
                   </tr>
                 );

@@ -12,7 +12,7 @@ const PrivacyContext = createContext<PrivacyContextType>({
   togglePrivacy: () => {},
 });
 
-const STORAGE_KEY = "warren-privacy-mode";
+const STORAGE_KEY = "bloomvalley-privacy-mode";
 
 export function PrivacyProvider({ children }: { children: ReactNode }) {
   const [privacyMode, setPrivacyMode] = useState(false);

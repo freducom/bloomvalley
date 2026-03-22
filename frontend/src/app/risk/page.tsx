@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 interface RiskMetrics {
   annualizedReturn: number;
@@ -218,7 +219,7 @@ function MetricsCards({ metrics }: { metrics: RiskMetrics }) {
     },
     {
       label: "VaR 95% (1-day)",
-      value: `${formatPercent(metrics.var95Daily)} / ${formatCurrency(Math.abs(metrics.var95DailyCents))}`,
+      value: <>{formatPercent(metrics.var95Daily)} / <Private>{formatCurrency(Math.abs(metrics.var95DailyCents))}</Private></>,
       color: "text-terminal-text-primary",
     },
   ];
@@ -393,7 +394,7 @@ function StressTestCard({ tests }: { tests: StressTest[] }) {
               {t.impactPct > 0 ? "+" : ""}{t.impactPct.toFixed(1)}%
             </div>
             <div className="text-xs font-mono text-terminal-text-secondary mt-1">
-              {formatCurrency(t.impactCents)} / After: {formatCurrency(t.portfolioAfterCents)}
+              <Private>{formatCurrency(t.impactCents)}</Private> / After: <Private>{formatCurrency(t.portfolioAfterCents)}</Private>
             </div>
           </div>
         ))}

@@ -2,7 +2,7 @@
 
 **Status: DRAFT**
 
-The home screen of the Warren Cashett terminal. It answers the central investor question: "How is my portfolio doing right now, and am I on track?" The dashboard aggregates all accounts into a single view showing total portfolio value as a hero metric, a holdings table with per-position detail, current-versus-target allocation with a glidepath chart, and P&L summaries broken down by account type. Four sub-tabs — Overview, Holdings, Performance, and Accounts — let the user drill from high-level summary to granular position data without leaving the page.
+The home screen of the Bloomvalley terminal. It answers the central investor question: "How is my portfolio doing right now, and am I on track?" The dashboard aggregates all accounts into a single view showing total portfolio value as a hero metric, a holdings table with per-position detail, current-versus-target allocation with a glidepath chart, and P&L summaries broken down by account type. Four sub-tabs — Overview, Holdings, Performance, and Accounts — let the user drill from high-level summary to granular position data without leaving the page.
 
 ## Dependencies
 

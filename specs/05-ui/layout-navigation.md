@@ -1,6 +1,6 @@
 # Layout & Navigation
 
-App shell structure, sidebar navigation, tab system, command palette, keyboard shortcuts, and responsive behavior for the Warren Cashett terminal.
+App shell structure, sidebar navigation, tab system, command palette, keyboard shortcuts, and responsive behavior for the Bloomvalley terminal.
 
 ## Dependencies
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGetRaw, apiPost, apiPut } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 /* ── Types ── */
 
@@ -186,7 +187,7 @@ function ActiveTab() {
               <div className="ml-auto flex items-center gap-4">
                 {r.entryPriceCents && (
                   <span className="text-xs font-mono text-terminal-text-secondary">
-                    Entry: {formatCurrency(r.entryPriceCents, r.currency)}
+                    Entry: <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private>
                   </span>
                 )}
                 {r.targetPriceCents && (
@@ -337,10 +338,10 @@ function ClosedTab() {
                   {r.confidence}
                 </td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {r.entryPriceCents ? formatCurrency(r.entryPriceCents, r.currency) : "-"}
+                  {r.entryPriceCents ? <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private> : "-"}
                 </td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {r.exitPriceCents ? formatCurrency(r.exitPriceCents, r.currency) : "-"}
+                  {r.exitPriceCents ? <Private>{formatCurrency(r.exitPriceCents, r.currency)}</Private> : "-"}
                 </td>
                 <td className={`text-right p-3 font-mono text-xs font-medium ${
                   r.returnPct !== null

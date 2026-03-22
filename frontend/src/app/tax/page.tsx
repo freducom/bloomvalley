@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent, formatDate } from "@/lib/format";
+import { Private } from "@/lib/privacy";
 
 /* ── Types ── */
 
@@ -229,27 +230,27 @@ function TaxLotsTab({ year }: { year: number }) {
                 </td>
                 <td className="p-3 text-xs">{formatDate(lot.acquiredDate)}</td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {parseFloat(lot.remainingQuantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                  <Private>{parseFloat(lot.remainingQuantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</Private>
                 </td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {formatCurrency(lot.costBasisCents, lot.costBasisCurrency)}
+                  <Private>{formatCurrency(lot.costBasisCents, lot.costBasisCurrency)}</Private>
                 </td>
                 <td className="text-right p-3 font-mono text-xs">
-                  {lot.marketValueCents !== null ? formatCurrency(lot.marketValueCents, lot.costBasisCurrency) : "-"}
+                  {lot.marketValueCents !== null ? <Private>{formatCurrency(lot.marketValueCents, lot.costBasisCurrency)}</Private> : "-"}
                 </td>
                 <td className={`text-right p-3 font-mono text-xs ${
                   lot.unrealizedPnlCents !== null
                     ? lot.unrealizedPnlCents >= 0 ? "text-terminal-positive" : "text-terminal-negative"
                     : ""
                 }`}>
-                  {lot.unrealizedPnlCents !== null ? formatCurrency(lot.unrealizedPnlCents, lot.costBasisCurrency) : "-"}
+                  {lot.unrealizedPnlCents !== null ? <Private>{formatCurrency(lot.unrealizedPnlCents, lot.costBasisCurrency)}</Private> : "-"}
                 </td>
                 <td className={`text-right p-3 font-mono text-xs ${
                   lot.realizedPnlCents !== null
                     ? lot.realizedPnlCents >= 0 ? "text-terminal-positive" : "text-terminal-negative"
                     : ""
                 }`}>
-                  {lot.realizedPnlCents !== null ? formatCurrency(lot.realizedPnlCents, lot.costBasisCurrency) : "-"}
+                  {lot.realizedPnlCents !== null ? <Private>{formatCurrency(lot.realizedPnlCents, lot.costBasisCurrency)}</Private> : "-"}
                 </td>
                 <td className="text-right p-3 font-mono text-xs text-terminal-text-secondary">
                   {lot.holdingYears.toFixed(1)}
@@ -291,10 +292,10 @@ function GainsTab({ year }: { year: number }) {
     <div className="space-y-6">
       {/* Hero metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="Realized Gains (YTD)" value={formatCurrency(data.realizedGainsCents)} valueClass="text-terminal-positive" />
-        <MetricCard label="Realized Losses (YTD)" value={formatCurrency(data.realizedLossesCents)} valueClass="text-terminal-negative" />
-        <MetricCard label="Net Realized P&L" value={formatCurrency(data.netRealizedCents)} valueClass={data.netRealizedCents >= 0 ? "text-terminal-positive" : "text-terminal-negative"} />
-        <MetricCard label="Estimated Tax" value={formatCurrency(data.estimatedTax.taxCents)} sub={`Effective rate: ${data.estimatedTax.effectiveRate}%`} />
+        <MetricCard label="Realized Gains (YTD)" value={formatCurrency(data.realizedGainsCents)} valueClass="text-terminal-positive" isPrivate />
+        <MetricCard label="Realized Losses (YTD)" value={formatCurrency(data.realizedLossesCents)} valueClass="text-terminal-negative" isPrivate />
+        <MetricCard label="Net Realized P&L" value={formatCurrency(data.netRealizedCents)} valueClass={data.netRealizedCents >= 0 ? "text-terminal-positive" : "text-terminal-negative"} isPrivate />
+        <MetricCard label="Estimated Tax" value={formatCurrency(data.estimatedTax.taxCents)} sub={`Effective rate: ${data.estimatedTax.effectiveRate}%`} isPrivate />
       </div>
 
       {/* Tax bracket bar */}
@@ -312,7 +313,7 @@ function GainsTab({ year }: { year: number }) {
             />
           )}
           <div className="absolute inset-0 flex items-center justify-center text-xs font-mono text-terminal-text-primary">
-            {formatCurrency(netForBar)} / {formatCurrency(threshold)}
+            <Private>{formatCurrency(netForBar)}</Private> / {formatCurrency(threshold)}
           </div>
         </div>
         <div className="flex justify-between text-xs text-terminal-text-secondary mt-1">
@@ -341,10 +342,10 @@ function GainsTab({ year }: { year: number }) {
               {data.byCategory.map((cat) => (
                 <tr key={cat.category} className="border-b border-terminal-border/50">
                   <td className="p-3 capitalize">{cat.category}</td>
-                  <td className="text-right p-3 font-mono text-terminal-positive">{formatCurrency(cat.gainsCents)}</td>
-                  <td className="text-right p-3 font-mono text-terminal-negative">{formatCurrency(cat.lossesCents)}</td>
+                  <td className="text-right p-3 font-mono text-terminal-positive"><Private>{formatCurrency(cat.gainsCents)}</Private></td>
+                  <td className="text-right p-3 font-mono text-terminal-negative"><Private>{formatCurrency(cat.lossesCents)}</Private></td>
                   <td className={`text-right p-3 font-mono ${cat.netCents >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
-                    {formatCurrency(cat.netCents)}
+                    <Private>{formatCurrency(cat.netCents)}</Private>
                   </td>
                 </tr>
               ))}
@@ -380,12 +381,12 @@ function GainsTab({ year }: { year: number }) {
                   <td className="p-3 text-xs text-terminal-text-secondary">{s.accountName}</td>
                   <td className="p-3 text-xs">{formatDate(s.acquiredDate)}</td>
                   <td className="p-3 text-xs">{s.closedDate ? formatDate(s.closedDate) : "-"}</td>
-                  <td className="text-right p-3 font-mono text-xs">{formatCurrency(s.costBasisCents)}</td>
-                  <td className="text-right p-3 font-mono text-xs">{s.proceedsCents !== null ? formatCurrency(s.proceedsCents) : "-"}</td>
+                  <td className="text-right p-3 font-mono text-xs"><Private>{formatCurrency(s.costBasisCents)}</Private></td>
+                  <td className="text-right p-3 font-mono text-xs">{s.proceedsCents !== null ? <Private>{formatCurrency(s.proceedsCents)}</Private> : "-"}</td>
                   <td className={`text-right p-3 font-mono text-xs ${
                     (s.taxableGainCents || 0) >= 0 ? "text-terminal-positive" : "text-terminal-negative"
                   }`}>
-                    {s.taxableGainCents !== undefined ? formatCurrency(s.taxableGainCents) : "-"}
+                    {s.taxableGainCents !== undefined ? <Private>{formatCurrency(s.taxableGainCents)}</Private> : "-"}
                   </td>
                   <td className="text-center p-3 text-xs capitalize">{s.methodUsed || "-"}</td>
                   <td className="text-center p-3">
@@ -458,12 +459,14 @@ function OstTab() {
           label="Total Deposits"
           value={formatCurrency(data.totalDepositsCents || 0)}
           sub={`${data.depositCapUsedPct}% of €50,000 cap`}
+          isPrivate
         />
-        <MetricCard label="Current Value" value={formatCurrency(data.currentValueCents || 0)} />
+        <MetricCard label="Current Value" value={formatCurrency(data.currentValueCents || 0)} isPrivate />
         <MetricCard
           label="Gains"
           value={formatCurrency(data.gainsCents || 0)}
           valueClass={(data.gainsCents || 0) >= 0 ? "text-terminal-positive" : "text-terminal-negative"}
+          isPrivate
         />
         <MetricCard label="Gains Ratio" value={`${data.gainsRatio}%`} sub="Taxable portion of withdrawals" />
       </div>
@@ -478,8 +481,8 @@ function OstTab() {
           />
         </div>
         <div className="flex justify-between text-xs text-terminal-text-secondary mt-1">
-          <span>{formatCurrency(data.totalDepositsCents || 0)} deposited</span>
-          <span>{formatCurrency((data.depositCapCents || 0) - (data.totalDepositsCents || 0))} remaining</span>
+          <span><Private>{formatCurrency(data.totalDepositsCents || 0)}</Private> deposited</span>
+          <span><Private>{formatCurrency((data.depositCapCents || 0) - (data.totalDepositsCents || 0))}</Private> remaining</span>
         </div>
       </div>
 
@@ -496,22 +499,22 @@ function OstTab() {
             className="flex-1 accent-terminal-accent"
           />
           <span className="font-mono text-sm w-32 text-right">
-            {formatCurrency(withdrawalAmount)}
+            <Private>{formatCurrency(withdrawalAmount)}</Private>
           </span>
         </div>
         {withdrawalPct > 0 && (
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <div className="text-xs text-terminal-text-secondary">Taxable portion</div>
-              <div className="font-mono text-terminal-warning">{formatCurrency(taxablePortion)}</div>
+              <div className="font-mono text-terminal-warning"><Private>{formatCurrency(taxablePortion)}</Private></div>
             </div>
             <div>
               <div className="text-xs text-terminal-text-secondary">Tax-free portion</div>
-              <div className="font-mono text-terminal-positive">{formatCurrency(taxFreePortion)}</div>
+              <div className="font-mono text-terminal-positive"><Private>{formatCurrency(taxFreePortion)}</Private></div>
             </div>
             <div>
               <div className="text-xs text-terminal-text-secondary">Estimated tax</div>
-              <div className="font-mono text-terminal-negative">{formatCurrency(taxOnWithdrawal)}</div>
+              <div className="font-mono text-terminal-negative"><Private>{formatCurrency(taxOnWithdrawal)}</Private></div>
             </div>
           </div>
         )}
@@ -539,9 +542,9 @@ function OstTab() {
                     <span className="text-xs text-terminal-text-secondary">{h.name}</span>
                   </td>
                   <td className="text-right p-3 font-mono text-xs">
-                    {parseFloat(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                    <Private>{parseFloat(h.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</Private>
                   </td>
-                  <td className="text-right p-3 font-mono text-xs">{formatCurrency(h.marketValueEurCents)}</td>
+                  <td className="text-right p-3 font-mono text-xs"><Private>{formatCurrency(h.marketValueEurCents)}</Private></td>
                 </tr>
               ))}
             </tbody>
@@ -584,10 +587,11 @@ function HarvestingTab() {
           label="Total Unrealized Losses"
           value={formatCurrency(data.totalUnrealizedLossCents)}
           valueClass="text-terminal-negative"
+          isPrivate
         />
-        <MetricCard label="Realized Gains YTD" value={formatCurrency(data.realizedGainsYtdCents)} valueClass="text-terminal-positive" />
-        <MetricCard label="Potential Tax Savings" value={formatCurrency(data.potentialTaxSavingsCents)} valueClass="text-terminal-info" />
-        <MetricCard label="Harvesting Budget" value={formatCurrency(data.realizedGainsYtdCents)} sub="Gains to offset" />
+        <MetricCard label="Realized Gains YTD" value={formatCurrency(data.realizedGainsYtdCents)} valueClass="text-terminal-positive" isPrivate />
+        <MetricCard label="Potential Tax Savings" value={formatCurrency(data.potentialTaxSavingsCents)} valueClass="text-terminal-info" isPrivate />
+        <MetricCard label="Harvesting Budget" value={formatCurrency(data.realizedGainsYtdCents)} sub="Gains to offset" isPrivate />
       </div>
 
       {/* Candidates */}
@@ -618,18 +622,18 @@ function HarvestingTab() {
                   </td>
                   <td className="p-3 text-xs text-terminal-text-secondary">{c.accountName}</td>
                   <td className="text-right p-3 font-mono text-xs">
-                    {parseFloat(c.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                    <Private>{parseFloat(c.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</Private>
                   </td>
-                  <td className="text-right p-3 font-mono text-xs">{formatCurrency(c.costBasisCents)}</td>
-                  <td className="text-right p-3 font-mono text-xs">{formatCurrency(c.marketValueCents)}</td>
+                  <td className="text-right p-3 font-mono text-xs"><Private>{formatCurrency(c.costBasisCents)}</Private></td>
+                  <td className="text-right p-3 font-mono text-xs"><Private>{formatCurrency(c.marketValueCents)}</Private></td>
                   <td className="text-right p-3 font-mono text-xs text-terminal-negative">
-                    {formatCurrency(c.unrealizedLossCents)}
+                    <Private>{formatCurrency(c.unrealizedLossCents)}</Private>
                   </td>
                   <td className="text-right p-3 font-mono text-xs text-terminal-text-secondary">
                     {c.holdingYears.toFixed(1)}
                   </td>
                   <td className="text-right p-3 font-mono text-xs text-terminal-info">
-                    {formatCurrency(c.taxSavingLowCents)}&ndash;{formatCurrency(c.taxSavingHighCents)}
+                    <Private>{formatCurrency(c.taxSavingLowCents)}&ndash;{formatCurrency(c.taxSavingHighCents)}</Private>
                   </td>
                 </tr>
               ))}
@@ -649,11 +653,11 @@ function HarvestingTab() {
 
 /* ── Helpers ── */
 
-function MetricCard({ label, value, valueClass, sub }: { label: string; value: string; valueClass?: string; sub?: string }) {
+function MetricCard({ label, value, valueClass, sub, isPrivate }: { label: string; value: string; valueClass?: string; sub?: string; isPrivate?: boolean }) {
   return (
     <div className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
       <div className="text-xs text-terminal-text-secondary mb-1">{label}</div>
-      <div className={`text-lg font-mono font-bold ${valueClass || "text-terminal-text-primary"}`}>{value}</div>
+      <div className={`text-lg font-mono font-bold ${valueClass || "text-terminal-text-primary"}`}>{isPrivate ? <Private>{value}</Private> : value}</div>
       {sub && <div className="text-xs text-terminal-text-secondary mt-0.5">{sub}</div>}
     </div>
   );
