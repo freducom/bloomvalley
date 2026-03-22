@@ -103,37 +103,59 @@ class SecEdgarFilings(PipelineAdapter):
                         # Extract filing metadata from the hit
                         source = hit.get("_source", hit)
 
+                        # EFTS search-index returns "form" (e.g. "4") and
+                        # "root_forms" (e.g. ["4"]). Fall back through
+                        # alternatives for forward-compatibility.
                         form_type = (
-                            source.get("form_type")
-                            or source.get("forms")
-                            or source.get("type")
+                            source.get("form")
+                            or source.get("form_type")
+                            or (
+                                source["root_forms"][0]
+                                if isinstance(source.get("root_forms"), list)
+                                and source["root_forms"]
+                                else None
+                            )
+                            or source.get("file_type")
                             or "Unknown"
                         )
-                        filer_name = (
-                            source.get("display_names", ["Unknown"])[0]
-                            if isinstance(source.get("display_names"), list)
-                            else source.get("entity_name")
-                            or source.get("company_name")
-                            or source.get("display_name")
-                            or "Unknown"
-                        )
+
+                        # display_names is a list like
+                        # ["Person Name  (CIK ...)", "COMPANY  (CIK ...)"]
+                        display_names = source.get("display_names")
+                        if isinstance(display_names, list) and display_names:
+                            filer_name = display_names[0]
+                        else:
+                            filer_name = (
+                                source.get("entity_name")
+                                or source.get("company_name")
+                                or source.get("display_name")
+                                or "Unknown"
+                            )
+
                         filing_date = (
                             source.get("file_date")
                             or source.get("period_of_report")
                             or source.get("date_filed")
                             or to_date.isoformat()
                         )
+
+                        # EFTS uses "adsh" for accession number
                         accession_number = (
-                            source.get("accession_no")
+                            source.get("adsh")
+                            or source.get("accession_no")
                             or source.get("accession_number")
                             or ""
                         )
-                        # Build filing URL from accession number
+
+                        # Build filing URL from accession number and CIK
                         if accession_number:
+                            ciks = source.get("ciks", [])
+                            # Use the last CIK (typically the issuer/company)
+                            cik = ciks[-1].lstrip("0") if ciks else ""
                             acc_clean = accession_number.replace("-", "")
                             filing_url = (
                                 f"https://www.sec.gov/Archives/edgar/data/"
-                                f"{source.get('entity_id', '')}/{acc_clean}/"
+                                f"{cik}/{acc_clean}/"
                                 f"{accession_number}-index.htm"
                             )
                         else:

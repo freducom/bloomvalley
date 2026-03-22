@@ -22,79 +22,121 @@ JUSTETF_BASE = "https://www.justetf.com/en/etf-profile.html"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 
 
-def _extract(html: str, label: str) -> str | None:
-    """Extract a value following a label in justETF HTML."""
-    # justETF uses patterns like:
-    #   <span>Total expense ratio</span> ... <span>0.20% p.a.</span>
-    #   or similar table/div structures with the label followed by the value
+def _extract_by_testid(html: str, testid: str, closing_tag: str = "") -> str | None:
+    """Extract text content from an element identified by data-testid attribute.
+
+    justETF uses data-testid attributes on value elements, e.g.:
+        data-testid="tl_etf-basics_value_ter">0.20% p.a.</div>
+    This is more robust than label-based matching which broke when the
+    page layout changed (discovered 2026-03-22).
+
+    Args:
+        html: The full page HTML.
+        testid: The data-testid attribute value to locate the element.
+        closing_tag: If set, capture up to this specific closing tag (e.g. "div")
+                     to include child elements. Otherwise stops at the first
+                     closing tag encountered.
+    """
+    if closing_tag:
+        end_pattern = rf"</{re.escape(closing_tag)}\b"
+    else:
+        end_pattern = r"</"
     pattern = re.compile(
-        rf"{re.escape(label)}"
-        r"[\s\S]{0,500}?"           # allow up to 500 chars between label and value
-        r"(?:<[^>]*>[\s]*)*"        # skip any intervening HTML tags
-        r"([^<]+)",                 # capture first text node after tags
+        rf'data-testid="{re.escape(testid)}"[^>]*>'
+        rf"([\s\S]*?){end_pattern}",
         re.IGNORECASE,
     )
     match = pattern.search(html)
     if match:
-        return match.group(1).strip()
+        # Strip nested HTML tags from the captured content
+        raw = re.sub(r"<[^>]+>", " ", match.group(1))
+        cleaned = re.sub(r"\s+", " ", raw).strip()
+        if cleaned:
+            return cleaned
     return None
 
 
 def _parse_ter(html: str) -> str | None:
-    """Extract TER percentage, e.g. '0.20% p.a.'."""
-    raw = _extract(html, "Total expense ratio")
-    if raw:
-        m = re.search(r"(\d+[.,]\d+\s*%)", raw)
-        if m:
-            return m.group(1).replace(",", ".")
+    """Extract TER percentage, e.g. '0.20%'.
+
+    Primary: data-testid="tl_etf-basics_value_ter" (table row)
+    Fallback: data-testid="etf-profile-header_ter-value" (header)
+    """
+    for testid in ["tl_etf-basics_value_ter", "etf-profile-header_ter-value"]:
+        raw = _extract_by_testid(html, testid)
+        if raw:
+            m = re.search(r"(\d+[.,]\d+\s*%)", raw)
+            if m:
+                return m.group(1).replace(",", ".")
     return None
 
 
 def _parse_fund_size(html: str) -> str | None:
-    """Extract fund size / AUM, e.g. 'EUR 1,234 m' or 'EUR 56 bn'."""
-    raw = _extract(html, "Fund size")
+    """Extract fund size / AUM, e.g. 'EUR 109,651 m'.
+
+    Primary: data-testid="etf-profile-header_fund-size-value-wrapper" (header)
+    The wrapper contains: <span> EUR 109,651 </span> m
+    Fallback: search the etf-basics table row for fund size.
+    """
+    # Try the header wrapper first — it contains currency, amount and unit.
+    # Use closing_tag="div" because the wrapper is a <div> containing nested
+    # <span> children: <span>EUR 109,651</span> m <span class="indicator...">
+    raw = _extract_by_testid(html, "etf-profile-header_fund-size-value-wrapper", closing_tag="div")
     if raw:
-        # Match currency + amount patterns like "EUR 1,234 m" or "1.234 m"
-        m = re.search(r"([A-Z]{3}\s+[\d.,]+\s*(?:m|bn|mil|billion)?)", raw, re.IGNORECASE)
+        m = re.search(r"([A-Z]{3}\s+[\d.,]+)\s*(m|bn)", raw, re.IGNORECASE)
         if m:
-            return m.group(1).strip()
-        # Fallback: just grab a number with possible unit
-        m = re.search(r"([\d.,]+\s*(?:m|bn|mil|billion)?)", raw, re.IGNORECASE)
+            return f"{m.group(1).strip()} {m.group(2)}"
+    # Fallback: basics table row
+    raw = _extract_by_testid(html, "tl_etf-basics_value_fund-size")
+    if raw:
+        m = re.search(r"([A-Z]{3}\s+[\d.,]+\s*(?:m|bn))", raw, re.IGNORECASE)
         if m:
             return m.group(1).strip()
     return None
 
 
 def _parse_replication(html: str) -> str | None:
-    """Extract replication method: Physical, Synthetic, Swap, etc."""
-    raw = _extract(html, "Replication")
-    if raw:
-        for method in ["Physical", "Synthetic", "Swap", "Full replication",
-                       "Optimized sampling", "Unfunded swap", "Funded swap"]:
-            if method.lower() in raw.lower():
-                return method
+    """Extract replication method: Physical, Synthetic, Swap, etc.
+
+    Primary: data-testid="tl_etf-basics_value_replication" (table)
+    Fallback: data-testid="etf-profile-header_replication-value" (header)
+    """
+    for testid in ["tl_etf-basics_value_replication",
+                    "etf-profile-header_replication-value"]:
+        raw = _extract_by_testid(html, testid)
+        if raw:
+            for method in ["Physical", "Synthetic", "Swap", "Full replication",
+                           "Optimized sampling", "Unfunded swap", "Funded swap"]:
+                if method.lower() in raw.lower():
+                    return method
     return None
 
 
 def _parse_distribution(html: str) -> str | None:
-    """Extract distribution policy: Accumulating or Distributing."""
-    raw = _extract(html, "Distribution policy")
-    if raw:
-        if "accumulating" in raw.lower():
-            return "Accumulating"
-        if "distributing" in raw.lower():
-            return "Distributing"
+    """Extract distribution policy: Accumulating or Distributing.
+
+    Primary: data-testid="tl_etf-basics_value_distribution-policy" (table)
+    Fallback: data-testid="etf-profile-header_distribution-policy-value" (header)
+    """
+    for testid in ["tl_etf-basics_value_distribution-policy",
+                    "etf-profile-header_distribution-policy-value"]:
+        raw = _extract_by_testid(html, testid)
+        if raw:
+            if "accumulating" in raw.lower():
+                return "Accumulating"
+            if "distributing" in raw.lower():
+                return "Distributing"
     return None
 
 
 def _parse_domicile(html: str) -> str | None:
-    """Extract fund domicile country."""
-    raw = _extract(html, "Fund domicile")
-    if raw:
-        # Clean up: take the first meaningful word(s), skip HTML artifacts
-        cleaned = re.sub(r"\s+", " ", raw).strip()
-        if cleaned and len(cleaned) < 50:
-            return cleaned
+    """Extract fund domicile country.
+
+    Primary: data-testid="tl_etf-basics_value_domicile-country" (table)
+    """
+    raw = _extract_by_testid(html, "tl_etf-basics_value_domicile-country")
+    if raw and len(raw) < 50:
+        return raw
     return None
 
 
