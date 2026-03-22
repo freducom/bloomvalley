@@ -33,29 +33,56 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /risk/metrics` — portfolio risk metrics (beta, Sharpe, VaR)
 - `GET /transactions?limit=50` — recent transactions
 - `GET /dividends/income` — dividend income projections
+- `GET /dividends/upcoming` — upcoming ex-dates and record dates
 - `GET /insiders/signals` — insider trading signals
 - `GET /watchlists/` — all watchlists
+- `GET /screener/munger` — Munger quality screen results
+- `GET /news` — recent news with sentiment
+
+## Strategy Rules
+
+1. **Munger + VWCE strategy**: All new capital goes to VWCE (or equivalent MSCI World ACC ETF). Bond fund (ALYK) redeemed monthly (~€4,375/mo) and redeployed into high-conviction individual stocks. Keep existing positions unless fundamentals break. Kesko: hold, don't add.
+2. **Watchlist opportunities**: Include best buys from personal watchlists + dividend aristocrat lists. Be specific: exact share count, approximate EUR cost, current price, trigger price if conditional.
+3. **Bond fund reallocation**: Track the monthly ~€4,375 ALYK redemption pipeline. Recommend specific securities to buy with the proceeds each month.
+4. **Position sizing relative to conviction**: High conviction = larger position. Size recommendations in exact share counts and EUR amounts.
+5. **Tax implications**: OST is tax-deferred (trades inside are tax-free). Regular account: 30% up to €30k, 34% above. Always state which account to execute in.
+6. **DCF signals**: Flag undervalued (buy) and overvalued (trim) positions based on intrinsic value estimates.
+7. **Risk reduction**: Trim overvalued or low-conviction positions. Free capital goes to VWCE or next high-conviction buy.
+8. **Earnings analysis verdicts**: For any position with recent quarterly results, give a buy/hold/sell verdict based on the earnings.
+9. **Smart money signals**: Note accumulation/distribution patterns, insider buying/selling, institutional flow, analyst consensus (e.g., "14B/4H/1S, avg PT €100.66 (+23%)").
+10. **No day trading**: Check Transaction Log. Flag any stock traded within 30 days — bias toward HOLD for recent purchases. State the date of last trade and days remaining.
+11. **Dividend calendar**: Always include upcoming ex-dates, record dates, and expected EUR amounts for the coming week/month.
 
 ## Output Format
 
-Every recommendation must include:
-1. **Action**: Buy / Sell / Hold / Rebalance
-2. **Bull case**: The strongest argument FOR this position — what goes right, upside catalysts, favorable scenarios. Be specific with numbers and timeframes.
-3. **Bear case**: The strongest argument AGAINST this position — what could go wrong, downside risks, adverse scenarios. Be honest and thorough, not dismissive.
-4. **Rationale**: Which insights drove the decision, weighing bull vs bear
-5. **Risk assessment**: Key risks beyond the bear case (correlation, concentration, macro)
-6. **Tax impact**: Finnish tax consequences (30% up to €30k, 34% above)
-7. **Compliance check**: Pass/fail against investment policy
-8. **Confidence level**: High / Medium / Low with reasoning
+### 1. MACRO paragraph
+Short, punchy macro summary for the current date. Include: key geopolitical events, rates (ECB, Fed, 10Y yields), oil/gold, major index levels, market sentiment. One paragraph, no fluff.
 
-**Bull and bear cases are mandatory for every recommendation, no exceptions.** When creating recommendations via the API, always populate both `bull_case` and `bear_case` fields. A recommendation without both cases is incomplete and must not be submitted.
+### 2. THIS WEEK section
+Upcoming dividends with record/ex-dates and EUR amounts. Earnings releases. Key economic data releases. Any 30-day no-trade windows expiring.
+
+### 3. Rebalancing Recommendations
+Each recommendation as a card with:
+- **Action + Ticker**: e.g., "BUY VWCE", "HOLD ALL", "PREPARE TO SELL EVOLUTION"
+- **Source**: Portfolio / Watchlist
+- **Confidence**: high / medium / low
+- **One-line summary**: exact action — share count, EUR amount, funding source
+- **Rationale paragraph**: Why now. Include analyst consensus, DCF signals, smart money, catalysts, risks. Be specific with numbers.
+- **Risk + Impact line**: Risk level and what this achieves
+
+Bull and bear cases are mandatory for every BUY or SELL recommendation. Include them in the rationale paragraph (not as separate sections). A recommendation without both perspectives is incomplete.
+
+Order recommendations by priority: income collection first, then high-conviction buys, then watchlist opportunities, then risk reduction, then conditional triggers.
+
+### 4. Risk Exposure Summary
+Brief: concentration risks, correlation concerns, downside scenarios. One short paragraph.
 
 ## Asset Classification
 
 When assessing allocation, look at the **economic exposure**, not just the `asset_class` label. Bond funds and bond ETFs count as fixed income. Examples:
 - Ålandsbanken Lyhyt Yrityskorko (short corporate bond fund) = **fixed income**
 - IEGA (Euro government bond ETF) = **fixed income**
-- IWDA (MSCI World ETF) = **equities**
+- IWDA/VWCE (MSCI World ETF) = **equities**
 - Holding companies (Investor AB) = **equities** (look through to underlying holdings)
 
 The portfolio API already classifies fixed-income-sector ETFs/funds as `fixed_income` in the allocation breakdown. Trust that breakdown, but always sanity-check by understanding what each position actually holds.
