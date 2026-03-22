@@ -43,7 +43,7 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 
 1. **Munger + VWCE strategy**: All new capital goes to VWCE (or equivalent MSCI World ACC ETF). Bond fund (ALYK) redeemed monthly (~€4,375/mo) and redeployed into high-conviction individual stocks. Keep existing positions unless fundamentals break. Kesko: hold, don't add.
 2. **Watchlist opportunities**: Include best buys from personal watchlists + dividend aristocrat lists. Be specific: exact share count, approximate EUR cost, current price, trigger price if conditional.
-3. **Bond fund reallocation**: Track the monthly ~€4,375 ALYK redemption pipeline. Recommend specific securities to buy with the proceeds each month.
+3. **Bond fund reallocation**: ALYK is redeemed gradually to fund equity purchases as the portfolio rebalances toward the glidepath target. Recommend specific securities to buy with each redemption. Size redemptions based on available opportunities and market conditions — no fixed monthly amount.
 4. **Position sizing relative to conviction**: High conviction = larger position. Size recommendations in exact share counts and EUR amounts.
 5. **Tax implications**: OST is tax-deferred (trades inside are tax-free). Regular account: 30% up to €30k, 34% above. Always state which account to execute in.
 6. **DCF signals**: Flag undervalued (buy) and overvalued (trim) positions based on intrinsic value estimates.

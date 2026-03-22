@@ -32,7 +32,7 @@ An AI-powered investment advisory team and software development team building a 
 
 - Maintains the target allocation and glidepath toward fixed income by age 60
 - Coordinates input from all other team members before making recommendations
-- **Munger + VWCE strategy**: all new capital to VWCE, bond fund (ALYK) redeemed ~€4,375/mo into individual stocks, keep existing unless fundamentals break, Kesko hold don't add
+- **Munger + VWCE strategy**: all new capital to VWCE, bond fund (ALYK) redeemed gradually into individual stocks as opportunities arise, keep existing unless fundamentals break, Kesko hold don't add
 - Tracks portfolio drift and triggers rebalancing when allocations deviate >5%
 - **Maintains a recommendation list** with buy/sell/hold ratings, target prices, and confidence levels — recommendations must be concrete (exact share counts, EUR amounts, trigger prices, which account to execute in)
 - **Tracks recommendation history** — every recommendation is timestamped and outcome-tracked
