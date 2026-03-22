@@ -158,117 +158,152 @@ function ActiveTab() {
     );
   }
 
-  return (
-    <div>
-      <p className="text-sm text-terminal-text-secondary mb-3">{total} active recommendation{total !== 1 ? "s" : ""}</p>
-      <div className="space-y-3">
-        {recs.map((r) => (
-          <div
-            key={r.id}
-            className="border border-terminal-border rounded bg-terminal-bg-secondary"
-          >
-            <div
-              className="flex items-center gap-3 p-4 cursor-pointer hover:bg-terminal-bg-tertiary"
-              onClick={() => setExpanded(expanded === r.id ? null : r.id)}
-            >
-              <span className={`text-xs px-2 py-0.5 rounded font-medium uppercase ${ACTION_COLORS[r.action] || ""}`}>
-                {r.action}
-              </span>
-              <span className="font-mono text-terminal-accent">{r.ticker}</span>
-              <span className="text-xs text-terminal-text-secondary">{r.securityName}</span>
-              <span className={`text-xs ml-1 ${CONFIDENCE_COLORS[r.confidence] || ""}`}>
-                {r.confidence}
-              </span>
-              {r.timeHorizon && (
-                <span className="text-xs text-terminal-text-secondary">
-                  {HORIZON_LABELS[r.timeHorizon] || r.timeHorizon}
-                </span>
-              )}
-              <div className="ml-auto flex items-center gap-4">
-                {r.entryPriceCents && (
-                  <span className="text-xs font-mono text-terminal-text-secondary">
-                    Entry: <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private>
-                  </span>
-                )}
-                {r.targetPriceCents && (
-                  <span className="text-xs font-mono text-terminal-text-secondary">
-                    Target: {formatCurrency(r.targetPriceCents, r.currency)}
-                  </span>
-                )}
-                {r.unrealizedReturnPct !== undefined && (
-                  <span className={`text-sm font-mono font-medium ${
-                    r.unrealizedReturnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"
-                  }`}>
-                    {formatPercent(r.unrealizedReturnPct, true)}
-                  </span>
-                )}
-              </div>
-            </div>
+  const [showAll, setShowAll] = useState(false);
 
-            {expanded === r.id && (
-              <div className="border-t border-terminal-border p-4 space-y-3">
-                <p className="text-sm text-terminal-text-primary">{r.rationale}</p>
-                {(r.bullCase || r.bearCase) && (
-                  <div className="grid grid-cols-2 gap-4">
-                    {r.bullCase && (
-                      <div>
-                        <span className="text-xs text-terminal-positive font-medium">Bull Case</span>
-                        <p className="text-xs text-terminal-text-secondary mt-1">{r.bullCase}</p>
-                      </div>
-                    )}
-                    {r.bearCase && (
-                      <div>
-                        <span className="text-xs text-terminal-negative font-medium">Bear Case</span>
-                        <p className="text-xs text-terminal-text-secondary mt-1">{r.bearCase}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-4 text-xs text-terminal-text-secondary">
-                  <span>Recommended: {formatDate(r.recommendedDate)}</span>
-                  {r.expiryDate && <span>Expires: {formatDate(r.expiryDate)}</span>}
-                  {r.source && <span>Source: {r.source}</span>}
-                  {r.currentPriceCents && (
-                    <span>Current: {formatCurrency(r.currentPriceCents, r.currency)}</span>
-                  )}
+  // Sort: buy/sell first, then by confidence (high > medium > low)
+  const CONF_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const ACTION_ORDER: Record<string, number> = { buy: 0, sell: 1, hold: 2 };
+  const sorted = [...recs].sort((a, b) => {
+    const aAction = ACTION_ORDER[a.action] ?? 3;
+    const bAction = ACTION_ORDER[b.action] ?? 3;
+    if (aAction !== bAction) return aAction - bAction;
+    return (CONF_ORDER[a.confidence] ?? 3) - (CONF_ORDER[b.confidence] ?? 3);
+  });
+
+  const top5 = sorted.slice(0, 5);
+  const rest = sorted.slice(5);
+
+  const renderCard = (r: Recommendation) => (
+    <div
+      key={r.id}
+      className="border border-terminal-border rounded bg-terminal-bg-secondary"
+    >
+      <div
+        className="flex items-center gap-3 p-4 cursor-pointer hover:bg-terminal-bg-tertiary"
+        onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+      >
+        <span className={`text-xs px-2 py-0.5 rounded font-medium uppercase ${ACTION_COLORS[r.action] || ""}`}>
+          {r.action}
+        </span>
+        <span className="font-mono text-terminal-accent">{r.ticker}</span>
+        <span className="text-xs text-terminal-text-secondary">{r.securityName}</span>
+        <span className={`text-xs ml-1 ${CONFIDENCE_COLORS[r.confidence] || ""}`}>
+          {r.confidence}
+        </span>
+        {r.timeHorizon && (
+          <span className="text-xs text-terminal-text-secondary">
+            {HORIZON_LABELS[r.timeHorizon] || r.timeHorizon}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-4">
+          {r.entryPriceCents && (
+            <span className="text-xs font-mono text-terminal-text-secondary">
+              Entry: <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private>
+            </span>
+          )}
+          {r.targetPriceCents && (
+            <span className="text-xs font-mono text-terminal-text-secondary">
+              Target: {formatCurrency(r.targetPriceCents, r.currency)}
+            </span>
+          )}
+          {r.unrealizedReturnPct !== undefined && (
+            <span className={`text-sm font-mono font-medium ${
+              r.unrealizedReturnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"
+            }`}>
+              {formatPercent(r.unrealizedReturnPct, true)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {expanded === r.id && (
+        <div className="border-t border-terminal-border p-4 space-y-3">
+          <p className="text-sm text-terminal-text-primary">{r.rationale}</p>
+          {(r.bullCase || r.bearCase) && (
+            <div className="grid grid-cols-2 gap-4">
+              {r.bullCase && (
+                <div>
+                  <span className="text-xs text-terminal-positive font-medium">Bull Case</span>
+                  <p className="text-xs text-terminal-text-secondary mt-1">{r.bullCase}</p>
                 </div>
-
-                {closing === r.id ? (
-                  <div className="flex items-center gap-2 pt-2 border-t border-terminal-border/50">
-                    <input
-                      value={closeNotes}
-                      onChange={(e) => setCloseNotes(e.target.value)}
-                      placeholder="Outcome notes (optional)"
-                      className="flex-1 px-3 py-1.5 bg-terminal-bg-primary border border-terminal-border rounded text-sm text-terminal-text-primary"
-                    />
-                    <button
-                      onClick={() => handleClose(r.id)}
-                      className="px-3 py-1.5 bg-terminal-accent text-terminal-bg-primary text-sm rounded font-medium hover:opacity-90"
-                    >
-                      Confirm Close
-                    </button>
-                    <button
-                      onClick={() => { setClosing(null); setCloseNotes(""); }}
-                      className="px-3 py-1.5 text-terminal-text-secondary text-sm hover:text-terminal-text-primary"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="pt-2 border-t border-terminal-border/50">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setClosing(r.id); }}
-                      className="text-xs text-terminal-text-secondary hover:text-terminal-text-primary"
-                    >
-                      Close recommendation
-                    </button>
-                  </div>
-                )}
-              </div>
+              )}
+              {r.bearCase && (
+                <div>
+                  <span className="text-xs text-terminal-negative font-medium">Bear Case</span>
+                  <p className="text-xs text-terminal-text-secondary mt-1">{r.bearCase}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-4 text-xs text-terminal-text-secondary">
+            <span>Recommended: {formatDate(r.recommendedDate)}</span>
+            {r.expiryDate && <span>Expires: {formatDate(r.expiryDate)}</span>}
+            {r.source && <span>Source: {r.source}</span>}
+            {r.currentPriceCents && (
+              <span>Current: {formatCurrency(r.currentPriceCents, r.currency)}</span>
             )}
           </div>
-        ))}
+
+          {closing === r.id ? (
+            <div className="flex items-center gap-2 pt-2 border-t border-terminal-border/50">
+              <input
+                value={closeNotes}
+                onChange={(e) => setCloseNotes(e.target.value)}
+                placeholder="Outcome notes (optional)"
+                className="flex-1 px-3 py-1.5 bg-terminal-bg-primary border border-terminal-border rounded text-sm text-terminal-text-primary"
+              />
+              <button
+                onClick={() => handleClose(r.id)}
+                className="px-3 py-1.5 bg-terminal-accent text-terminal-bg-primary text-sm rounded font-medium hover:opacity-90"
+              >
+                Confirm Close
+              </button>
+              <button
+                onClick={() => { setClosing(null); setCloseNotes(""); }}
+                className="px-3 py-1.5 text-terminal-text-secondary text-sm hover:text-terminal-text-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-terminal-border/50">
+              <button
+                onClick={(e) => { e.stopPropagation(); setClosing(r.id); }}
+                className="text-xs text-terminal-text-secondary hover:text-terminal-text-primary"
+              >
+                Close recommendation
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <p className="text-sm text-terminal-text-secondary mb-3">
+        Top {Math.min(5, sorted.length)} of {total} active recommendation{total !== 1 ? "s" : ""} (sorted by priority)
+      </p>
+      <div className="space-y-3">
+        {top5.map(renderCard)}
       </div>
+
+      {rest.length > 0 && (
+        <div className="mt-4">
+          <button
+            onClick={() => setShowAll(!showAll)}
+            className="text-sm text-terminal-accent hover:underline font-mono"
+          >
+            {showAll ? "Hide" : `Show ${rest.length} more`} recommendation{rest.length !== 1 ? "s" : ""}
+          </button>
+          {showAll && (
+            <div className="space-y-3 mt-3">
+              {rest.map(renderCard)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
