@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import Link from "next/link";
+import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
+
+interface Recommendation {
+  id: number;
+  ticker: string;
+  securityName: string;
+  action: "BUY" | "SELL" | "HOLD";
+  confidence: "high" | "medium" | "low";
+  rationale: string;
+}
 
 interface Holding {
   accountId: number;
@@ -51,18 +61,23 @@ interface PortfolioSummary {
 export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"overview" | "holdings">("overview");
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [sum, hld] = await Promise.all([
+        const [sum, hld, recRaw] = await Promise.all([
           apiGet<PortfolioSummary>("/portfolio/summary"),
           apiGet<Holding[]>("/portfolio/holdings"),
+          apiGetRaw<{ data: Recommendation[]; pagination: Record<string, unknown> }>(
+            "/recommendations?status=active&limit=10"
+          ).catch(() => ({ data: [] as Recommendation[], pagination: {} })),
         ]);
         setSummary(sum);
         setHoldings(hld);
+        setRecommendations(recRaw.data);
       } catch (e) {
         console.error("Failed to load portfolio:", e);
       } finally {
@@ -227,6 +242,64 @@ export default function PortfolioPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Recommendations */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">Recommendations</h2>
+              <Link
+                href="/recommendations"
+                className="text-sm text-terminal-accent hover:underline font-mono"
+              >
+                View all &rarr;
+              </Link>
+            </div>
+            {recommendations.length === 0 ? (
+              <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4 text-sm text-terminal-text-tertiary">
+                No active recommendations
+              </div>
+            ) : (
+              <div className="border border-terminal-border rounded-md divide-y divide-terminal-border">
+                {recommendations.map((rec) => (
+                  <div
+                    key={rec.id}
+                    className="flex items-center gap-3 px-4 py-2 bg-terminal-bg-secondary hover:bg-terminal-bg-secondary/70 transition-colors"
+                  >
+                    <span
+                      className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${
+                        rec.action === "BUY"
+                          ? "bg-terminal-positive/20 text-terminal-positive"
+                          : rec.action === "SELL"
+                          ? "bg-terminal-negative/20 text-terminal-negative"
+                          : "bg-terminal-warning/20 text-terminal-warning"
+                      }`}
+                    >
+                      {rec.action}
+                    </span>
+                    <span className="font-mono text-sm text-terminal-accent whitespace-nowrap">
+                      {rec.ticker}
+                    </span>
+                    <span className="text-sm text-terminal-text-secondary truncate flex-1 min-w-0">
+                      {rec.rationale.length > 100
+                        ? rec.rationale.slice(0, 100) + "\u2026"
+                        : rec.rationale}
+                    </span>
+                    <span
+                      className={`text-xs font-mono px-2 py-0.5 rounded whitespace-nowrap ${
+                        rec.confidence === "high"
+                          ? "bg-terminal-positive/20 text-terminal-positive"
+                          : rec.confidence === "medium"
+                          ? "bg-terminal-warning/20 text-terminal-warning"
+                          : "bg-terminal-text-tertiary/20 text-terminal-text-tertiary"
+                      }`}
+                    >
+                      {rec.confidence}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : (

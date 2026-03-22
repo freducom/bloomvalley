@@ -52,6 +52,9 @@ interface Recommendation {
   action: string;
   confidence: string;
   rationale: string;
+  targetPriceCents: number;
+  entryPriceCents: number;
+  currency: string;
   recommendedDate: string;
 }
 
@@ -169,7 +172,7 @@ export default function FullscreenDashboard() {
       const [s, h, r, n, a] = await Promise.allSettled([
         apiGet<PortfolioSummary>("/portfolio/summary"),
         apiGet<Holding[]>("/portfolio/holdings"),
-        apiGet<Recommendation[]>("/recommendations?limit=5&sort=-recommended_date"),
+        apiGet<Recommendation[]>("/recommendations?status=active&limit=8"),
         apiGet<NewsItem[]>("/news?limit=10"),
         apiGet<AlertItem[]>("/alerts?status=active&limit=5"),
       ]);
@@ -423,37 +426,51 @@ export default function FullscreenDashboard() {
         <div className="bg-terminal-bg-secondary rounded p-5 overflow-hidden flex flex-col">
           <div className="text-terminal-text-tertiary text-xs uppercase tracking-wider mb-3 flex items-center gap-2">
             <BarChart3 size={14} />
-            Latest Recommendations
+            Recommendations
           </div>
-          <div className="flex-1 overflow-y-auto space-y-2">
+          <div className="flex-1 overflow-y-auto space-y-1.5">
             {recommendations.length === 0 && (
-              <div className="text-terminal-text-tertiary text-sm">No recommendations yet</div>
+              <div className="text-terminal-text-tertiary text-sm">No active recommendations</div>
             )}
             {recommendations.map((r) => {
               const actionColor = {
                 buy: "bg-terminal-positive text-terminal-bg-primary",
                 sell: "bg-terminal-negative text-terminal-bg-primary",
                 hold: "bg-terminal-warning text-terminal-bg-primary",
-              }[r.action] || "bg-terminal-bg-tertiary text-terminal-text-primary";
+              }[r.action?.toLowerCase()] || "bg-terminal-bg-tertiary text-terminal-text-primary";
 
               const confColor = {
                 high: "text-terminal-positive",
                 medium: "text-terminal-warning",
                 low: "text-terminal-negative",
-              }[r.confidence] || "text-terminal-text-tertiary";
+              }[r.confidence?.toLowerCase()] || "text-terminal-text-tertiary";
+
+              const confLabel = {
+                high: "H",
+                medium: "M",
+                low: "L",
+              }[r.confidence?.toLowerCase()] || "?";
 
               return (
-                <div key={r.id} className="py-2 border-b border-terminal-border last:border-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${actionColor}`}>
+                <div key={r.id} className="py-1.5 border-b border-terminal-border last:border-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded leading-none ${actionColor}`}>
                       {r.action}
                     </span>
-                    <span className="font-mono text-sm text-terminal-text-primary">{r.ticker}</span>
-                    <span className="text-xs text-terminal-text-secondary truncate">{r.securityName}</span>
-                    <span className={`text-[10px] ml-auto ${confColor}`}>{r.confidence}</span>
+                    <span className="font-mono text-xs text-terminal-text-primary">{r.ticker}</span>
+                    {r.targetPriceCents > 0 && (
+                      <span className="text-[10px] font-mono text-terminal-text-tertiary ml-auto">
+                        <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private>
+                        <span className="text-terminal-text-tertiary mx-0.5">&rarr;</span>
+                        <Private>{formatCurrency(r.targetPriceCents, r.currency)}</Private>
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-mono font-bold ${!r.targetPriceCents ? "ml-auto" : ""} ${confColor}`} title={r.confidence}>
+                      [{confLabel}]
+                    </span>
                   </div>
-                  <div className="text-xs text-terminal-text-tertiary line-clamp-2">
-                    {r.rationale.length > 100 ? r.rationale.slice(0, 100) + "..." : r.rationale}
+                  <div className="text-[11px] text-terminal-text-tertiary leading-snug">
+                    {r.rationale && r.rationale.length > 80 ? r.rationale.slice(0, 80) + "…" : r.rationale}
                   </div>
                 </div>
               );
