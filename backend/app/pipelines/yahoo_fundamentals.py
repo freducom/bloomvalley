@@ -310,4 +310,155 @@ class YahooFundamentals(PipelineAdapter):
             await session.commit()
 
         logger.info("yahoo_fundamentals_loaded", rows=rows_affected)
+
+        # Compute DCF valuations for all securities with positive FCF
+        await self._compute_dcf_valuations()
+
         return rows_affected
+
+    async def _compute_dcf_valuations(self) -> None:
+        """
+        Compute 2-stage DCF valuations for all securities with positive FCF.
+
+        Stage 1 (years 1-5): FCF growth rate based on ROIC quality tier.
+        Stage 2 (terminal): Perpetuity growth at 2.5% (long-term GDP proxy).
+        Discount rate: WACC if available, otherwise tiered by ROIC.
+
+        Updates dcf_value_cents, dcf_discount_rate, dcf_terminal_growth,
+        and dcf_model_notes in security_fundamentals.
+        """
+        TERMINAL_GROWTH = 0.025
+
+        async with async_session() as session:
+            # Fetch all fundamentals with positive FCF
+            result = await session.execute(
+                text("""
+                    SELECT id, security_id, free_cash_flow_cents, fcf_currency,
+                           roic, wacc, market_cap_cents
+                    FROM security_fundamentals
+                    WHERE free_cash_flow_cents > 0
+                """)
+            )
+            rows = result.fetchall()
+
+        if not rows:
+            logger.info("dcf_compute_skip", reason="no securities with positive FCF")
+            return
+
+        logger.info("dcf_compute_start", securities=len(rows))
+
+        update_sql = text("""
+            UPDATE security_fundamentals
+            SET dcf_value_cents = :dcf_value_cents,
+                dcf_discount_rate = :dcf_discount_rate,
+                dcf_terminal_growth = :dcf_terminal_growth,
+                dcf_model_notes = :dcf_model_notes,
+                updated_at = now()
+            WHERE id = :id
+        """)
+
+        updated = 0
+        async with async_session() as session:
+            for row in rows:
+                fund_id = row[0]
+                fcf_cents = row[2]
+                fcf_currency = row[3] or "USD"
+                roic = float(row[4]) if row[4] is not None else None
+                wacc = float(row[5]) if row[5] is not None else None
+                market_cap_cents = row[6]
+
+                # Determine Stage 1 growth rate based on ROIC
+                if roic is not None:
+                    if roic > 0.20:
+                        growth_rate = 0.15
+                    elif roic > 0.15:
+                        growth_rate = 0.12
+                    elif roic > 0.10:
+                        growth_rate = 0.08
+                    else:
+                        growth_rate = 0.05
+                else:
+                    # No ROIC data — use conservative default
+                    growth_rate = 0.05
+
+                # Cap growth rate at 20%
+                growth_rate = min(growth_rate, 0.20)
+
+                # Determine discount rate: WACC if available, else tiered by ROIC
+                if wacc is not None and wacc > TERMINAL_GROWTH:
+                    discount_rate = wacc
+                else:
+                    if roic is not None and roic > 0.15:
+                        discount_rate = 0.10
+                    elif roic is not None and roic > 0.10:
+                        discount_rate = 0.11
+                    else:
+                        discount_rate = 0.12
+
+                # Guard: discount rate must exceed terminal growth
+                if discount_rate <= TERMINAL_GROWTH:
+                    logger.warning(
+                        "dcf_skip_low_discount_rate",
+                        fund_id=fund_id,
+                        discount_rate=discount_rate,
+                        terminal_growth=TERMINAL_GROWTH,
+                    )
+                    continue
+
+                # Stage 1: project FCF for years 1-5 and discount
+                fcf = fcf_cents  # in cents
+                pv_stage1 = 0
+                for year in range(1, 6):
+                    fcf = fcf * (1 + growth_rate)
+                    pv_stage1 += fcf / (1 + discount_rate) ** year
+
+                # fcf is now FCF at year 5
+                fcf_year5 = fcf
+
+                # Stage 2: terminal value
+                terminal_value = fcf_year5 * (1 + TERMINAL_GROWTH) / (discount_rate - TERMINAL_GROWTH)
+                pv_terminal = terminal_value / (1 + discount_rate) ** 5
+
+                # Total DCF enterprise value (in cents)
+                dcf_value_cents = round(pv_stage1 + pv_terminal)
+
+                # Format FCF for notes (convert cents to human-readable)
+                fcf_abs = abs(row[2])  # original FCF cents
+                if fcf_abs >= 100_000_000_00:  # >= 1B (in cents)
+                    fcf_display = f"{row[2] / 100_000_000_00:.1f}B"
+                elif fcf_abs >= 100_000_00:  # >= 1M (in cents)
+                    fcf_display = f"{row[2] / 100_000_00:.1f}M"
+                else:
+                    fcf_display = f"{row[2] / 100:.0f}"
+
+                currency_symbol = {"EUR": "\u20ac", "USD": "$", "SEK": "kr", "GBP": "\u00a3"}.get(
+                    fcf_currency, fcf_currency
+                )
+
+                growth_pct = round(growth_rate * 100)
+                terminal_pct = round(TERMINAL_GROWTH * 100, 1)
+                discount_pct = round(discount_rate * 100)
+                wacc_label = "WACC" if wacc is not None and wacc > TERMINAL_GROWTH else "est"
+
+                notes = (
+                    f"2-stage DCF: {growth_pct}% growth 5yr, "
+                    f"{terminal_pct}% terminal, "
+                    f"{discount_pct}% {wacc_label}. "
+                    f"FCF: {currency_symbol}{fcf_display}"
+                )
+
+                await session.execute(
+                    update_sql,
+                    {
+                        "id": fund_id,
+                        "dcf_value_cents": dcf_value_cents,
+                        "dcf_discount_rate": discount_rate,
+                        "dcf_terminal_growth": TERMINAL_GROWTH,
+                        "dcf_model_notes": notes,
+                    },
+                )
+                updated += 1
+
+            await session.commit()
+
+        logger.info("dcf_compute_complete", updated=updated)

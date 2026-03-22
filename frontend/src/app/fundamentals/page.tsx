@@ -159,24 +159,24 @@ function OverviewTab() {
   }
 
   return (
-    <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto">
+    <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto max-h-[80vh] overflow-y-auto">
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-terminal-bg-secondary">
           <tr className="border-b border-terminal-border text-terminal-text-secondary text-xs">
-            <th className="text-left p-3">Security</th>
-            <th className="text-right p-3">Price</th>
-            <th className="text-right p-3">P/B</th>
-            <th className="text-right p-3">PE</th>
-            <th className="text-right p-3">ROIC</th>
-            <th className="text-right p-3">FCF Yield</th>
-            <th className="text-right p-3">Debt/EBITDA</th>
-            <th className="text-right p-3">Div Yield</th>
-            <th className="text-right p-3">Gross Mgn</th>
-            <th className="text-right p-3">Op Mgn</th>
-            <th className="text-right p-3">DCF Upside</th>
-            <th className="text-right p-3">Short %</th>
-            <th className="text-center p-3">Smart Money</th>
-            <th className="text-left p-3">Updated</th>
+            <th className="text-left p-3" title="Company ticker and name">Security</th>
+            <th className="text-right p-3" title="Current market price per share">Price</th>
+            <th className="text-right p-3" title="Price-to-Book ratio. Useful for banks, industrials, asset-heavy businesses. Less meaningful for software/asset-light companies.">P/B</th>
+            <th className="text-right p-3" title="Price-to-Earnings ratio. Lower = cheaper relative to earnings. Compare within sector, not across sectors.">PE</th>
+            <th className="text-right p-3" title="Return on Invested Capital. The most important quality metric. A company returning above its WACC (~8-12%) is creating value. >15% = excellent, 10-15% = good, <10% = weak.">ROIC</th>
+            <th className="text-right p-3" title="Free Cash Flow Yield = FCF / Market Cap. Higher means more cash generation per EUR invested. >5% is attractive.">FCF Yield</th>
+            <th className="text-right p-3" title="Net Debt / EBITDA. Measures leverage. <1x = conservative, 1-3x = moderate, >3x = risky. Negative means net cash position.">Debt/EBITDA</th>
+            <th className="text-right p-3" title="Annual dividend yield. Dividend payers are a positive signal. Growing importance as portfolio ages toward income focus.">Div Yield</th>
+            <th className="text-right p-3" title="Gross margin — revenue minus cost of goods sold. Higher = stronger pricing power and competitive advantage.">Gross Mgn</th>
+            <th className="text-right p-3" title="Operating margin — profit from core operations. Higher = more efficient business. Key profitability indicator.">Op Mgn</th>
+            <th className="text-right p-3" title="DCF (Discounted Cash Flow) upside/downside vs current market cap. Positive = undervalued. A high-ROIC company with large DCF upside is the strongest buy signal.">DCF Upside</th>
+            <th className="text-right p-3" title="Short interest as % of float. High short interest can signal bearish sentiment or potential squeeze. Less important than fundamentals.">Short %</th>
+            <th className="text-center p-3" title="Smart money signal from institutional flow and insider patterns. Supplementary indicator — less important than ROIC and DCF.">Smart Money</th>
+            <th className="text-left p-3" title="Last time fundamentals data was updated">Updated</th>
           </tr>
         </thead>
         <tbody>
@@ -385,15 +385,15 @@ function ShortsTab() {
   const sorted = [...data].sort((a, b) => (b.shortInterestPct || 0) - (a.shortInterestPct || 0));
 
   return (
-    <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto">
+    <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto max-h-[80vh] overflow-y-auto">
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-terminal-bg-secondary">
           <tr className="border-b border-terminal-border text-terminal-text-secondary text-xs">
             <th className="text-left p-3">Security</th>
-            <th className="text-right p-3">Short % Float</th>
-            <th className="text-right p-3">Change</th>
-            <th className="text-right p-3">Days to Cover</th>
-            <th className="text-center p-3">Squeeze Risk</th>
+            <th className="text-right p-3" title="Shares sold short as % of float. Higher = more bearish bets against the stock.">Short % Float</th>
+            <th className="text-right p-3" title="Recent change in short interest. Increasing shorts = growing bearish sentiment.">Change</th>
+            <th className="text-right p-3" title="Trading days needed for all shorts to cover. Higher = shorts are more trapped.">Days to Cover</th>
+            <th className="text-center p-3" title="Risk of a short squeeze — when shorts are forced to buy back, pushing price up rapidly.">Squeeze Risk</th>
             <th className="text-right p-3">Price</th>
             <th className="text-left p-3">Updated</th>
           </tr>
