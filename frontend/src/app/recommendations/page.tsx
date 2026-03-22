@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiGetRaw, apiPost, apiPut } from "@/lib/api";
+import { apiGet, apiGetRaw, apiPost, apiPut } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 
@@ -107,6 +107,128 @@ export default function RecommendationsPage() {
       {tab === "closed" && <ClosedTab />}
       {tab === "retrospective" && <RetroTab />}
       {tab === "create" && <CreateTab onCreated={() => setTab("active")} />}
+    </div>
+  );
+}
+
+/* ── Macro Context Banner ── */
+
+interface RegimeData {
+  regime: string;
+  confidence: string;
+  compositeScore: number;
+  signals: { name: string; signal: string; value: number | null; detail: string }[];
+}
+
+interface MacroIndicator {
+  code: string;
+  name: string;
+  value: number;
+  unit: string;
+  date: string;
+  change: number;
+}
+
+interface MacroRegion {
+  region: string;
+  regionLabel: string;
+  categories: { category: string; label: string; indicators: MacroIndicator[] }[];
+}
+
+interface NewsItem {
+  id: number;
+  title: string;
+  publishedAt: string;
+  source: string;
+}
+
+function MacroContextBanner() {
+  const [regime, setRegime] = useState<RegimeData | null>(null);
+  const [macroRegions, setMacroRegions] = useState<MacroRegion[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      apiGet<RegimeData>("/macro/regime").catch(() => null),
+      apiGet<MacroRegion[]>("/macro/summary").catch(() => []),
+      apiGet<NewsItem[]>("/news?limit=5&sort=-published_at").catch(() => []),
+    ]).then(([r, m, n]) => {
+      setRegime(r);
+      setMacroRegions(m);
+      setNews(n);
+    });
+  }, []);
+
+  // Extract key indicators
+  const findIndicator = (code: string): MacroIndicator | undefined => {
+    for (const region of macroRegions) {
+      for (const cat of region.categories) {
+        const ind = cat.indicators.find((i) => i.code === code);
+        if (ind) return ind;
+      }
+    }
+    return undefined;
+  };
+
+  const ecbRate = findIndicator("ECB_DFR");
+  const fedRate = findIndicator("FEDFUNDS");
+  const us10y = findIndicator("GS10");
+  const ezHicp = findIndicator("EZ_HICP");
+  const fiUnemp = findIndicator("FI_UNEMP");
+  const hyOas = findIndicator("BAMLH0A0HYM2");
+
+  const REGIME_COLORS: Record<string, string> = {
+    expansion: "text-terminal-positive bg-terminal-positive/10",
+    slowdown: "text-terminal-warning bg-terminal-warning/10",
+    recession: "text-terminal-negative bg-terminal-negative/10",
+    recovery: "text-terminal-info bg-terminal-info/10",
+  };
+
+  if (!regime) return null;
+
+  return (
+    <div className="mb-6 border border-terminal-border rounded bg-terminal-bg-secondary p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-mono font-semibold tracking-wider text-terminal-text-secondary">MACRO CONTEXT</span>
+        <span className={`text-xs px-2 py-0.5 rounded font-medium uppercase ${REGIME_COLORS[regime.regime] || "text-terminal-text-secondary bg-terminal-bg-tertiary"}`}>
+          {regime.regime}
+        </span>
+        <span className="text-xs text-terminal-text-tertiary">
+          ({regime.confidence} confidence)
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono text-terminal-text-secondary">
+        {ecbRate && <span>ECB {ecbRate.value}%</span>}
+        {fedRate && <span>Fed {fedRate.value}%</span>}
+        {us10y && <span>US 10Y {us10y.value}%</span>}
+        {ezHicp && <span>EZ HICP {ezHicp.value}%</span>}
+        {fiUnemp && <span>FI Unemp {fiUnemp.value}%</span>}
+        {hyOas && <span>HY OAS {hyOas.value}%</span>}
+      </div>
+
+      {regime.signals.length > 0 && (
+        <p className="text-sm text-terminal-text-primary leading-relaxed">
+          {regime.signals
+            .filter((s) => s.signal !== "unavailable")
+            .map((s) => s.detail)
+            .join(". ")}
+          .
+        </p>
+      )}
+
+      {news.length > 0 && (
+        <div className="border-t border-terminal-border/50 pt-2">
+          <span className="text-xs font-mono text-terminal-text-tertiary">HEADLINES</span>
+          <div className="mt-1 space-y-0.5">
+            {news.slice(0, 3).map((n) => (
+              <p key={n.id} className="text-xs text-terminal-text-secondary truncate">
+                {n.title}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -281,6 +403,7 @@ function ActiveTab() {
 
   return (
     <div>
+      <MacroContextBanner />
       <p className="text-sm text-terminal-text-secondary mb-3">
         Top {Math.min(5, sorted.length)} of {total} active recommendation{total !== 1 ? "s" : ""} (sorted by priority)
       </p>
