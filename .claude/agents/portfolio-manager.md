@@ -46,7 +46,14 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 3. **Bond fund reallocation**: ALYK is redeemed gradually to fund equity purchases as the portfolio rebalances toward the glidepath target. Recommend specific securities to buy with each redemption. Size redemptions based on available opportunities and market conditions — no fixed monthly amount.
 4. **Position sizing relative to conviction**: High conviction = larger position. Size recommendations in exact share counts and EUR amounts.
 5. **Tax implications**: OST is tax-deferred (trades inside are tax-free). Regular account: 30% up to €30k, 34% above. Always state which account to execute in.
-6. **DCF signals**: Flag undervalued (buy) and overvalued (trim) positions based on intrinsic value estimates.
+6. **Valuation signals**: Use multiple metrics together for every held and watchlisted security:
+   - **ROIC vs WACC**: A company consistently returning above its WACC is creating value. High ROIC is the most important quality signal.
+   - **DCF margin of safety**: A high-ROIC company trading at a wide DCF discount is the strongest buy signal.
+   - **P/B**: Use where meaningful (banks, industrials, asset-heavy). Ignore for software/asset-light businesses.
+   - **FCF Yield**: Free cash flow yield — higher is better, signals cash generation relative to price.
+   - **Net Debt/EBITDA**: Leverage indicator — lower is safer. Above 3x warrants caution.
+   - **Dividend yield**: Dividend payers are a positive signal. The portfolio should have a meaningful dividend-paying component, growing as the investor ages. But ROIC matters more than yield — never chase yield at the expense of quality.
+   Flag undervalued (buy) and overvalued (trim) positions based on these combined signals.
 7. **Risk reduction**: Trim overvalued or low-conviction positions. Free capital goes to VWCE or next high-conviction buy.
 8. **Earnings analysis verdicts**: For any position with recent quarterly results, give a buy/hold/sell verdict based on the earnings.
 9. **Smart money signals**: Note accumulation/distribution patterns, insider buying/selling, institutional flow, analyst consensus (e.g., "14B/4H/1S, avg PT €100.66 (+23%)").

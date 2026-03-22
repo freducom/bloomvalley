@@ -30,6 +30,20 @@ interface Fundamentals {
   institutionalFlow: string | null;
   smartMoneySignal: string | null;
   smartMoneyOutlookDays: number | null;
+  // Quality & profitability
+  roic: number | null;
+  wacc: number | null;
+  roe: number | null;
+  fcfYield: number | null;
+  netDebtEbitda: number | null;
+  dividendYield: number | null;
+  epsCents: number | null;
+  revenueCents: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  peRatio: number | null;
+  marketCapCents: number | null;
   updatedAt: string;
 }
 
@@ -152,11 +166,15 @@ function OverviewTab() {
             <th className="text-left p-3">Security</th>
             <th className="text-right p-3">Price</th>
             <th className="text-right p-3">P/B</th>
-            <th className="text-right p-3">DCF Value</th>
+            <th className="text-right p-3">PE</th>
+            <th className="text-right p-3">ROIC</th>
+            <th className="text-right p-3">FCF Yield</th>
+            <th className="text-right p-3">Debt/EBITDA</th>
+            <th className="text-right p-3">Div Yield</th>
+            <th className="text-right p-3">Gross Mgn</th>
+            <th className="text-right p-3">Op Mgn</th>
             <th className="text-right p-3">DCF Upside</th>
-            <th className="text-right p-3">FCF</th>
             <th className="text-right p-3">Short %</th>
-            <th className="text-center p-3">Squeeze</th>
             <th className="text-center p-3">Smart Money</th>
             <th className="text-left p-3">Updated</th>
           </tr>
@@ -178,7 +196,33 @@ function OverviewTab() {
                 {f.priceToBook !== null ? f.priceToBook.toFixed(2) : "-"}
               </td>
               <td className="text-right p-3 font-mono text-xs">
-                {f.dcfValueCents ? formatCurrency(f.dcfValueCents, f.currency) : "-"}
+                {f.peRatio !== null ? f.peRatio.toFixed(1) : "-"}
+              </td>
+              <td className={`text-right p-3 font-mono text-xs ${
+                f.roic !== null
+                  ? f.roic > 0.15 ? "text-terminal-positive" : f.roic >= 0.10 ? "text-terminal-warning" : "text-terminal-negative"
+                  : ""
+              }`}>
+                {f.roic !== null ? formatPercent(f.roic * 100) : "-"}
+              </td>
+              <td className={`text-right p-3 font-mono text-xs ${
+                f.fcfYield !== null && f.fcfYield > 0.05 ? "text-terminal-positive" : ""
+              }`}>
+                {f.fcfYield !== null ? formatPercent(f.fcfYield * 100) : "-"}
+              </td>
+              <td className={`text-right p-3 font-mono text-xs ${
+                f.netDebtEbitda !== null && f.netDebtEbitda > 3 ? "text-terminal-negative" : ""
+              }`}>
+                {f.netDebtEbitda !== null ? `${f.netDebtEbitda.toFixed(1)}x` : "-"}
+              </td>
+              <td className="text-right p-3 font-mono text-xs">
+                {f.dividendYield !== null ? formatPercent(f.dividendYield * 100) : "-"}
+              </td>
+              <td className="text-right p-3 font-mono text-xs">
+                {f.grossMargin !== null ? formatPercent(f.grossMargin * 100) : "-"}
+              </td>
+              <td className="text-right p-3 font-mono text-xs">
+                {f.operatingMargin !== null ? formatPercent(f.operatingMargin * 100) : "-"}
               </td>
               <td className={`text-right p-3 font-mono text-xs font-medium ${
                 f.dcfUpsidePct !== null
@@ -187,20 +231,10 @@ function OverviewTab() {
               }`}>
                 {f.dcfUpsidePct !== null ? formatPercent(f.dcfUpsidePct, true) : "-"}
               </td>
-              <td className="text-right p-3 font-mono text-xs">
-                {f.freeCashFlowCents ? formatLargeNumber(f.freeCashFlowCents, f.fcfCurrency || f.currency) : "-"}
-              </td>
               <td className={`text-right p-3 font-mono text-xs ${
                 f.shortInterestPct !== null && f.shortInterestPct > 10 ? "text-terminal-warning" : ""
               }`}>
                 {f.shortInterestPct !== null ? `${f.shortInterestPct.toFixed(2)}%` : "-"}
-              </td>
-              <td className="text-center p-3">
-                {f.shortSqueezeRisk && (
-                  <span className={`text-xs px-2 py-0.5 rounded capitalize ${SQUEEZE_COLORS[f.shortSqueezeRisk] || ""}`}>
-                    {f.shortSqueezeRisk}
-                  </span>
-                )}
               </td>
               <td className="text-center p-3">
                 {f.institutionalFlow && (

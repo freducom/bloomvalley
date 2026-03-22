@@ -94,6 +94,20 @@ def _fundamentals_to_dict(f: SecurityFundamentals, sec: Security, current_price:
         "institutionalFlow": f.institutional_flow,
         "smartMoneySignal": f.smart_money_signal,
         "smartMoneyOutlookDays": f.smart_money_outlook_days,
+        # Quality & profitability
+        "roic": float(f.roic) if f.roic is not None else None,
+        "wacc": float(f.wacc) if f.wacc is not None else None,
+        "roe": float(f.roe) if f.roe is not None else None,
+        "fcfYield": float(f.fcf_yield) if f.fcf_yield is not None else None,
+        "netDebtEbitda": float(f.net_debt_ebitda) if f.net_debt_ebitda is not None else None,
+        "dividendYield": float(f.dividend_yield) if f.dividend_yield is not None else None,
+        "epsCents": f.eps_cents,
+        "revenueCents": f.revenue_cents,
+        "grossMargin": float(f.gross_margin) if f.gross_margin is not None else None,
+        "operatingMargin": float(f.operating_margin) if f.operating_margin is not None else None,
+        "netMargin": float(f.net_margin) if f.net_margin is not None else None,
+        "peRatio": float(f.pe_ratio) if f.pe_ratio is not None else None,
+        "marketCapCents": f.market_cap_cents,
         "updatedAt": f.updated_at.isoformat(),
     }
 

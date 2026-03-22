@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiDelete, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import Link from "next/link";
 
@@ -46,6 +46,18 @@ interface SecurityOption {
   assetClass: string;
 }
 
+interface FundamentalsData {
+  securityId: number;
+  roic: number | null;
+  priceToBook: number | null;
+  fcfYield: number | null;
+  dividendYield: number | null;
+  peRatio: number | null;
+  netDebtEbitda: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+}
+
 export default function WatchlistPage() {
   const [watchlists, setWatchlists] = useState<WatchlistSummary[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -54,6 +66,9 @@ export default function WatchlistPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+
+  // Fundamentals data keyed by securityId
+  const [fundMap, setFundMap] = useState<Record<number, FundamentalsData>>({});
 
   // Add security modal
   const [showAdd, setShowAdd] = useState(false);
@@ -81,13 +96,27 @@ export default function WatchlistPage() {
     }
   }, []);
 
+  const loadFundamentals = useCallback(async () => {
+    try {
+      const res = await apiGetRaw<{ data: FundamentalsData[] }>("/fundamentals?limit=500");
+      const map: Record<number, FundamentalsData> = {};
+      for (const f of res.data) {
+        map[f.securityId] = f;
+      }
+      setFundMap(map);
+    } catch {
+      // Fundamentals may not be available yet
+    }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
       await loadWatchlists();
+      await loadFundamentals();
       setLoading(false);
     };
     init();
-  }, [loadWatchlists]);
+  }, [loadWatchlists, loadFundamentals]);
 
   useEffect(() => {
     if (activeId !== null) {
@@ -399,6 +428,7 @@ export default function WatchlistPage() {
                               : (item.dayChangeCents ?? 0) < 0
                               ? "text-terminal-negative"
                               : "text-terminal-text-tertiary";
+                          const fund = fundMap[item.securityId];
                           return (
                             <tr
                               key={item.id}
@@ -408,7 +438,51 @@ export default function WatchlistPage() {
                                 {item.ticker}
                               </td>
                               <td className="px-4 py-2 text-sm">
-                                {item.name}
+                                <div>{item.name}</div>
+                                {fund && (
+                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                    {fund.roic !== null && (
+                                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                        fund.roic > 0.15 ? "bg-terminal-positive/15 text-terminal-positive" :
+                                        fund.roic >= 0.10 ? "bg-terminal-warning/15 text-terminal-warning" :
+                                        "bg-terminal-negative/15 text-terminal-negative"
+                                      }`}>
+                                        ROIC {formatPercent(fund.roic * 100)}
+                                      </span>
+                                    )}
+                                    {fund.priceToBook !== null && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-secondary">
+                                        P/B {fund.priceToBook.toFixed(2)}
+                                      </span>
+                                    )}
+                                    {fund.fcfYield !== null && (
+                                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                        fund.fcfYield > 0.05 ? "bg-terminal-positive/15 text-terminal-positive" :
+                                        "bg-terminal-bg-tertiary text-terminal-text-secondary"
+                                      }`}>
+                                        FCF {formatPercent(fund.fcfYield * 100)}
+                                      </span>
+                                    )}
+                                    {fund.dividendYield !== null && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-secondary">
+                                        Div {formatPercent(fund.dividendYield * 100)}
+                                      </span>
+                                    )}
+                                    {fund.peRatio !== null && (
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-secondary">
+                                        PE {fund.peRatio.toFixed(1)}
+                                      </span>
+                                    )}
+                                    {fund.netDebtEbitda !== null && (
+                                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                        fund.netDebtEbitda > 3 ? "bg-terminal-negative/15 text-terminal-negative" :
+                                        "bg-terminal-bg-tertiary text-terminal-text-secondary"
+                                      }`}>
+                                        D/E {fund.netDebtEbitda.toFixed(1)}x
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </td>
                               <td className="px-4 py-2">
                                 <span
