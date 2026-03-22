@@ -120,6 +120,7 @@ function ActiveTab() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [closing, setClosing] = useState<number | null>(null);
   const [closeNotes, setCloseNotes] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,8 +158,6 @@ function ActiveTab() {
       </div>
     );
   }
-
-  const [showAll, setShowAll] = useState(false);
 
   // Sort: buy/sell first, then by confidence (high > medium > low)
   const CONF_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
