@@ -89,7 +89,7 @@ services:
     environment:
       - TZ=Europe/Helsinki
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LLM_PROVIDER=${LLM_PROVIDER:-claude}
+      - LLM_PROVIDER=${LLM_PROVIDER:-claude_cli}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-}
@@ -100,4 +100,5 @@ services:
       - ./analyst-swarm/config.local.yaml:/app/config.local.yaml:ro
       # Mount Claude auth for claude_cli provider (company subscription)
       - ${HOME}/.claude:/root/.claude:ro
+      - ${HOME}/.claude.json:/root/.claude.json:ro
     restart: unless-stopped
