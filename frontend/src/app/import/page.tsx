@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { apiGet, apiPost } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import { apiGet, apiGetRaw, apiPost } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 
@@ -43,7 +43,252 @@ interface ConfirmResult {
   accountId: number;
 }
 
+interface SecurityResult {
+  id: number;
+  ticker: string | null;
+  name: string;
+  assetClass: string;
+}
+
+interface AccountResult {
+  id: number;
+  name: string;
+  type: string;
+}
+
 type AccountType = "regular" | "osakesaastotili";
+
+function AddSingleHolding() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SecurityResult[]>([]);
+  const [selected, setSelected] = useState<SecurityResult | null>(null);
+  const [accounts, setAccounts] = useState<AccountResult[]>([]);
+  const [accountId, setAccountId] = useState<number | "">("");
+  const [quantity, setQuantity] = useState("");
+  const [avgPrice, setAvgPrice] = useState("");
+  const [currency, setCurrency] = useState("EUR");
+  const [tradeDate, setTradeDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [txType, setTxType] = useState<"transfer_in" | "buy">("transfer_in");
+  const [notes, setNotes] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGetRaw<{ data: AccountResult[] }>("/accounts").then((r) => {
+      setAccounts(r.data);
+      if (r.data.length > 0) setAccountId(r.data[0].id);
+    }).catch(() => {});
+  }, []);
+
+  const searchSecurities = useCallback(async (q: string) => {
+    if (q.length < 2) { setResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await apiGetRaw<{ data: SecurityResult[] }>(`/securities?q=${encodeURIComponent(q)}&limit=10`);
+      setResults(res.data);
+    } catch { setResults([]); }
+    finally { setSearching(false); }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchSecurities(query), 300);
+    return () => clearTimeout(timer);
+  }, [query, searchSecurities]);
+
+  const handleSelect = (sec: SecurityResult) => {
+    setSelected(sec);
+    setQuery("");
+    setResults([]);
+  };
+
+  const handleSubmit = async () => {
+    if (!selected || !accountId || !quantity) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const qty = parseFloat(quantity);
+    const price = parseFloat(avgPrice) || 0;
+    const priceCents = Math.round(price * 100);
+    const totalCents = Math.round(qty * price * 100);
+
+    try {
+      await apiPost("/transactions", {
+        account_id: accountId,
+        security_id: selected.id,
+        type: txType,
+        trade_date: tradeDate,
+        quantity: String(qty),
+        price_cents: priceCents || null,
+        price_currency: currency,
+        total_cents: totalCents,
+        fee_cents: 0,
+        currency,
+        notes: notes || null,
+      });
+      setSuccess(`Added ${qty} × ${selected.ticker || selected.name}`);
+      setSelected(null);
+      setQuantity("");
+      setAvgPrice("");
+      setNotes("");
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add holding");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mb-6 p-4 bg-terminal-bg-secondary border border-terminal-border rounded-md">
+      <h2 className="text-sm font-medium text-terminal-text-secondary mb-3">
+        Add Single Holding
+      </h2>
+
+      {success && (
+        <div className="mb-3 px-3 py-2 bg-terminal-positive/10 border border-terminal-positive/30 rounded text-sm text-terminal-positive">
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="mb-3 px-3 py-2 bg-terminal-negative/10 border border-terminal-negative/30 rounded text-sm text-terminal-negative">
+          {error}
+        </div>
+      )}
+
+      {/* Security search */}
+      <div className="mb-3 relative">
+        {selected ? (
+          <div className="flex items-center gap-2 bg-terminal-bg-primary border border-terminal-accent/50 rounded px-3 py-1.5">
+            <span className="text-sm font-mono font-medium text-terminal-accent">{selected.ticker}</span>
+            <span className="text-sm text-terminal-text-secondary">{selected.name}</span>
+            <span className="text-xs text-terminal-text-tertiary ml-auto">{selected.assetClass}</span>
+            <button onClick={() => setSelected(null)} className="text-terminal-text-tertiary hover:text-terminal-negative text-xs ml-2">✕</button>
+          </div>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search security by name or ticker..."
+              className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-3 py-1.5 font-mono text-sm text-terminal-text-primary placeholder-terminal-text-tertiary focus:outline-none focus:border-terminal-accent"
+            />
+            {searching && <div className="absolute right-3 top-2 text-xs text-terminal-text-tertiary">searching...</div>}
+            {results.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-terminal-bg-primary border border-terminal-border rounded shadow-md max-h-48 overflow-y-auto">
+                {results.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSelect(s)}
+                    className="w-full text-left px-3 py-2 hover:bg-terminal-bg-tertiary flex items-center gap-2 text-sm"
+                  >
+                    <span className="font-mono font-medium text-terminal-accent w-24 shrink-0">{s.ticker || "—"}</span>
+                    <span className="text-terminal-text-primary truncate">{s.name}</span>
+                    <span className="text-xs text-terminal-text-tertiary ml-auto shrink-0">{s.assetClass}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Fields row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-3">
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Account</label>
+          <select
+            value={accountId}
+            onChange={(e) => setAccountId(Number(e.target.value))}
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm"
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Type</label>
+          <select
+            value={txType}
+            onChange={(e) => setTxType(e.target.value as "transfer_in" | "buy")}
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm"
+          >
+            <option value="transfer_in">Transfer In</option>
+            <option value="buy">Buy</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Quantity</label>
+          <input
+            type="text"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="100"
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 font-mono text-sm focus:outline-none focus:border-terminal-accent"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Avg Price</label>
+          <input
+            type="text"
+            value={avgPrice}
+            onChange={(e) => setAvgPrice(e.target.value)}
+            placeholder="25.50"
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 font-mono text-sm focus:outline-none focus:border-terminal-accent"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Currency</label>
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm"
+          >
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="SEK">SEK</option>
+            <option value="GBP">GBP</option>
+            <option value="DKK">DKK</option>
+            <option value="NOK">NOK</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Trade Date</label>
+          <input
+            type="date"
+            value={tradeDate}
+            onChange={(e) => setTradeDate(e.target.value)}
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-terminal-accent"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-terminal-text-tertiary">Notes</label>
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Optional"
+            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-terminal-accent"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleSubmit}
+          disabled={saving || !selected || !quantity || !accountId}
+          className="px-4 py-1.5 bg-terminal-accent text-white rounded font-mono text-sm hover:bg-terminal-accent/80 disabled:opacity-50 transition-colors"
+        >
+          {saving ? "Adding..." : "Add Holding"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function ImportPage() {
   const [text, setText] = useState("");
@@ -218,6 +463,9 @@ export default function ImportPage() {
           )}
         </div>
       </div>
+
+      {/* Add Single Holding */}
+      <AddSingleHolding />
 
       {/* Success banner */}
       {confirmResult && (

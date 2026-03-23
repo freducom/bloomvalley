@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiGet, apiGetRaw, apiDelete } from "@/lib/api";
+import { apiGet, apiGetRaw, apiPut, apiDelete } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
@@ -119,6 +119,49 @@ export default function TransactionsPage() {
       apiGet<TransactionSummary>("/transactions/summary").then(setSummary).catch(console.error);
     } catch (e) {
       console.error("Failed to delete transaction", e);
+    }
+  };
+
+  // Inline editing
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+
+  const startEdit = (t: Transaction) => {
+    setEditingId(t.id);
+    setEditValues({
+      tradeDate: t.tradeDate,
+      type: t.type,
+      quantity: t.quantity,
+      priceCents: t.priceCents ? String(t.priceCents / 100) : "",
+      totalCents: t.totalCents ? String(t.totalCents / 100) : "",
+      feeCents: t.feeCents ? String(t.feeCents / 100) : "",
+      notes: t.notes || "",
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValues({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    try {
+      const body: Record<string, unknown> = {};
+      if (editValues.tradeDate) body.trade_date = editValues.tradeDate;
+      if (editValues.type) body.type = editValues.type;
+      if (editValues.quantity) body.quantity = editValues.quantity;
+      if (editValues.priceCents !== undefined) body.price_cents = Math.round(parseFloat(editValues.priceCents || "0") * 100);
+      if (editValues.totalCents !== undefined) body.total_cents = Math.round(parseFloat(editValues.totalCents || "0") * 100);
+      if (editValues.feeCents !== undefined) body.fee_cents = Math.round(parseFloat(editValues.feeCents || "0") * 100);
+      if (editValues.notes !== undefined) body.notes = editValues.notes || null;
+      await apiPut(`/transactions/${editingId}`, body);
+      setEditingId(null);
+      setEditValues({});
+      fetchTransactions();
+      apiGet<TransactionSummary>("/transactions/summary").then(setSummary).catch(console.error);
+    } catch (e) {
+      console.error("Failed to update transaction", e);
     }
   };
 
@@ -240,26 +283,38 @@ export default function TransactionsPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((t) => (
-                  <tr key={t.id} className="hover:bg-terminal-bg-secondary/50">
+                filtered.map((t) => {
+                  const isEditing = editingId === t.id;
+                  const editInput = (field: string, align: string = "text-right") => (
+                    <input
+                      type="text"
+                      value={editValues[field] || ""}
+                      onChange={(e) => setEditValues({ ...editValues, [field]: e.target.value })}
+                      className={`w-full bg-terminal-bg-primary border border-terminal-accent/50 rounded px-1.5 py-0.5 font-mono text-xs ${align} focus:outline-none focus:border-terminal-accent`}
+                    />
+                  );
+                  return (
+                  <tr key={t.id} className={`hover:bg-terminal-bg-secondary/50 ${isEditing ? "bg-terminal-accent/5" : ""}`}>
                     <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                      {t.tradeDate}
+                      {isEditing ? (
+                        <input type="date" value={editValues.tradeDate || ""} onChange={(e) => setEditValues({ ...editValues, tradeDate: e.target.value })} className="bg-terminal-bg-primary border border-terminal-accent/50 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-terminal-accent" />
+                      ) : t.tradeDate}
                     </td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium capitalize ${
-                          TYPE_COLORS[t.type] || "bg-gray-700/40 text-gray-400"
-                        }`}
-                      >
-                        {t.type.replace("_", " ")}
-                      </span>
+                      {isEditing ? (
+                        <select value={editValues.type || t.type} onChange={(e) => setEditValues({ ...editValues, type: e.target.value })} className="bg-terminal-bg-primary border border-terminal-accent/50 rounded px-1.5 py-0.5 text-xs">
+                          {["buy", "sell", "dividend", "transfer_in", "transfer_out", "fee", "tax", "interest", "deposit", "withdrawal"].map((tt) => (
+                            <option key={tt} value={tt}>{tt.replace("_", " ")}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium capitalize ${TYPE_COLORS[t.type] || "bg-gray-700/40 text-gray-400"}`}>
+                          {t.type.replace("_", " ")}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 font-mono font-medium">
-                      {t.ticker ? (
-                        <TickerLink ticker={t.ticker} />
-                      ) : (
-                        <span className="text-terminal-text-secondary">—</span>
-                      )}
+                      {t.ticker ? <TickerLink ticker={t.ticker} /> : <span className="text-terminal-text-secondary">—</span>}
                     </td>
                     <td className="px-3 py-2 text-terminal-text-secondary max-w-[200px] truncate">
                       {t.securityName || "—"}
@@ -268,49 +323,47 @@ export default function TransactionsPage() {
                       {t.accountName || "—"}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
-                      {parseFloat(t.quantity) !== 0
-                        ? <Private>{parseFloat(t.quantity).toLocaleString(undefined, {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 4,
-                          })}</Private>
-                        : "—"}
+                      {isEditing ? editInput("quantity") : (
+                        parseFloat(t.quantity) !== 0
+                          ? <Private>{parseFloat(t.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}</Private>
+                          : "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
-                      {t.priceCents
-                        ? formatCurrency(t.priceCents, t.priceCurrency)
-                        : "—"}
+                      {isEditing ? editInput("priceCents") : (
+                        t.priceCents ? formatCurrency(t.priceCents, t.priceCurrency) : "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono font-medium">
-                      {t.totalCents ? (
-                        <span
-                          className={
-                            t.type === "sell" || t.type === "dividend"
-                              ? "text-green-400"
-                              : t.type === "buy"
-                              ? "text-red-400"
-                              : ""
-                          }
-                        >
-                          <Private>{formatCurrency(t.totalCents, t.currency)}</Private>
-                        </span>
-                      ) : (
-                        "—"
+                      {isEditing ? editInput("totalCents") : (
+                        t.totalCents ? (
+                          <span className={t.type === "sell" || t.type === "dividend" ? "text-green-400" : t.type === "buy" ? "text-red-400" : ""}>
+                            <Private>{formatCurrency(t.totalCents, t.currency)}</Private>
+                          </span>
+                        ) : "—"
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs text-terminal-text-secondary">
-                      {t.feeCents ? <Private>{formatCurrency(t.feeCents, t.feeCurrency)}</Private> : "—"}
+                      {isEditing ? editInput("feeCents") : (
+                        t.feeCents ? <Private>{formatCurrency(t.feeCents, t.feeCurrency)}</Private> : "—"
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => handleDelete(t.id)}
-                        className="text-terminal-text-secondary hover:text-red-400 transition-colors text-xs"
-                        title="Delete transaction"
-                      >
-                        ✕
-                      </button>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      {isEditing ? (
+                        <span className="flex gap-1 justify-center">
+                          <button onClick={saveEdit} className="text-terminal-positive hover:text-terminal-positive/80 text-xs" title="Save">✓</button>
+                          <button onClick={cancelEdit} className="text-terminal-text-secondary hover:text-terminal-negative text-xs" title="Cancel">✕</button>
+                        </span>
+                      ) : (
+                        <span className="flex gap-1 justify-center">
+                          <button onClick={() => startEdit(t)} className="text-terminal-text-secondary hover:text-terminal-accent transition-colors text-xs" title="Edit">✎</button>
+                          <button onClick={() => handleDelete(t.id)} className="text-terminal-text-secondary hover:text-red-400 transition-colors text-xs" title="Delete">✕</button>
+                        </span>
+                      )}
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

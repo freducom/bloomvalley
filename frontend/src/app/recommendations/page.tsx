@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { apiGet, apiGetRaw, apiPost, apiPut } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
@@ -320,9 +322,9 @@ function AnalystSummaries() {
                 </p>
               )}
               {isExpanded && (
-                <p className="text-sm text-terminal-text-secondary mt-2 leading-relaxed whitespace-pre-wrap">
-                  {note.thesis}
-                </p>
+                <div className="text-sm text-terminal-text-secondary mt-2 leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.thesis}</ReactMarkdown>
+                </div>
               )}
             </div>
           );

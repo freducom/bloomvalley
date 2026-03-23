@@ -162,6 +162,56 @@ async def list_transactions(
     }
 
 
+class TransactionUpdate(BaseModel):
+    trade_date: Optional[date] = None
+    settlement_date: Optional[date] = None
+    quantity: Optional[str] = None
+    price_cents: Optional[int] = None
+    price_currency: Optional[str] = None
+    total_cents: Optional[int] = None
+    fee_cents: Optional[int] = None
+    fee_currency: Optional[str] = None
+    currency: Optional[str] = None
+    notes: Optional[str] = None
+    type: Optional[str] = None
+
+
+@router.put("/{transaction_id}")
+async def update_transaction(transaction_id: int, body: TransactionUpdate):
+    """Update an existing transaction."""
+    async with async_session() as session:
+        tx = await session.get(Transaction, transaction_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        updates = body.model_dump(exclude_unset=True)
+        for field, value in updates.items():
+            if field == "quantity" and value is not None:
+                setattr(tx, field, Decimal(value))
+            else:
+                setattr(tx, field, value)
+
+        await session.commit()
+        await session.refresh(tx)
+
+    return {
+        "data": {
+            "id": tx.id,
+            "accountId": tx.account_id,
+            "securityId": tx.security_id,
+            "type": tx.type,
+            "tradeDate": tx.trade_date.isoformat(),
+            "quantity": str(tx.quantity),
+            "priceCents": tx.price_cents,
+            "totalCents": tx.total_cents,
+            "feeCents": tx.fee_cents,
+            "currency": tx.currency,
+            "notes": tx.notes,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
 @router.delete("/{transaction_id}")
 async def delete_transaction(transaction_id: int):
     """Delete a single transaction."""
