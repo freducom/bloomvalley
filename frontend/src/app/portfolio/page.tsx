@@ -327,9 +327,9 @@ function BrinsonAttribution() {
   const [groupBy, setGroupBy] = useState<"sector" | "assetClass">("sector");
   const [snapshotting, setSnapshotting] = useState(false);
 
-  // Default: last 30 days
+  // Default: last 2 days (snapshots may be recent)
   const [fromDate, setFromDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30);
+    const d = new Date(); d.setDate(d.getDate() - 2);
     return d.toISOString().split("T")[0];
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -343,7 +343,12 @@ function BrinsonAttribution() {
       );
       setData(res.data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load attribution");
+      const msg = e instanceof Error ? e.message : "Failed to load attribution";
+      if (msg.includes("snapshot")) {
+        setError("No holdings snapshot found for this date range. Click \"Snapshot\" to capture current holdings.");
+      } else {
+        setError(msg);
+      }
       setData(null);
     } finally {
       setLoading(false);
