@@ -307,17 +307,12 @@ export default function SecurityDetailPage() {
           );
           if (analystRes?.data?.[0]?.thesis) {
             const report = analystRes.data[0].thesis;
-            // Find section by ticker (e.g. "### 5. TEAM" or "(TEAM)")
-            const esc = ticker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const patterns = [
-              new RegExp(`## \\d+\\.\\s+${esc}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n## \\d+\\.|$)`),
-              new RegExp(`###[^\\n]*\\b${esc}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s|\\n---\\s*\\n|$)`),
-              new RegExp(`##[^\\n]*\\b${esc}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|\\n---\\s*\\n|$)`),
-            ];
-            for (const pat of patterns) {
-              const match = report.match(pat);
-              if (match) {
-                setAnalystExcerpt(match[0].trim());
+            // Split on section headings and find the one for this ticker
+            const parts = report.split(/\n(?=## (?:W-)?\d+\.\s)/);
+            for (const part of parts) {
+              const esc = ticker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              if (new RegExp(`^## (?:W-)?\\d+\\.\\s+${esc}\\b`).test(part)) {
+                setAnalystExcerpt(part.trim());
                 break;
               }
             }

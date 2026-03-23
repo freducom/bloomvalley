@@ -362,10 +362,15 @@ export default function FullscreenDashboard() {
         if (analystRes?.data?.[0]?.thesis) {
           const report = analystRes.data[0].thesis;
           const sections: Record<string, string> = {};
-          const pattern = /^## (?:W-)?\d+\.\s+(\S+)\s*[—–-]\s*[^\n]*\n([\s\S]*?)(?=\n## (?:W-)?\d+\.|$)/gm;
-          let match;
-          while ((match = pattern.exec(report)) !== null) {
-            sections[match[1]] = match[2].trim();
+          // Split report on section headings
+          const parts = report.split(/\n(?=## (?:W-)?\d+\.\s)/);
+          for (const part of parts) {
+            const headMatch = part.match(/^## (?:W-)?\d+\.\s+(\S+)/);
+            if (headMatch) {
+              const ticker = headMatch[1];
+              const content = part.slice(part.indexOf("\n") + 1).trim();
+              sections[ticker] = content;
+            }
           }
           setHoldingAnalysis(sections);
         }
