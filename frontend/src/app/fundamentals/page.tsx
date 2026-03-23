@@ -134,9 +134,13 @@ export default function FundamentalsPage() {
 
 /* ── Overview: All fundamentals in one table ── */
 
+type SortKey = "ticker" | "currentPriceCents" | "priceToBook" | "peRatio" | "roic" | "fcfYield" | "netDebtEbitda" | "dividendYield" | "grossMargin" | "operatingMargin" | "dcfUpsidePct" | "shortInterestPct" | "updatedAt";
+
 function OverviewTab() {
   const [data, setData] = useState<Fundamentals[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>("roic");
+  const [sortAsc, setSortAsc] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -147,6 +151,24 @@ function OverviewTab() {
       setLoading(false);
     })();
   }, []);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(false);
+    }
+  };
+
+  const sorted = [...data].sort((a, b) => {
+    const av = a[sortKey] ?? (sortAsc ? Infinity : -Infinity);
+    const bv = b[sortKey] ?? (sortAsc ? Infinity : -Infinity);
+    if (typeof av === "string" && typeof bv === "string") return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
+  });
+
+  const arrow = (key: SortKey) => sortKey === key ? (sortAsc ? " ▲" : " ▼") : "";
 
   if (loading) return <div className="text-terminal-text-secondary text-sm p-4">Loading...</div>;
 
@@ -160,29 +182,39 @@ function OverviewTab() {
     );
   }
 
+  const TH = ({ k, align, title, children }: { k: SortKey; align?: string; title: string; children: React.ReactNode }) => (
+    <th
+      className={`${align || "text-right"} p-3 cursor-pointer select-none hover:text-terminal-accent transition-colors whitespace-nowrap`}
+      title={title}
+      onClick={() => handleSort(k)}
+    >
+      {children}{arrow(k)}
+    </th>
+  );
+
   return (
     <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto max-h-[80vh] overflow-y-auto">
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-terminal-bg-secondary">
           <tr className="border-b border-terminal-border text-terminal-text-secondary text-xs">
-            <th className="text-left p-3" title="Company ticker and name">Security</th>
-            <th className="text-right p-3" title="Current market price per share">Price</th>
-            <th className="text-right p-3" title="Price-to-Book ratio. Useful for banks, industrials, asset-heavy businesses. Less meaningful for software/asset-light companies.">P/B</th>
-            <th className="text-right p-3" title="Price-to-Earnings ratio. Lower = cheaper relative to earnings. Compare within sector, not across sectors.">PE</th>
-            <th className="text-right p-3" title="Return on Invested Capital. The most important quality metric. A company returning above its WACC (~8-12%) is creating value. >15% = excellent, 10-15% = good, <10% = weak.">ROIC</th>
-            <th className="text-right p-3" title="Free Cash Flow Yield = FCF / Market Cap. Higher means more cash generation per EUR invested. >5% is attractive.">FCF Yield</th>
-            <th className="text-right p-3" title="Net Debt / EBITDA. Measures leverage. <1x = conservative, 1-3x = moderate, >3x = risky. Negative means net cash position.">Debt/EBITDA</th>
-            <th className="text-right p-3" title="Annual dividend yield. Dividend payers are a positive signal. Growing importance as portfolio ages toward income focus.">Div Yield</th>
-            <th className="text-right p-3" title="Gross margin — revenue minus cost of goods sold. Higher = stronger pricing power and competitive advantage.">Gross Mgn</th>
-            <th className="text-right p-3" title="Operating margin — profit from core operations. Higher = more efficient business. Key profitability indicator.">Op Mgn</th>
-            <th className="text-right p-3" title="DCF (Discounted Cash Flow) upside/downside vs current market cap. Positive = undervalued. A high-ROIC company with large DCF upside is the strongest buy signal.">DCF Upside</th>
-            <th className="text-right p-3" title="Short interest as % of float. High short interest can signal bearish sentiment or potential squeeze. Less important than fundamentals.">Short %</th>
+            <TH k="ticker" align="text-left" title="Company ticker and name">Security</TH>
+            <TH k="currentPriceCents" title="Current market price per share">Price</TH>
+            <TH k="priceToBook" title="Price-to-Book ratio. Useful for banks, industrials, asset-heavy businesses. Less meaningful for software/asset-light companies.">P/B</TH>
+            <TH k="peRatio" title="Price-to-Earnings ratio. Lower = cheaper relative to earnings. Compare within sector, not across sectors.">PE</TH>
+            <TH k="roic" title="Return on Invested Capital. The most important quality metric. A company returning above its WACC (~8-12%) is creating value. >15% = excellent, 10-15% = good, <10% = weak.">ROIC</TH>
+            <TH k="fcfYield" title="Free Cash Flow Yield = FCF / Market Cap. Higher means more cash generation per EUR invested. >5% is attractive.">FCF Yield</TH>
+            <TH k="netDebtEbitda" title="Net Debt / EBITDA. Measures leverage. <1x = conservative, 1-3x = moderate, >3x = risky. Negative means net cash position.">Debt/EBITDA</TH>
+            <TH k="dividendYield" title="Annual dividend yield. Dividend payers are a positive signal. Growing importance as portfolio ages toward income focus.">Div Yield</TH>
+            <TH k="grossMargin" title="Gross margin — revenue minus cost of goods sold. Higher = stronger pricing power and competitive advantage.">Gross Mgn</TH>
+            <TH k="operatingMargin" title="Operating margin — profit from core operations. Higher = more efficient business. Key profitability indicator.">Op Mgn</TH>
+            <TH k="dcfUpsidePct" title="DCF (Discounted Cash Flow) upside/downside vs current market cap. Positive = undervalued. A high-ROIC company with large DCF upside is the strongest buy signal.">DCF Upside</TH>
+            <TH k="shortInterestPct" title="Short interest as % of float. High short interest can signal bearish sentiment or potential squeeze. Less important than fundamentals.">Short %</TH>
             <th className="text-center p-3" title="Smart money signal from institutional flow and insider patterns. Supplementary indicator — less important than ROIC and DCF.">Smart Money</th>
-            <th className="text-left p-3" title="Last time fundamentals data was updated">Updated</th>
+            <TH k="updatedAt" align="text-left" title="Last time fundamentals data was updated">Updated</TH>
           </tr>
         </thead>
         <tbody>
-          {data.map((f) => (
+          {sorted.map((f) => (
             <tr key={f.id} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
               <td className="p-3">
                 <TickerLink ticker={f.ticker} className="font-mono text-terminal-accent mr-2 hover:underline" />
