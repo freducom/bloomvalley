@@ -190,6 +190,23 @@ async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
                 resp = await client.get(ep)
                 if resp.status_code == 200:
                     results[ep] = resp.text
+
+                    # For /watchlists/, also fetch each watchlist's items
+                    if ep == "/watchlists/":
+                        try:
+                            wl_data = resp.json().get("data", [])
+                            all_items = []
+                            for wl in wl_data:
+                                if wl.get("itemCount", 0) > 0:
+                                    wl_resp = await client.get(f"/watchlists/{wl['id']}")
+                                    if wl_resp.status_code == 200:
+                                        wl_detail = wl_resp.json().get("data", {})
+                                        for item in wl_detail.get("items", []):
+                                            item["watchlistName"] = wl["name"]
+                                            all_items.append(item)
+                            results["/watchlists/items"] = json.dumps({"data": all_items})
+                        except Exception:
+                            pass
                 else:
                     results[ep] = f"ERROR {resp.status_code}"
             except Exception as e:

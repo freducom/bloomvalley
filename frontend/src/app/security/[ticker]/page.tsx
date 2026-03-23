@@ -6,6 +6,8 @@ import Link from "next/link";
 import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent, formatDate, formatLargeNumber } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 /* ── Types ── */
 
@@ -245,6 +247,7 @@ export default function SecurityDetailPage() {
   const [insiders, setInsiders] = useState<InsiderTrade[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [dividends, setDividends] = useState<DividendEvent[]>([]);
+  const [analystExcerpt, setAnalystExcerpt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -296,6 +299,28 @@ export default function SecurityDetailPage() {
         if (insiderRes?.data) setInsiders(insiderRes.data);
         if (newsRes?.data) setNews(newsRes.data);
         if (divRes?.data) setDividends(divRes.data);
+
+        // Extract ticker section from latest analyst swarm report
+        try {
+          const analystRes = await apiGetRaw<{ data: { thesis: string }[] }>(
+            "/research/notes?tag=research-analyst&limit=1"
+          );
+          if (analystRes?.data?.[0]?.thesis) {
+            const report = analystRes.data[0].thesis;
+            // Find section by ticker (e.g. "### 5. TEAM" or "(TEAM)")
+            const patterns = [
+              new RegExp(`###[^\\n]*\\b${ticker}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s|\\n---\\s*\\n|$)`),
+              new RegExp(`##[^\\n]*\\b${ticker}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|\\n---\\s*\\n|$)`),
+            ];
+            for (const pat of patterns) {
+              const match = report.match(pat);
+              if (match) {
+                setAnalystExcerpt(match[0].trim());
+                break;
+              }
+            }
+          }
+        } catch { /* */ }
       } catch (e) {
         console.error("Failed to load security detail:", e);
         setError("Failed to load security data");
@@ -478,30 +503,38 @@ export default function SecurityDetailPage() {
       </div>
 
       {/* ── AI Analysis ── */}
-      {(latestResearch?.thesis || latestRec?.rationale) && (
+      {(analystExcerpt || latestResearch?.thesis || latestRec?.rationale) && (
         <div className="border border-terminal-accent/30 bg-terminal-accent/5 rounded-md p-4 mb-6">
           <h2 className="text-sm font-semibold text-terminal-accent mb-2">AI Analysis</h2>
-          {latestResearch?.thesis && (
-            <p className="text-sm text-terminal-text-primary mb-2">{latestResearch.thesis}</p>
-          )}
-          {!latestResearch?.thesis && latestRec?.rationale && (
-            <p className="text-sm text-terminal-text-primary mb-2">{latestRec.rationale}</p>
-          )}
-          {(latestResearch?.bullCase || latestRec?.bullCase) && (
-            <div className="mt-2">
-              <span className="text-xs font-semibold text-terminal-positive">Bull Case</span>
-              <p className="text-sm text-terminal-text-secondary mt-0.5">
-                {latestResearch?.bullCase || latestRec?.bullCase}
-              </p>
+          {analystExcerpt ? (
+            <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{analystExcerpt}</ReactMarkdown>
             </div>
-          )}
-          {(latestResearch?.bearCase || latestRec?.bearCase) && (
-            <div className="mt-2">
-              <span className="text-xs font-semibold text-terminal-negative">Bear Case</span>
-              <p className="text-sm text-terminal-text-secondary mt-0.5">
-                {latestResearch?.bearCase || latestRec?.bearCase}
-              </p>
-            </div>
+          ) : (
+            <>
+              {latestResearch?.thesis && (
+                <p className="text-sm text-terminal-text-primary mb-2">{latestResearch.thesis}</p>
+              )}
+              {!latestResearch?.thesis && latestRec?.rationale && (
+                <p className="text-sm text-terminal-text-primary mb-2">{latestRec.rationale}</p>
+              )}
+              {(latestResearch?.bullCase || latestRec?.bullCase) && (
+                <div className="mt-2">
+                  <span className="text-xs font-semibold text-terminal-positive">Bull Case</span>
+                  <p className="text-sm text-terminal-text-secondary mt-0.5">
+                    {latestResearch?.bullCase || latestRec?.bullCase}
+                  </p>
+                </div>
+              )}
+              {(latestResearch?.bearCase || latestRec?.bearCase) && (
+                <div className="mt-2">
+                  <span className="text-xs font-semibold text-terminal-negative">Bear Case</span>
+                  <p className="text-sm text-terminal-text-secondary mt-0.5">
+                    {latestResearch?.bearCase || latestRec?.bearCase}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
