@@ -94,6 +94,10 @@ class EarningsReport(Base):
     eps_yoy_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
     gross_margin_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
     operating_margin_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 2), nullable=True)
+    # Estimates & surprise (from Finnhub)
+    eps_estimate_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    revenue_estimate_cents: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    surprise_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
     # Qualitative
     forward_guidance: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     red_flags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

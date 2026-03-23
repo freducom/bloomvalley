@@ -28,6 +28,9 @@ from app.api.v1.recommendations import router as recommendations_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.screener import router as screener_router
 from app.api.v1.technical import router as technical_router
+from app.api.v1.attribution import router as attribution_router
+from app.api.v1.earnings import router as earnings_router
+from app.api.v1.quotes import router as quotes_router
 from app.api.v1.watchlists import router as watchlists_router
 
 # Import pipelines to trigger registration
@@ -50,6 +53,7 @@ import app.pipelines.morningstar  # noqa: F401
 import app.pipelines.french_factors  # noqa: F401
 import app.pipelines.yahoo_fundamentals  # noqa: F401
 import app.pipelines.regional_news  # noqa: F401
+import app.pipelines.finnhub_earnings  # noqa: F401
 
 router = APIRouter()
 
@@ -82,3 +86,6 @@ router.include_router(reports_router, prefix="/reports", tags=["Reports"])
 router.include_router(technical_router, prefix="/technical", tags=["Technical Analysis"])
 router.include_router(screener_router, prefix="/screener", tags=["Screener"])
 router.include_router(global_events_router, prefix="/global-events", tags=["Global Events"])
+router.include_router(quotes_router, prefix="/quotes", tags=["Quotes"])
+router.include_router(earnings_router, prefix="/earnings", tags=["Earnings"])
+router.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])

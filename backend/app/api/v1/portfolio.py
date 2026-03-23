@@ -9,6 +9,7 @@ from sqlalchemy import func, select, case, literal_column
 
 from app.db.engine import async_session
 from app.db.models.accounts import Account
+from app.db.models.holdings_snapshot import HoldingsSnapshot
 from app.db.models.imports import Import, ImportRow
 from app.db.models.prices import FxRate, Price
 from app.db.models.securities import Security
@@ -378,4 +379,58 @@ async def get_portfolio_summary(
             "cacheAge": None,
             "stale": False,
         },
+    }
+
+
+@router.post("/snapshot")
+async def take_snapshot():
+    """Take a snapshot of current holdings for attribution analysis."""
+    from fastapi.responses import JSONResponse
+
+    # Get current holdings (pass account_id=None explicitly)
+    holdings_resp = await get_holdings(account_id=None)
+    holdings_data = holdings_resp.get("data", [])
+    if not holdings_data:
+        return JSONResponse(status_code=400, content={"detail": "No holdings to snapshot"})
+
+    today = date.today()
+    total_value = sum(h.get("marketValueEurCents") or 0 for h in holdings_data)
+    rows_created = 0
+
+    async with async_session() as session:
+        # Delete existing snapshot for today (upsert)
+        from sqlalchemy import delete
+        await session.execute(
+            delete(HoldingsSnapshot).where(HoldingsSnapshot.snapshot_date == today)
+        )
+
+        for h in holdings_data:
+            if not h.get("securityId"):
+                continue
+            mv = h.get("marketValueEurCents") or 0
+            weight = (mv / total_value * 100) if total_value > 0 else 0
+
+            snapshot = HoldingsSnapshot(
+                snapshot_date=today,
+                account_id=h["accountId"],
+                security_id=h["securityId"],
+                quantity=Decimal(str(h.get("quantity", 0))),
+                cost_basis_cents=h.get("costBasisEurCents") or 0,
+                cost_basis_currency="EUR",
+                market_price_cents=h.get("lastPriceCents") or 0,
+                market_price_currency=h.get("currency") or "EUR",
+                market_value_eur_cents=mv,
+                unrealized_pnl_eur_cents=h.get("unrealizedPnlEurCents") or 0,
+                fx_rate=None,
+                weight_pct=Decimal(str(round(weight, 4))),
+            )
+            session.add(snapshot)
+            rows_created += 1
+
+        await session.commit()
+
+    logger.info("holdings_snapshot_taken", date=today.isoformat(), rows=rows_created)
+    return {
+        "data": {"date": today.isoformat(), "rows": rows_created},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

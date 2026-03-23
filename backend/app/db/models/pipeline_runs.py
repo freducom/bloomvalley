@@ -34,7 +34,7 @@ pipeline_runs_source_enum = ENUM(
     "yahoo_finance", "alpha_vantage", "fred", "ecb",
     "coingecko", "justetf", "morningstar", "manual",
     "google_news", "sec_edgar", "quiver", "gdelt",
-    "regional_rss",
+    "regional_rss", "finnhub",
     name="pipeline_runs_source_enum",
     create_type=False,
 )
