@@ -16,7 +16,7 @@ import {
   Clock,
   Newspaper,
 } from "lucide-react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { usePrivacy, Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
@@ -77,6 +77,83 @@ interface AlertItem {
   createdAt: string;
 }
 
+interface HeatmapItem {
+  securityId: number;
+  ticker: string;
+  name: string;
+  changePct: number;
+  weight: number;
+}
+
+interface ExchangeGroup {
+  label: string;
+  tz: string;
+  openHour: number;
+  openMinute: number;
+  closeHour: number;
+  closeMinute: number;
+  tradingDays: number[];
+  mics: string[];
+}
+
+const MARKET_GROUPS: ExchangeGroup[] = [
+  { label: "Nordic", mics: ["XHEL", "XSTO", "XCSE"], tz: "Europe/Helsinki", tradingDays: [1,2,3,4,5], openHour: 10, openMinute: 0, closeHour: 18, closeMinute: 30 },
+  { label: "EU", mics: ["XAMS", "XETR", "XPAR", "XSWX"], tz: "Europe/Paris", tradingDays: [1,2,3,4,5], openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30 },
+  { label: "London", mics: ["XLON"], tz: "Europe/London", tradingDays: [1,2,3,4,5], openHour: 8, openMinute: 0, closeHour: 16, closeMinute: 30 },
+  { label: "US", mics: ["XNYS", "XNAS", "NMS"], tz: "America/New_York", tradingDays: [1,2,3,4,5], openHour: 9, openMinute: 30, closeHour: 16, closeMinute: 0 },
+];
+
+function getHeatmapColor(pct: number): string {
+  if (pct >= 5) return "#16a34a";
+  if (pct >= 3) return "#16a34acc";
+  if (pct >= 1) return "#15803db3";
+  if (pct >= 0.01) return "#166534aa";
+  if (pct > -0.01) return "#374151";
+  if (pct > -1) return "#991b1baa";
+  if (pct > -3) return "#b91c1cb3";
+  if (pct > -5) return "#dc2626cc";
+  return "#dc2626";
+}
+
+function getExchangeInfo(g: ExchangeGroup): { status: string; detail: string; color: string } {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: g.tz, hour: "2-digit", minute: "2-digit", hour12: false, weekday: "short",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  const dayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+  const day = dayMap[get("weekday")] ?? 0;
+  const minutes = parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
+  const openMin = g.openHour * 60 + g.openMinute;
+  const closeMin = g.closeHour * 60 + g.closeMinute;
+
+  if (!g.tradingDays.includes(day)) {
+    let daysAhead = 1;
+    for (let i = 1; i <= 7; i++) { if (g.tradingDays.includes((day + i) % 7)) { daysAhead = i; break; } }
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return { status: "Closed", detail: `Opens ${dayNames[(day + daysAhead) % 7]} ${String(g.openHour).padStart(2, "0")}:${String(g.openMinute).padStart(2, "0")}`, color: "text-terminal-negative" };
+  }
+  if (minutes >= openMin && minutes < closeMin) {
+    const left = closeMin - minutes;
+    const h = Math.floor(left / 60); const m = left % 60;
+    return { status: "Open", detail: `Closes in ${h > 0 ? h + "h " : ""}${m}m`, color: "text-terminal-positive" };
+  }
+  if (minutes < openMin) {
+    const left = openMin - minutes;
+    const h = Math.floor(left / 60); const m = left % 60;
+    return { status: "Closed", detail: `Opens in ${h > 0 ? h + "h " : ""}${m}m`, color: "text-terminal-negative" };
+  }
+  let daysAhead = 1;
+  for (let i = 1; i <= 7; i++) { if (g.tradingDays.includes((day + i) % 7)) { daysAhead = i; break; } }
+  if (daysAhead === 1) {
+    const left = 24 * 60 - minutes + openMin;
+    const h = Math.floor(left / 60); const m = left % 60;
+    return { status: "Closed", detail: `Opens in ${h}h ${m}m`, color: "text-terminal-negative" };
+  }
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return { status: "Closed", detail: `Opens ${dayNames[(day + daysAhead) % 7]} ${String(g.openHour).padStart(2, "0")}:${String(g.openMinute).padStart(2, "0")}`, color: "text-terminal-negative" };
+}
+
 // --- Helpers ---
 
 function timeAgo(dateStr: string): string {
@@ -117,6 +194,95 @@ function allocationPercent(allocation: Record<string, number>): { label: string;
     .sort((a, b) => b.pct - a.pct);
 }
 
+// --- Heatmap Grid ---
+
+function HeatmapGrid({ items }: { items: HeatmapItem[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const measure = () => {
+      if (ref.current) {
+        setDims({ w: ref.current.clientWidth, h: ref.current.clientHeight });
+      }
+    };
+    measure();
+    const obs = new ResizeObserver(measure);
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+
+  const sorted = [...items].sort((a, b) => b.weight - a.weight);
+  const totalWeight = sorted.reduce((s, i) => s + Math.max(i.weight, 1), 0);
+  if (totalWeight === 0 || dims.w === 0 || dims.h === 0) {
+    return <div ref={ref} className="w-full h-full" />;
+  }
+
+  // Simple row-based layout
+  const rects: { item: HeatmapItem; x: number; y: number; w: number; h: number }[] = [];
+  let y = 0;
+  let remaining = [...sorted];
+  const totalArea = dims.w * dims.h;
+
+  while (remaining.length > 0 && y < dims.h) {
+    // Take items for this row based on aspect ratio
+    const rowItems: HeatmapItem[] = [];
+    let rowWeight = 0;
+    const availH = dims.h - y;
+
+    for (const item of remaining) {
+      rowItems.push(item);
+      rowWeight += Math.max(item.weight, 1);
+      const rowArea = (rowWeight / totalWeight) * totalArea;
+      const rowH = rowArea / dims.w;
+      const minItemW = (Math.max(item.weight, 1) / rowWeight) * dims.w;
+      // Good enough aspect ratio?
+      if (rowH >= 30 && minItemW >= 30) break;
+    }
+
+    remaining = remaining.slice(rowItems.length);
+    const rowArea = (rowWeight / totalWeight) * totalArea;
+    const rowH = remaining.length > 0 ? Math.min(rowArea / dims.w, availH) : availH;
+
+    let x = 0;
+    for (const item of rowItems) {
+      const itemW = (Math.max(item.weight, 1) / rowWeight) * dims.w;
+      rects.push({ item, x, y, w: itemW, h: rowH });
+      x += itemW;
+    }
+    y += rowH;
+  }
+
+  return (
+    <div ref={ref} className="w-full h-full relative">
+      {rects.map((r) => {
+        const minDim = Math.min(r.w, r.h);
+        return (
+          <div
+            key={r.item.securityId}
+            className="absolute flex flex-col items-center justify-center overflow-hidden border border-black/20"
+            style={{
+              left: r.x, top: r.y,
+              width: Math.max(r.w - 1, 1), height: Math.max(r.h - 1, 1),
+              backgroundColor: getHeatmapColor(r.item.changePct),
+            }}
+            title={`${r.item.ticker} — ${r.item.changePct >= 0 ? "+" : ""}${r.item.changePct.toFixed(2)}%`}
+          >
+            {minDim >= 25 && (
+              <span className="font-mono font-bold text-white text-[10px] leading-tight">{r.item.ticker}</span>
+            )}
+            {minDim >= 35 && (
+              <span className="font-mono font-bold text-white text-xs leading-tight">
+                {r.item.changePct >= 0 ? "+" : ""}{r.item.changePct.toFixed(1)}%
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // --- Component ---
 
 export default function FullscreenDashboard() {
@@ -131,7 +297,7 @@ export default function FullscreenDashboard() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Clock
@@ -175,13 +341,13 @@ export default function FullscreenDashboard() {
         apiGet<Holding[]>("/portfolio/holdings"),
         apiGet<Recommendation[]>("/recommendations?status=active&limit=8"),
         apiGet<NewsItem[]>("/news?limit=10"),
-        apiGet<AlertItem[]>("/alerts?status=active&limit=5"),
+        apiGetRaw<{ data: HeatmapItem[] }>("/charts/heatmap?source=holdings&period=1D"),
       ]);
       if (s.status === "fulfilled") setSummary(s.value);
       if (h.status === "fulfilled") setHoldings(h.value);
       if (r.status === "fulfilled") setRecommendations(r.value);
       if (n.status === "fulfilled") setNews(n.value);
-      if (a.status === "fulfilled") setAlerts(a.value);
+      if (a.status === "fulfilled" && a.value?.data) setHeatmapData(a.value.data);
       setLastUpdated(new Date());
     } catch {}
   }, []);
@@ -348,78 +514,53 @@ export default function FullscreenDashboard() {
           </div>
         </div>
 
-        {/* Panel 2: Market Pulse / Alerts */}
+        {/* Panel 2: Exchange Status */}
         <div className="bg-terminal-bg-secondary rounded p-5 overflow-hidden flex flex-col">
           <div className="text-terminal-text-tertiary text-xs uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Bell size={14} />
-            Active Alerts
+            <Clock size={14} />
+            Markets
           </div>
-          <div className="flex-1 overflow-y-auto space-y-2">
-            {alerts.length === 0 && (
-              <div className="text-terminal-text-tertiary text-sm">No active alerts</div>
-            )}
-            {alerts.map((a) => (
-              <div key={a.id} className="flex items-start gap-2 py-1.5 border-b border-terminal-border last:border-0">
-                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                  a.type === "risk_breach" ? "bg-terminal-negative" :
-                  a.type === "price_target" ? "bg-terminal-positive" :
-                  "bg-terminal-warning"
-                }`} />
-                <div className="min-w-0">
-                  {a.ticker && (
-                    <span className="text-xs font-mono text-terminal-accent mr-1.5">{a.ticker}</span>
-                  )}
-                  <span className="text-xs text-terminal-text-secondary leading-relaxed line-clamp-2">
-                    {a.message.length > 120 ? a.message.slice(0, 120) + "..." : a.message}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Panel 3: Top Movers */}
-        <div className="bg-terminal-bg-secondary rounded p-5 overflow-hidden flex flex-col">
-          <div className="text-terminal-text-tertiary text-xs uppercase tracking-wider mb-3 flex items-center gap-2">
-            <TrendingUp size={14} />
-            Holdings Performance
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-1">
-            {topMovers.map((h) => {
-              const pct = h.unrealizedPnlPct;
-              const isPositive = pct >= 0;
-              const barWidth = (Math.abs(pct) / maxAbsPct) * 100;
-
+          <div className="flex-1 overflow-y-auto space-y-3">
+            {MARKET_GROUPS.map((g) => {
+              const info = getExchangeInfo(g);
               return (
-                <div key={`${h.accountId}-${h.securityId}`} className="flex items-center gap-3 h-8">
-                  <span className="font-mono text-xs w-20 shrink-0 truncate"><TickerLink ticker={h.ticker} className="font-mono text-xs text-terminal-accent hover:underline" /></span>
-                  <span className="text-xs text-terminal-text-secondary w-44 shrink-0 truncate">{h.name}</span>
-                  <div className="flex-1 flex items-center h-5">
-                    {isPositive ? (
-                      <div className="flex-1 flex justify-start">
-                        <div
-                          className="h-4 rounded-sm bg-terminal-positive/40"
-                          style={{ width: `${barWidth}%` }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex justify-end">
-                        <div
-                          className="h-4 rounded-sm bg-terminal-negative/40"
-                          style={{ width: `${barWidth}%` }}
-                        />
-                      </div>
-                    )}
+                <div key={g.label} className="flex items-center justify-between py-2 border-b border-terminal-border last:border-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-2.5 h-2.5 rounded-full ${info.status === "Open" ? "bg-terminal-positive animate-pulse" : "bg-terminal-negative"}`} />
+                    <span className="text-sm font-medium text-terminal-text-primary">{g.label}</span>
                   </div>
-                  <span className={`font-mono text-xs w-16 text-right shrink-0 ${isPositive ? "text-terminal-positive" : "text-terminal-negative"}`}>
-                    {isPositive ? "+" : ""}{pct.toFixed(1)}%
-                  </span>
-                  <span className="font-mono text-xs w-20 text-right shrink-0 text-terminal-text-secondary">
-                    <Private>{formatCurrency(h.marketValueEurCents)}</Private>
-                  </span>
+                  <div className="text-right">
+                    <div className={`text-sm font-mono ${info.color}`}>{info.status}</div>
+                    <div className="text-[10px] text-terminal-text-tertiary">{info.detail}</div>
+                  </div>
                 </div>
               );
             })}
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-terminal-positive animate-pulse" />
+                <span className="text-sm font-medium text-terminal-text-primary">Crypto</span>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-mono text-terminal-positive">Open</div>
+                <div className="text-[10px] text-terminal-text-tertiary">24/7</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Panel 3: Holdings Heatmap */}
+        <div className="bg-terminal-bg-secondary rounded p-5 overflow-hidden flex flex-col">
+          <div className="text-terminal-text-tertiary text-xs uppercase tracking-wider mb-3 flex items-center gap-2">
+            <TrendingUp size={14} />
+            Holdings — 1 Day
+          </div>
+          <div className="flex-1 relative min-h-0">
+            {heatmapData.length === 0 ? (
+              <div className="text-terminal-text-tertiary text-sm">No data</div>
+            ) : (
+              <HeatmapGrid items={heatmapData} />
+            )}
           </div>
         </div>
 

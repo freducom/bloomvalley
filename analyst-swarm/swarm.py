@@ -355,7 +355,7 @@ async def store_report(backend_url: str, agent_name: str, report: str):
         try:
             await client.post("/research/notes", json={
                 "title": f"{agent_name.replace('-', ' ').title()} — {datetime.now().strftime('%Y-%m-%d')}",
-                "thesis": report[:10000],
+                "thesis": report[:60000],
                 "tags": ["analyst_report", agent_name, "swarm"],
             })
         except Exception as e:
