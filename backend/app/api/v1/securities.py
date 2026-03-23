@@ -32,9 +32,11 @@ async def list_securities(
     if ticker:
         query = query.where(Security.ticker == ticker)
 
-    # Text search using trigram similarity
+    # Text search — match ticker or name
     if q:
-        query = query.where(Security.name.ilike(f"%{q}%"))
+        query = query.where(
+            Security.ticker.ilike(f"%{q}%") | Security.name.ilike(f"%{q}%")
+        )
 
     if asset_class:
         query = query.where(Security.asset_class == asset_class)
