@@ -265,9 +265,9 @@ async def store_report(backend_url: str, agent_name: str, report: str):
     """Store the agent report as a research note."""
     async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
         try:
-            await client.post("/research", json={
-                "title": f"Analyst Report: {agent_name} ({datetime.now().strftime('%Y-%m-%d %H:%M')})",
-                "thesis": report,
+            await client.post("/research/notes", json={
+                "title": f"{agent_name.replace('-', ' ').title()} — {datetime.now().strftime('%Y-%m-%d')}",
+                "thesis": report[:10000],
                 "tags": ["analyst_report", agent_name, "swarm"],
             })
         except Exception as e:

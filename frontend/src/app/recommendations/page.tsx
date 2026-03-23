@@ -234,6 +234,104 @@ function MacroContextBanner() {
   );
 }
 
+/* ── Analyst Summaries ── */
+
+const AGENT_LABELS: Record<string, { label: string; icon: string }> = {
+  "risk-manager": { label: "Risk Manager", icon: "🛡" },
+  "macro-strategist": { label: "Macro Strategist", icon: "🌍" },
+  "research-analyst": { label: "Research Analyst", icon: "🔬" },
+  "tax-strategist": { label: "Tax Strategist", icon: "📋" },
+  "fixed-income-analyst": { label: "Fixed Income", icon: "💰" },
+  "technical-analyst": { label: "Technical Analyst", icon: "📈" },
+  "quant-analyst": { label: "Quant Analyst", icon: "🧮" },
+  "compliance-officer": { label: "Compliance", icon: "✅" },
+};
+
+interface AnalystNote {
+  id: number;
+  title: string;
+  thesis: string;
+  tags: string[];
+  createdAt: string;
+}
+
+function AnalystSummaries() {
+  const [notes, setNotes] = useState<AnalystNote[]>([]);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiGetRaw<{ data: AnalystNote[] }>(
+          "/research/notes?tags=analyst_report&limit=20&sort=-created_at"
+        );
+        setNotes(res.data);
+      } catch { /* */ }
+    })();
+  }, []);
+
+  if (notes.length === 0) return null;
+
+  // Group by agent (second tag), keep only latest per agent
+  const byAgent: Record<string, AnalystNote> = {};
+  for (const n of notes) {
+    const agentTag = n.tags.find((t) => t !== "analyst_report" && t !== "swarm");
+    if (agentTag && !byAgent[agentTag]) {
+      byAgent[agentTag] = n;
+    }
+  }
+
+  const agents = Object.entries(byAgent);
+  if (agents.length === 0) return null;
+
+  // Get the date from the first note
+  const reportDate = agents[0]?.[1]?.createdAt;
+  const dateStr = reportDate
+    ? (() => { const d = new Date(reportDate); return `${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; })()
+    : "";
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-mono font-semibold tracking-wider text-terminal-text-secondary">ANALYST SUMMARIES</span>
+        {dateStr && <span className="text-xs text-terminal-text-tertiary font-mono">{dateStr}</span>}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {agents.map(([agentTag, note]) => {
+          const meta = AGENT_LABELS[agentTag] || { label: agentTag, icon: "📊" };
+          const isExpanded = expandedAgent === agentTag;
+          return (
+            <div
+              key={agentTag}
+              className={`border rounded p-3 cursor-pointer transition-colors ${
+                isExpanded
+                  ? "border-terminal-accent bg-terminal-bg-tertiary col-span-2 md:col-span-4"
+                  : "border-terminal-border bg-terminal-bg-secondary hover:border-terminal-accent/50"
+              }`}
+              onClick={() => setExpandedAgent(isExpanded ? null : agentTag)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">{meta.icon}</span>
+                <span className="text-xs font-medium text-terminal-text-primary">{meta.label}</span>
+              </div>
+              {!isExpanded && (
+                <p className="text-xs text-terminal-text-tertiary mt-1 line-clamp-2">
+                  {note.thesis.slice(0, 120)}...
+                </p>
+              )}
+              {isExpanded && (
+                <p className="text-sm text-terminal-text-secondary mt-2 leading-relaxed whitespace-pre-wrap">
+                  {note.thesis}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── Active Recommendations ── */
 
 function ActiveTab() {
@@ -319,7 +417,7 @@ function ActiveTab() {
         )}
         <div className="ml-auto flex items-center gap-4">
           <span className="text-xs text-terminal-text-tertiary font-mono">
-            {new Date(r.recommendedDate).toLocaleString("fi-FI", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+            {(() => { const d = new Date(r.recommendedDate); return `${d.getDate()}.${d.getMonth()+1}.${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; })()}
           </span>
           {r.entryPriceCents && (
             <span className="text-xs font-mono text-terminal-text-secondary">
@@ -408,6 +506,7 @@ function ActiveTab() {
   return (
     <div>
       <MacroContextBanner />
+      <AnalystSummaries />
       <p className="text-sm text-terminal-text-secondary mb-3">
         Top {Math.min(5, sorted.length)} of {total} active recommendation{total !== 1 ? "s" : ""} (sorted by priority)
       </p>
