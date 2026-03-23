@@ -213,10 +213,9 @@ class YahooFundamentals(PipelineAdapter):
             roe = _safe_decimal(_safe_get(info, "returnOnEquity"))
             free_cash_flow = _safe_get(info, "freeCashflow")
             price_to_book = _safe_decimal(_safe_get(info, "priceToBook"))
-            # yfinance returns dividendYield as percentage (e.g. 0.42 = 0.42%)
-            # Normalize to decimal (e.g. 0.0042) to match other ratio fields
-            raw_div_yield = _safe_decimal(_safe_get(info, "dividendYield"))
-            dividend_yield = raw_div_yield / 100 if raw_div_yield is not None else None
+            # Use trailingAnnualDividendYield (already a decimal, e.g. 0.061 = 6.1%)
+            # More reliable than dividendYield which is inconsistently scaled
+            dividend_yield = _safe_decimal(_safe_get(info, "trailingAnnualDividendYield"))
             trailing_eps = _safe_get(info, "trailingEps")
             total_revenue = _safe_get(info, "totalRevenue")
             gross_margin = _safe_decimal(_safe_get(info, "grossMargins"))
