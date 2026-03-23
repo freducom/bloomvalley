@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent, formatDate } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 /* ── Types ── */
 
@@ -220,7 +221,7 @@ function TaxLotsTab({ year }: { year: number }) {
             {lots.map((lot) => (
               <tr key={lot.id} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
                 <td className="p-3">
-                  <span className="font-mono text-terminal-accent">{lot.ticker}</span>
+                  <TickerLink ticker={lot.ticker} />
                 </td>
                 <td className="p-3 text-terminal-text-secondary text-xs">{lot.accountName}</td>
                 <td className="text-center p-3">
@@ -377,7 +378,7 @@ function GainsTab({ year }: { year: number }) {
             <tbody>
               {data.perSecurity.map((s, i) => (
                 <tr key={i} className="border-b border-terminal-border/50">
-                  <td className="p-3 font-mono text-terminal-accent">{s.ticker}</td>
+                  <td className="p-3"><TickerLink ticker={s.ticker} /></td>
                   <td className="p-3 text-xs text-terminal-text-secondary">{s.accountName}</td>
                   <td className="p-3 text-xs">{formatDate(s.acquiredDate)}</td>
                   <td className="p-3 text-xs">{s.closedDate ? formatDate(s.closedDate) : "-"}</td>
@@ -538,7 +539,7 @@ function OstTab() {
               {data.holdings.map((h) => (
                 <tr key={h.securityId} className="border-b border-terminal-border/50">
                   <td className="p-3">
-                    <span className="font-mono text-terminal-accent mr-2">{h.ticker}</span>
+                    <TickerLink ticker={h.ticker} className="font-mono text-terminal-accent mr-2 hover:underline" />
                     <span className="text-xs text-terminal-text-secondary">{h.name}</span>
                   </td>
                   <td className="text-right p-3 font-mono text-xs">
@@ -617,7 +618,7 @@ function HarvestingTab() {
               {data.candidates.map((c) => (
                 <tr key={c.lotId} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
                   <td className="p-3">
-                    <span className="font-mono text-terminal-accent mr-2">{c.ticker}</span>
+                    <TickerLink ticker={c.ticker} className="font-mono text-terminal-accent mr-2 hover:underline" />
                     <span className="text-xs text-terminal-text-secondary">{c.name}</span>
                   </td>
                   <td className="p-3 text-xs text-terminal-text-secondary">{c.accountName}</td>

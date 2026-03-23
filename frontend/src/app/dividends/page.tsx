@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 interface UpcomingDividend {
   securityId: number;
@@ -222,9 +223,7 @@ function UpcomingTab({
                 <tr key={i} className="hover:bg-terminal-bg-secondary/50">
                   <td className="px-3 py-2 font-mono text-xs">{d.exDate}</td>
                   <td className="px-3 py-2 font-mono font-medium">
-                    <a href={`/charts?securityId=${d.securityId}`} className="text-blue-400 hover:underline">
-                      {d.ticker}
-                    </a>
+                    <TickerLink ticker={d.ticker} />
                   </td>
                   <td className="px-3 py-2 text-terminal-text-secondary truncate max-w-[200px]">{d.name}</td>
                   <td className="px-3 py-2 text-xs text-terminal-text-secondary">
@@ -317,9 +316,7 @@ function YieldTab({ data }: { data: YieldMetrics }) {
                 .map((h) => (
                   <tr key={h.securityId} className="hover:bg-terminal-bg-tertiary/50">
                     <td className="px-3 py-2 font-mono font-medium">
-                      <a href={`/charts?securityId=${h.securityId}`} className="text-blue-400 hover:underline">
-                        {h.ticker}
-                      </a>
+                      <TickerLink ticker={h.ticker} />
                     </td>
                     <td className="px-3 py-2 text-terminal-text-secondary truncate max-w-[200px]">{h.name}</td>
                     <td className="px-3 py-2 text-xs text-terminal-text-secondary">
@@ -404,12 +401,7 @@ function CalendarTab({ data }: { data: CalendarEvent[] }) {
                       {ev.exDate.slice(5)}
                     </span>
                     <span className="w-2 h-2 rounded-full bg-red-400" title="Ex-date" />
-                    <a
-                      href={`/charts?securityId=${ev.securityId}`}
-                      className="font-mono text-blue-400 hover:underline w-16"
-                    >
-                      {ev.ticker}
-                    </a>
+                    <TickerLink ticker={ev.ticker} className="font-mono text-terminal-accent hover:underline w-16" />
                     <span className="text-terminal-text-secondary flex-1 truncate">{ev.name}</span>
                     <span className="font-mono text-right w-24">
                       {formatCurrency(ev.amountPerShareCents, ev.currency)}/sh
@@ -473,9 +465,7 @@ function HistoryTab({ data }: { data: CalendarEvent[] }) {
                 <tr key={i} className="hover:bg-terminal-bg-secondary/50">
                   <td className="px-3 py-2 font-mono text-xs">{d.exDate}</td>
                   <td className="px-3 py-2 font-mono font-medium">
-                    <a href={`/charts?securityId=${d.securityId}`} className="text-blue-400 hover:underline">
-                      {d.ticker}
-                    </a>
+                    <TickerLink ticker={d.ticker} />
                   </td>
                   <td className="px-3 py-2 text-terminal-text-secondary truncate max-w-[200px]">{d.name}</td>
                   <td className="px-3 py-2 text-xs text-terminal-text-secondary">

@@ -19,6 +19,7 @@ import {
 import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { usePrivacy, Private } from "@/lib/privacy";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 // --- Types ---
 
@@ -391,7 +392,7 @@ export default function FullscreenDashboard() {
 
               return (
                 <div key={h.securityId} className="flex items-center gap-3 h-8">
-                  <span className="font-mono text-xs text-terminal-text-primary w-20 shrink-0 truncate">{h.ticker}</span>
+                  <span className="font-mono text-xs w-20 shrink-0 truncate"><TickerLink ticker={h.ticker} className="font-mono text-xs text-terminal-accent hover:underline" /></span>
                   <span className="text-xs text-terminal-text-secondary w-44 shrink-0 truncate">{h.name}</span>
                   <div className="flex-1 flex items-center h-5">
                     {isPositive ? (
@@ -457,7 +458,7 @@ export default function FullscreenDashboard() {
                     <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded leading-none ${actionColor}`}>
                       {r.action}
                     </span>
-                    <span className="font-mono text-xs text-terminal-text-primary">{r.ticker}</span>
+                    <TickerLink ticker={r.ticker} className="font-mono text-xs text-terminal-accent hover:underline" />
                     {r.targetPriceCents > 0 && (
                       <span className="text-[10px] font-mono text-terminal-text-tertiary ml-auto">
                         <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private>
@@ -549,7 +550,7 @@ export default function FullscreenDashboard() {
                       const weight = ((h.marketValueEurCents / totalVal) * 100);
                       return (
                         <div key={h.securityId} className="flex justify-between text-xs py-0.5">
-                          <span className="font-mono text-terminal-text-primary">{h.ticker}</span>
+                          <TickerLink ticker={h.ticker} className="font-mono text-terminal-accent hover:underline text-xs" />
                           <div className="flex gap-3">
                             <span className={`font-mono ${h.unrealizedPnlPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
                               {h.unrealizedPnlPct >= 0 ? "+" : ""}{h.unrealizedPnlPct.toFixed(1)}%

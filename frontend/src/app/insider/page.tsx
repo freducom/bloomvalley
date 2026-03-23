@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGetRaw, apiPost } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 /* ── Types ── */
 
@@ -246,7 +247,7 @@ function TradesTab() {
                 >
                   <td className="p-3 text-xs whitespace-nowrap">{formatDate(t.tradeDate)}</td>
                   <td className="p-3">
-                    <span className="font-mono text-terminal-accent">{t.ticker}</span>
+                    {t.ticker && <TickerLink ticker={t.ticker} />}
                   </td>
                   <td className="p-3 text-xs">{t.insiderName}</td>
                   <td className="p-3 text-xs text-terminal-text-secondary">
@@ -334,7 +335,7 @@ function SignalsTab() {
               }`}>
                 {sig.type === "cluster_buying" ? "CLUSTER BUY" : "INSIDER TRADE"}
               </span>
-              <span className="font-mono text-terminal-accent">{sig.ticker}</span>
+              <TickerLink ticker={sig.ticker} />
               <span className="text-xs text-terminal-text-secondary">{sig.securityName}</span>
             </div>
             {sig.tradeDate && (
@@ -432,7 +433,7 @@ function CongressTab() {
                       {t.tradeType.toUpperCase()}
                     </span>
                   </td>
-                  <td className="p-3 font-mono text-terminal-accent text-xs">{t.tickerReported}</td>
+                  <td className="p-3 font-mono text-xs"><TickerLink ticker={t.tickerReported} /></td>
                   <td className="text-right p-3 font-mono text-xs">
                     {formatCurrency(t.amountRangeLowCents, t.currency)} &ndash; {formatCurrency(t.amountRangeHighCents, t.currency)}
                   </td>
@@ -497,7 +498,7 @@ function BuybacksTab() {
           {buybacks.map((bb) => (
             <tr key={bb.id} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
               <td className="p-3">
-                <span className="font-mono text-terminal-accent mr-2">{bb.ticker}</span>
+                <TickerLink ticker={bb.ticker} className="font-mono text-terminal-accent mr-2 hover:underline" />
                 <span className="text-xs text-terminal-text-secondary">{bb.name}</span>
               </td>
               <td className="text-right p-3 font-mono text-xs">

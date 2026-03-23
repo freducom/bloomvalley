@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiGetRaw, apiPost, apiPut } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 /* ── Types ── */
 
@@ -306,7 +307,7 @@ function ActiveTab() {
         <span className={`text-xs px-2 py-0.5 rounded font-medium uppercase ${ACTION_COLORS[r.action] || ""}`}>
           {r.action}
         </span>
-        <span className="font-mono text-terminal-accent">{r.ticker}</span>
+        {r.ticker && <TickerLink ticker={r.ticker} />}
         <span className="text-xs text-terminal-text-secondary">{r.securityName}</span>
         <span className={`text-xs ml-1 ${CONFIDENCE_COLORS[r.confidence] || ""}`}>
           {r.confidence}

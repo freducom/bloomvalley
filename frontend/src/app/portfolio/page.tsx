@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet, apiGetRaw } from "@/lib/api";
+import { TickerLink } from "@/components/ui/TickerLink";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
@@ -277,9 +278,7 @@ export default function PortfolioPage() {
                     >
                       {rec.action}
                     </span>
-                    <span className="font-mono text-sm text-terminal-accent whitespace-nowrap">
-                      {rec.ticker}
-                    </span>
+                    <TickerLink ticker={rec.ticker} className="font-mono text-sm text-terminal-accent whitespace-nowrap hover:underline" />
                     <span className="text-sm text-terminal-text-secondary truncate flex-1 min-w-0">
                       {rec.rationale.length > 100
                         ? rec.rationale.slice(0, 100) + "\u2026"
@@ -336,7 +335,7 @@ export default function PortfolioPage() {
                     className="border-t border-terminal-border hover:bg-terminal-bg-secondary/50 transition-colors"
                   >
                     <td className="px-4 py-2 font-mono text-terminal-accent text-sm">
-                      {h.ticker}
+                      <TickerLink ticker={h.ticker} />
                     </td>
                     <td className="px-4 py-2 text-sm">{h.name}</td>
                     <td className="px-4 py-2 text-xs text-terminal-text-secondary">

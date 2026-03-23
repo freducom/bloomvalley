@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 interface RiskMetrics {
   annualizedReturn: number;
@@ -271,7 +272,7 @@ function TopPositionsCard({ positions }: { positions: Position[] }) {
         {top.map((p) => (
           <div key={p.ticker} className="flex items-center gap-2">
             <span className={`font-mono text-sm w-20 ${p.breach ? "text-yellow-400" : ""}`}>
-              {p.ticker}
+              <TickerLink ticker={p.ticker} className={`font-mono hover:underline ${p.breach ? "text-yellow-400" : "text-terminal-accent"}`} />
             </span>
             <div className="flex-1 h-2 bg-terminal-bg-tertiary rounded-full overflow-hidden">
               <div

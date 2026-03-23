@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiGetRaw, apiDelete } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 interface Transaction {
   id: number;
@@ -255,12 +256,7 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-3 py-2 font-mono font-medium">
                       {t.ticker ? (
-                        <a
-                          href={`/charts?securityId=${t.securityId}`}
-                          className="text-blue-400 hover:underline"
-                        >
-                          {t.ticker}
-                        </a>
+                        <TickerLink ticker={t.ticker} />
                       ) : (
                         <span className="text-terminal-text-secondary">—</span>
                       )}

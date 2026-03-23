@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { apiGet, apiPost, apiDelete, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import Link from "next/link";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 interface WatchlistSummary {
   id: number;
@@ -435,7 +436,7 @@ export default function WatchlistPage() {
                               className="border-t border-terminal-border hover:bg-terminal-bg-secondary/50 transition-colors"
                             >
                               <td className="px-4 py-2 font-mono text-terminal-accent text-sm">
-                                {item.ticker}
+                                <TickerLink ticker={item.ticker} />
                               </td>
                               <td className="px-4 py-2 text-sm">
                                 <div>{item.name}</div>
