@@ -179,6 +179,23 @@ async def report_status(backend_url: str, status: str, agent: str | None = None,
         pass  # Non-critical — don't fail the swarm over status reporting
 
 
+# ── Watchlist Rotation ──
+
+_OFFSET_FILE = Path(__file__).parent / ".watchlist_offset"
+
+def _get_watchlist_offset(backend_url: str) -> int:
+    try:
+        return int(_OFFSET_FILE.read_text().strip())
+    except Exception:
+        return 0
+
+def _set_watchlist_offset(backend_url: str, offset: int):
+    try:
+        _OFFSET_FILE.write_text(str(offset))
+    except Exception:
+        pass
+
+
 # ── Data Fetching ──
 
 async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
@@ -191,7 +208,7 @@ async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
                 if resp.status_code == 200:
                     results[ep] = resp.text
 
-                    # For /watchlists/, also fetch each watchlist's items
+                    # For /watchlists/, also fetch each watchlist's items (with rotation)
                     if ep == "/watchlists/":
                         try:
                             wl_data = resp.json().get("data", [])
@@ -204,7 +221,23 @@ async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
                                         for item in wl_detail.get("items", []):
                                             item["watchlistName"] = wl["name"]
                                             all_items.append(item)
-                            results["/watchlists/items"] = json.dumps({"data": all_items})
+                            # Rotate: send ~20 items per run, advance offset each time
+                            batch_size = 20
+                            offset = _get_watchlist_offset(backend_url)
+                            if len(all_items) > batch_size:
+                                start = offset % len(all_items)
+                                batch = all_items[start:start + batch_size]
+                                if len(batch) < batch_size:
+                                    batch += all_items[:batch_size - len(batch)]
+                                _set_watchlist_offset(backend_url, offset + batch_size)
+                                remaining = len(all_items) - batch_size
+                                results["/watchlists/items"] = json.dumps({
+                                    "data": batch,
+                                    "meta": {"total": len(all_items), "batchSize": batch_size,
+                                             "offset": start, "remaining": remaining},
+                                })
+                            else:
+                                results["/watchlists/items"] = json.dumps({"data": all_items})
                         except Exception:
                             pass
                 else:
@@ -576,11 +609,34 @@ async def run_swarm(cfg: dict):
     print(f"{'='*60}\n", flush=True)
 
 
+# ── Research-Only Run ──
+
+async def run_research_only(cfg: dict):
+    """Run just the research analyst (for nighttime watchlist rotation)."""
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    backend_url = cfg["backend_url"]
+    print(f"\n[swarm] Research-only run — {datetime.now().isoformat()}", flush=True)
+
+    await report_status(backend_url, "running", agent="research-analyst",
+                        completed=0, total=1, message="Watchlist rotation")
+    start = time.time()
+    await run_agent("research-analyst", cfg, date_str)
+    elapsed = round(time.time() - start, 1)
+    await report_status(backend_url, "idle", completed=1, total=1,
+                        message=f"Research complete in {elapsed}s")
+    print(f"[swarm] Research-only run complete in {elapsed}s\n", flush=True)
+
+
 # ── Scheduler ──
 
 def run_swarm_sync(cfg: dict):
     """Synchronous wrapper for the scheduler."""
     asyncio.run(run_swarm(cfg))
+
+
+def run_research_sync(cfg: dict):
+    """Synchronous wrapper for research-only runs."""
+    asyncio.run(run_research_only(cfg))
 
 
 def main():
@@ -605,10 +661,25 @@ def main():
         )
         scheduler.add_job(run_swarm_sync, trigger, args=[cfg], id=f"swarm_run_{i}")
 
-    print(f"[swarm] Scheduled {len(schedules)} runs:", flush=True)
+    # Nighttime research-only runs (watchlist rotation)
+    research_schedules = cfg.get("research_schedule", ["0 1 * * *", "0 3 * * *"])
+    for i, cron_expr in enumerate(research_schedules):
+        parts = cron_expr.split()
+        trigger = CronTrigger(
+            minute=parts[0], hour=parts[1],
+            day=parts[2], month=parts[3], day_of_week=parts[4],
+            timezone="Europe/Helsinki",
+        )
+        scheduler.add_job(run_research_sync, trigger, args=[cfg], id=f"research_run_{i}")
+
+    total_jobs = len(schedules) + len(research_schedules)
+    print(f"[swarm] Scheduled {total_jobs} jobs:", flush=True)
     for s in schedules:
-        print(f"  - {s} (Helsinki)", flush=True)
+        print(f"  - {s} (Helsinki) [full swarm]", flush=True)
+    for s in research_schedules:
+        print(f"  - {s} (Helsinki) [research only]", flush=True)
     print(f"[swarm] LLM: {cfg['llm_provider']} / {cfg.get(cfg['llm_provider'], {}).get('model', '?')}", flush=True)
+    print(f"[swarm] Watchlist rotation: {20} items per run", flush=True)
     print("[swarm] Waiting for next scheduled run...\n", flush=True)
 
     scheduler.start()
