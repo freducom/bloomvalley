@@ -144,13 +144,25 @@ These directories store all persistent state:
 | `REDIS_DATA_DIR` | `./data/redis` | Redis AOF persistence (pipeline cache, session state) | Optional |
 | `.env` | — | API keys and secrets | **Yes** (keep separate backup) |
 
-### 3. Start all services
+### 3. Create config files before first start
+
+The analyst-swarm service mounts `config.local.yaml` as a file bind mount. If this file doesn't exist when Docker Compose starts, Docker will create it as an **empty directory**, which crashes the service. Create it first:
+
+```bash
+# Copy default config (uses claude_cli provider by default)
+cp analyst-swarm/config.yaml analyst-swarm/config.local.yaml
+
+# Edit to customize LLM provider, schedule, etc.
+# See analyst-swarm/config.yaml for all options
+```
+
+### 4. Start all services
 
 ```bash
 docker compose up -d --build
 ```
 
-This starts 5 services:
+This starts 6 services:
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -159,21 +171,22 @@ This starts 5 services:
 | `backend` | 8000 | FastAPI application |
 | `frontend` | 3000 | Next.js application |
 | `cron` | — | Scheduled pipeline runner |
+| `analyst-swarm` | — | AI analyst agents (scheduled) |
 
-### 4. Run database migrations
+### 5. Run database migrations
 
 ```bash
 docker compose exec backend alembic upgrade head
 ```
 
-### 5. Verify
+### 6. Verify
 
 ```bash
 curl http://localhost:8000/api/v1/health
 # {"data":{"status":"healthy","checks":{"database":"ok","redis":"ok"}}, ...}
 ```
 
-### 6. Initial data fetch
+### 7. Initial data fetch
 
 Trigger all pipelines to populate the database:
 
@@ -206,6 +219,89 @@ All API keys are stored in `.env` (never committed to git).
 | `ALPHA_VANTAGE_API_KEY` | No (future use) | Yes (limited) | https://www.alphavantage.co/support/#api-key |
 
 **No API key needed for:** Yahoo Finance (yfinance library), ECB Statistical Data Warehouse, CoinGecko (public API).
+
+---
+
+## Reverse Proxy Setup
+
+When deploying behind a reverse proxy (Traefik, nginx, Caddy), two things must be configured:
+
+### 1. Update `FRONTEND_URL` for CORS
+
+The backend uses `FRONTEND_URL` from `.env` to set the `Access-Control-Allow-Origin` header. This must match the domain users access in their browser:
+
+```bash
+# In .env — change from default localhost to your domain
+FRONTEND_URL=http://bloomvalley.example.com
+```
+
+### 2. Set `NEXT_PUBLIC_API_URL` to empty
+
+In `docker-compose.yml`, the frontend's `NEXT_PUBLIC_API_URL` must be empty so browser API calls go to the same origin (your reverse proxy), not `localhost:8000`:
+
+```yaml
+environment:
+  - NEXT_PUBLIC_API_URL=
+```
+
+The Next.js rewrite in `next.config.mjs` proxies `/api/*` requests to the backend container. Your reverse proxy should route both the frontend and `/api/*` paths to the appropriate service.
+
+### Example: Traefik (file provider)
+
+Create a dynamic config file (e.g., `bloomvalley.yml`):
+
+```yaml
+http:
+  routers:
+    bloomvalley-api:
+      rule: "Host(`bloomvalley.example.com`) && PathPrefix(`/api`)"
+      entryPoints:
+        - web
+      service: bloomvalley-api
+      priority: 100
+
+    bloomvalley-frontend:
+      rule: "Host(`bloomvalley.example.com`)"
+      entryPoints:
+        - web
+      service: bloomvalley-frontend
+
+  services:
+    bloomvalley-api:
+      loadBalancer:
+        servers:
+          - url: "http://<docker-host-ip>:8000"
+
+    bloomvalley-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://<docker-host-ip>:3000"
+```
+
+Replace `<docker-host-ip>` with your Docker bridge IP (typically `172.17.0.1`, check with `ip -4 addr show docker0`).
+
+### Example: nginx
+
+```nginx
+server {
+    listen 80;
+    server_name bloomvalley.example.com;
+
+    location /api/ {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
 
 ---
 
@@ -308,18 +404,32 @@ docker compose exec db pg_dump -U warren --disable-triggers warren | gzip > back
 
 ### Database restore
 
+> **Important:** Do NOT use `--single-transaction` with TimescaleDB dumps. TimescaleDB's circular foreign-key constraints cause the first error to abort the entire transaction, resulting in an empty database. Run the restore without it — the `--disable-triggers` flag used during backup ensures correct ordering.
+
 ```bash
-# Stop backend first to prevent writes during restore
+# Stop services to prevent writes during restore
 docker compose stop backend cron analyst-swarm
 
-# Restore from SQL dump
-docker compose exec -T db psql -U warren --single-transaction warren < backup_20260323.sql
+# If restoring into an existing database, drop and recreate it first
+docker compose exec db psql -U warren -d postgres -c "DROP DATABASE warren;"
+docker compose exec db psql -U warren -d postgres -c "CREATE DATABASE warren OWNER warren;"
+
+# Restore from SQL dump (no --single-transaction)
+docker compose exec -T db psql -U warren warren < backup_20260323.sql
 
 # Restore from compressed dump
-gunzip -c backup_20260323.sql.gz | docker compose exec -T db psql -U warren --single-transaction warren
+gunzip -c backup_20260323.sql.gz | docker compose exec -T db psql -U warren warren
 
 # Restart services
 docker compose up -d
+```
+
+You may see two harmless TimescaleDB warnings (`table "prices" is not a hypertable` and `ONLY option not supported`). These are cosmetic and do not affect the restored data.
+
+After restoring, verify with:
+
+```bash
+docker compose exec db psql -U warren warren -c "SELECT count(*) FROM securities;"
 ```
 
 ### Full backup script
@@ -388,18 +498,15 @@ mkdir -p data/postgres data/redis  # or your custom paths from .env
 docker compose up -d db redis
 sleep 10  # Wait for DB to initialize
 
-# 5. Run migrations to create schema
+# 5. Restore data (the dump includes the full schema, no need to run migrations)
 docker compose up -d backend
 sleep 5
-docker compose exec backend alembic upgrade head
-
-# 6. Restore data
 gunzip -c /tmp/migration_backup.sql.gz | docker compose exec -T db psql -U warren warren
 
-# 7. Start all services
+# 6. Start all services
 docker compose up -d --build
 
-# 8. Verify
+# 7. Verify
 curl http://localhost:8000/api/v1/health
 curl http://localhost:8000/api/v1/portfolio/summary
 ```
