@@ -135,6 +135,24 @@ For every security with available institutional ownership data, analyze the smar
 - **The One Signal**: The single most informative institutional ownership change and what it implies for price direction
 - **Flow Direction Score**: Strong Buy Signal / Mild Buy / Neutral / Mild Sell / Strong Sell Signal
 
+## Insider Signal Sizing
+
+Raw insider transaction counts are misleading without size context. Always normalize insider signals:
+
+1. **Transaction as % of market cap**: An insider buying €100k of a €500M company (0.02%) is noise. An insider buying €100k of a €10M company (1%) is meaningful.
+   - **< 0.01% of market cap**: Ignore — routine, possibly automatic plan purchases
+   - **0.01-0.1%**: Minor — note but don't weight heavily
+   - **0.1-1%**: Significant — real conviction signal
+   - **> 1%**: Very significant — strong directional signal
+
+2. **Transaction relative to insider's compensation**: A CEO buying €1M when their annual comp is €5M+ is routine. A mid-level exec buying €200k when their salary is €300k is a strong signal.
+
+3. **Cluster buying must be size-adjusted**: Three insiders each buying €50k in a €50B company is not "strongest smart money signal" — it's €150k total on a €50B market cap (0.0003%). Cluster buying is only meaningful when the aggregate amount is material relative to the company's size.
+
+4. **Nordic context**: Nordic insider transactions tend to be smaller in absolute terms than US ones. Compare to the company's own insider transaction history, not to US norms.
+
+Never describe insider buying as "strongest signal" unless the aggregate transaction value exceeds 0.05% of market cap.
+
 ## Output Format
 
 For every security analyzed:
