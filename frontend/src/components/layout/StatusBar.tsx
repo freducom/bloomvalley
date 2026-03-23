@@ -303,9 +303,9 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="hidden md:flex items-center justify-between h-8 px-4 bg-terminal-bg-secondary border-t border-terminal-border shrink-0 text-xs font-mono">
-      {/* Markets */}
-      <div className="flex items-center gap-4">
+    <footer className="flex items-center justify-between h-8 px-4 bg-terminal-bg-secondary border-t border-terminal-border shrink-0 text-xs font-mono">
+      {/* Markets — hidden on mobile */}
+      <div className="hidden md:flex items-center gap-4">
         {Object.entries(statuses).map(([name, info]) => (
           <StatusDot key={name} label={name} status={info.status} tooltip={info.tooltip} />
         ))}
@@ -342,14 +342,14 @@ export function StatusBar() {
         ) : swarmStatus?.status !== "running" ? (
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-terminal-positive" />
-            <span className="text-terminal-text-secondary">All systems functional</span>
+            <span className="text-terminal-text-secondary hidden md:inline">All systems functional</span>
           </div>
         ) : null}
       </div>
 
       {/* Portfolio value */}
       <div className="flex items-center gap-2">
-        <span className="text-terminal-text-secondary">Portfolio:</span>
+        <span className="text-terminal-text-secondary hidden md:inline">Portfolio:</span>
         <span className="font-semibold text-terminal-text-primary">
           <Private>{portfolioValue !== null ? formatCurrency(portfolioValue) : "—"}</Private>
         </span>
