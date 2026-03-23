@@ -360,14 +360,12 @@ docker compose exec db pg_dump -U warren --disable-triggers warren | gzip > migr
 # 2. Bundle config files
 tar czf migration_config.tar.gz .env analyst-swarm/config.local.yaml .claude/agents/
 
-# 3. Copy Claude auth (if using claude_cli provider)
-tar czf migration_claude_auth.tar.gz -C ~ .claude/
 ```
 
 **Transfer to new server:**
 
 ```bash
-scp migration_backup.sql.gz migration_config.tar.gz migration_claude_auth.tar.gz user@newserver:/tmp/
+scp migration_backup.sql.gz migration_config.tar.gz user@newserver:/tmp/
 ```
 
 **On the new server:**
@@ -380,8 +378,9 @@ cd bloomvalley
 # 2. Restore config files
 tar xzf /tmp/migration_config.tar.gz
 
-# 3. Restore Claude auth (if using claude_cli)
-tar xzf /tmp/migration_claude_auth.tar.gz -C ~/
+# 3. Install Claude CLI and log in (if using claude_cli provider)
+npm install -g @anthropic-ai/claude-code
+claude login
 
 # 4. Create data directories and start database
 # Edit .env to set POSTGRES_DATA_DIR / REDIS_DATA_DIR if using custom paths
