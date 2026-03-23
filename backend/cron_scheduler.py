@@ -126,6 +126,11 @@ def main() -> None:
                       args=["news/cleanup", "news_cleanup"],
                       hour=4, minute=0, id="news_cleanup")
 
+    # Research notes retention cleanup — daily at 04:30 Helsinki time
+    scheduler.add_job(trigger_endpoint, "cron",
+                      args=["research/cleanup", "research_cleanup"],
+                      hour=4, minute=30, id="research_cleanup")
+
     jobs = scheduler.get_jobs()
     print(f"[cron] Starting scheduler with {len(jobs)} jobs (TZ=Europe/Helsinki):", flush=True)
     for job in jobs:

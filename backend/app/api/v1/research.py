@@ -245,3 +245,11 @@ async def list_tags():
         )
         tags = sorted([r.tag for r in result.all()])
     return {"data": tags, "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
+
+
+@router.post("/cleanup")
+async def cleanup_research():
+    """Run research notes retention cleanup: delete old auto-generated notes."""
+    from app.services.research_cleanup import cleanup_old_research
+    result = await cleanup_old_research()
+    return {"data": result, "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}

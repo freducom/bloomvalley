@@ -317,9 +317,13 @@ export default function ResearchPage() {
         </label>
       </div>
 
+      {/* Mobile: show list OR detail, not both */}
+      {/* Desktop: side-by-side grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left panel — note list */}
-        <div className="lg:col-span-1 space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+        {/* Left panel — note list (hidden on mobile when viewing a note) */}
+        <div className={`lg:col-span-1 space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 ${
+          (selectedNote || isFormMode) ? "hidden lg:block" : ""
+        }`}>
           {loading ? (
             <div className="text-terminal-text-secondary text-sm p-4">
               Loading...
@@ -402,8 +406,23 @@ export default function ResearchPage() {
           )}
         </div>
 
-        {/* Right panel — detail or form */}
-        <div className="lg:col-span-2">
+        {/* Right panel — detail or form (hidden on mobile when no note selected) */}
+        <div className={`lg:col-span-2 ${
+          !selectedNote && !isFormMode ? "hidden lg:block" : ""
+        }`}>
+          {/* Back button on mobile */}
+          {(selectedNote || isFormMode) && (
+            <button
+              onClick={() => {
+                setSelectedId(null);
+                setEditing(false);
+                setCreating(false);
+              }}
+              className="lg:hidden mb-3 text-sm text-terminal-accent hover:underline font-mono"
+            >
+              &larr; Back to list
+            </button>
+          )}
           {isFormMode ? (
             <NoteForm
               form={form}
