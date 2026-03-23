@@ -15,6 +15,7 @@ router = APIRouter()
 @router.get("")
 async def list_securities(
     q: Optional[str] = Query(None, description="Search by name (trigram)"),
+    ticker: Optional[str] = Query(None, description="Exact ticker match"),
     asset_class: Optional[str] = Query(None, alias="assetClass"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -22,6 +23,10 @@ async def list_securities(
 ):
     """List securities with pagination and optional search."""
     query = select(Security).where(Security.is_active == True)  # noqa: E712
+
+    # Exact ticker match
+    if ticker:
+        query = query.where(Security.ticker == ticker)
 
     # Text search using trigram similarity
     if q:
