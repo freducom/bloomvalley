@@ -115,17 +115,34 @@ FRED_API_KEY=your_fred_api_key
 
 ### 2. Create persistent data directories
 
+By default, data is stored in `./data/` within the project. To use custom locations (e.g., a separate disk or partition), set these in `.env`:
+
 ```bash
+# Default: data stored in project directory
 mkdir -p data/postgres data/redis
+
+# Or: custom locations (set in .env)
+POSTGRES_DATA_DIR=/mnt/storage/bloomvalley/postgres
+REDIS_DATA_DIR=/mnt/storage/bloomvalley/redis
+```
+
+Create whichever directories you chose:
+
+```bash
+# If using defaults:
+mkdir -p data/postgres data/redis
+
+# If using custom paths (example):
+mkdir -p /mnt/storage/bloomvalley/postgres /mnt/storage/bloomvalley/redis
 ```
 
 These directories store all persistent state:
 
-| Directory | Contents | Backup? |
-|-----------|----------|---------|
-| `data/postgres/` | PostgreSQL database files (all portfolio data, prices, indicators) | **Yes** |
-| `data/redis/` | Redis AOF persistence (pipeline cache, session state) | Optional |
-| `.env` | API keys and secrets | **Yes** (keep separate backup) |
+| Variable | Default | Contents | Backup? |
+|----------|---------|----------|---------|
+| `POSTGRES_DATA_DIR` | `./data/postgres` | PostgreSQL database files (all portfolio data, prices, indicators) | **Yes** |
+| `REDIS_DATA_DIR` | `./data/redis` | Redis AOF persistence (pipeline cache, session state) | Optional |
+| `.env` | — | API keys and secrets | **Yes** (keep separate backup) |
 
 ### 3. Start all services
 
@@ -270,8 +287,8 @@ Add these lines (adjust paths and timezone):
 
 | File / Directory | Contains | Critical? | Size |
 |-----------------|----------|-----------|------|
-| `data/postgres/` | All portfolio data, prices, fundamentals, recommendations, news, research notes | **Yes** | ~100-500 MB |
-| `data/redis/` | Pipeline cache, session state | No (regenerated) | ~1 MB |
+| `$POSTGRES_DATA_DIR` (default: `data/postgres/`) | All portfolio data, prices, fundamentals, recommendations, news, research notes | **Yes** | ~100-500 MB |
+| `$REDIS_DATA_DIR` (default: `data/redis/`) | Pipeline cache, session state | No (regenerated) | ~1 MB |
 | `.env` | API keys (FRED, Alpha Vantage, Finnhub), DB passwords | **Yes** | <1 KB |
 | `.claude/agents/` | AI analyst agent definitions and strategy rules | **Yes** (in git) | ~50 KB |
 | `analyst-swarm/config.local.yaml` | Swarm LLM provider config, schedule | **Yes** | <1 KB |
@@ -365,7 +382,8 @@ tar xzf /tmp/migration_config.tar.gz
 tar xzf /tmp/migration_claude_auth.tar.gz -C ~/
 
 # 4. Create data directories and start database
-mkdir -p data/postgres data/redis
+# Edit .env to set POSTGRES_DATA_DIR / REDIS_DATA_DIR if using custom paths
+mkdir -p data/postgres data/redis  # or your custom paths from .env
 docker compose up -d db redis
 sleep 10  # Wait for DB to initialize
 
@@ -387,8 +405,8 @@ curl http://localhost:8000/api/v1/portfolio/summary
 
 ### What you do NOT need to copy
 
-- `data/postgres/` raw directory — use SQL dump instead (portable across architectures)
-- `data/redis/` — regenerated automatically by pipelines
+- `$POSTGRES_DATA_DIR` raw directory — use SQL dump instead (portable across architectures)
+- `$REDIS_DATA_DIR` — regenerated automatically by pipelines
 - `node_modules/`, `.venv/`, `__pycache__/` — rebuilt by Docker
 - `frontend/.next/` — rebuilt on container start
 

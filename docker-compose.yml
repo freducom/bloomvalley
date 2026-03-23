@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-warren}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-warren}
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-warren} -d ${POSTGRES_DB:-warren}"]
       interval: 5s
@@ -23,7 +23,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./data/redis:/data
+      - ${REDIS_DATA_DIR:-./data/redis}:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
