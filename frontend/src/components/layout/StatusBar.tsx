@@ -24,83 +24,52 @@ interface ExchangeSchedule {
   afterHoursEndHour?: number;
 }
 
-// MIC code → schedule + display label
-const ALL_EXCHANGES: Record<string, ExchangeSchedule & { label: string }> = {
-  XHEL: {
-    label: "Helsinki",
-    tz: "Europe/Helsinki",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 10, openMinute: 0,
-    closeHour: 18, closeMinute: 30,
+// Market groups — exchanges that share the same trading hours shown as one entry.
+// Each group has a display label, schedule, and the MIC codes it covers.
+const MARKET_GROUPS: { label: string; mics: string[]; schedule: ExchangeSchedule }[] = [
+  {
+    label: "Nordic",
+    mics: ["XHEL", "XSTO", "XCSE"],
+    schedule: {
+      tz: "Europe/Helsinki",
+      tradingDays: [1, 2, 3, 4, 5],
+      openHour: 10, openMinute: 0,  // 10:00 EET = 09:00 CET
+      closeHour: 18, closeMinute: 30,
+    },
   },
-  XSTO: {
-    label: "Stockholm",
-    tz: "Europe/Stockholm",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 0,
-    closeHour: 17, closeMinute: 30,
+  {
+    label: "EU",
+    mics: ["XAMS", "XETR", "XPAR", "XSWX"],
+    schedule: {
+      tz: "Europe/Paris",
+      tradingDays: [1, 2, 3, 4, 5],
+      openHour: 9, openMinute: 0,
+      closeHour: 17, closeMinute: 30,
+    },
   },
-  XCSE: {
-    label: "Copenhagen",
-    tz: "Europe/Copenhagen",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 0,
-    closeHour: 17, closeMinute: 0,
-  },
-  XAMS: {
-    label: "Amsterdam",
-    tz: "Europe/Amsterdam",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 0,
-    closeHour: 17, closeMinute: 30,
-  },
-  XETR: {
-    label: "Frankfurt",
-    tz: "Europe/Berlin",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 0,
-    closeHour: 17, closeMinute: 30,
-  },
-  XPAR: {
-    label: "Paris",
-    tz: "Europe/Paris",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 0,
-    closeHour: 17, closeMinute: 30,
-  },
-  XSWX: {
-    label: "Zurich",
-    tz: "Europe/Zurich",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 0,
-    closeHour: 17, closeMinute: 30,
-  },
-  XLON: {
+  {
     label: "London",
-    tz: "Europe/London",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 8, openMinute: 0,
-    closeHour: 16, closeMinute: 30,
+    mics: ["XLON"],
+    schedule: {
+      tz: "Europe/London",
+      tradingDays: [1, 2, 3, 4, 5],
+      openHour: 8, openMinute: 0,
+      closeHour: 16, closeMinute: 30,
+    },
   },
-  XNYS: {
-    label: "NYSE",
-    tz: "America/New_York",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 30,
-    closeHour: 16, closeMinute: 0,
-    preMarketHour: 4,
-    afterHoursEndHour: 20,
+  {
+    label: "US",
+    mics: ["XNYS", "XNAS", "NMS", "NGS", "NYQ"],
+    schedule: {
+      tz: "America/New_York",
+      tradingDays: [1, 2, 3, 4, 5],
+      openHour: 9, openMinute: 30,
+      closeHour: 16, closeMinute: 0,
+      preMarketHour: 4,
+      afterHoursEndHour: 20,
+    },
   },
-  XNAS: {
-    label: "NASDAQ",
-    tz: "America/New_York",
-    tradingDays: [1, 2, 3, 4, 5],
-    openHour: 9, openMinute: 30,
-    closeHour: 16, closeMinute: 0,
-    preMarketHour: 4,
-    afterHoursEndHour: 20,
-  },
-};
+];
 
 function getLocalTime(tz: string): { hour: number; minute: number; dayOfWeek: number } {
   const now = new Date();
@@ -213,29 +182,13 @@ interface SecurityInfo {
   assetClass: string;
 }
 
-// Deduplicate exchanges that share the same timezone and hours (e.g. XNYS/XNAS)
-function dedupeExchanges(mics: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const mic of mics) {
-    const ex = ALL_EXCHANGES[mic];
-    if (!ex) continue;
-    const key = `${ex.tz}-${ex.openHour}:${ex.openMinute}-${ex.closeHour}:${ex.closeMinute}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(mic);
-    }
-  }
-  return result;
-}
-
 export function StatusBar() {
   const [statuses, setStatuses] = useState<Record<string, { status: MarketStatusType; tooltip?: string }>>({});
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
-  const [userExchanges, setUserExchanges] = useState<string[]>([]);
+  const [activeGroups, setActiveGroups] = useState<typeof MARKET_GROUPS>([]);
   const [hasCrypto, setHasCrypto] = useState(false);
 
-  // Fetch exchanges from all tracked securities
+  // Fetch exchanges from all tracked securities, match to market groups
   useEffect(() => {
     apiGet<SecurityInfo[]>("/securities")
       .then((secs) => {
@@ -246,11 +199,10 @@ export function StatusBar() {
           if (s.assetClass === "crypto") crypto = true;
         }
         setHasCrypto(crypto);
-        // Normalize exchange aliases
-        const ALIASES: Record<string, string> = { NMS: "XNAS", NGS: "XNAS", NYQ: "XNYS" };
-        const normalized = [...exchanges].map((e) => ALIASES[e] || e);
-        const known = normalized.filter((e) => e in ALL_EXCHANGES);
-        setUserExchanges(dedupeExchanges(known));
+        const groups = MARKET_GROUPS.filter((g) =>
+          g.mics.some((mic) => exchanges.has(mic))
+        );
+        setActiveGroups(groups);
       })
       .catch(() => {});
   }, []);
@@ -258,14 +210,12 @@ export function StatusBar() {
   useEffect(() => {
     function update() {
       const s: Record<string, { status: MarketStatusType; tooltip?: string }> = {};
-      for (const mic of userExchanges) {
-        const schedule = ALL_EXCHANGES[mic];
-        if (!schedule) continue;
-        const status = getExchangeStatus(schedule);
+      for (const group of activeGroups) {
+        const status = getExchangeStatus(group.schedule);
         const tooltip = status === "open"
-          ? getTimeUntilClose(schedule)
-          : getTimeUntilOpen(schedule);
-        s[schedule.label] = { status, tooltip };
+          ? getTimeUntilClose(group.schedule)
+          : getTimeUntilOpen(group.schedule);
+        s[group.label] = { status, tooltip };
       }
       if (hasCrypto) {
         s["Crypto"] = { status: "open", tooltip: "24/7 market" };
@@ -275,7 +225,7 @@ export function StatusBar() {
     update();
     const interval = setInterval(update, 30_000);
     return () => clearInterval(interval);
-  }, [userExchanges, hasCrypto]);
+  }, [activeGroups, hasCrypto]);
 
   useEffect(() => {
     apiGet<{ totalValueEurCents: number }>("/portfolio/summary")
