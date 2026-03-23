@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { TickerLink } from "@/components/ui/TickerLink";
@@ -152,9 +152,8 @@ export default function EarningsPage() {
               </thead>
               <tbody className="divide-y divide-terminal-border">
                 {surprises.map((s, i) => (
-                  <>
+                  <React.Fragment key={`${s.securityId}-${s.fiscalQuarter}`}>
                     <tr
-                      key={i}
                       className="hover:bg-terminal-bg-secondary/50 cursor-pointer"
                       onClick={() => loadEstimates(s.securityId)}
                     >
@@ -218,7 +217,7 @@ export default function EarningsPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
