@@ -27,10 +27,10 @@ GLIDEPATH = {
     60: {"equity": 0.30, "fixed_income": 0.60, "crypto": 0.02, "cash": 0.08},
 }
 
-# Position limits
-MAX_SINGLE_STOCK_PCT = 5.0
-MAX_SECTOR_PCT = 20.0
-MAX_CRYPTO_PCT = 10.0
+# Concentration thresholds (informational — no hard limits per investment policy)
+NOTABLE_POSITION_PCT = 10.0  # Flag positions above this for awareness
+NOTABLE_SECTOR_PCT = 30.0    # Flag sectors above this for awareness
+MAX_CRYPTO_PCT = 10.0        # Crypto has an actual glidepath target
 
 # Map asset_class to glidepath categories
 ASSET_CLASS_MAP = {
@@ -306,7 +306,7 @@ def _compute_concentration(holdings, portfolio_total, total_cash):
             "sector": h["sector"],
             "valueCents": val,
             "weight": round(pct, 2),
-            "breach": pct > MAX_SINGLE_STOCK_PCT and h["assetClass"] == "stock",
+            "notable": pct > NOTABLE_POSITION_PCT and h["assetClass"] == "stock",
         })
     positions.sort(key=lambda p: p["weight"], reverse=True)
 
@@ -317,7 +317,7 @@ def _compute_concentration(holdings, portfolio_total, total_cash):
         val = h["marketValueEurCents"] or 0
         sectors[s] = sectors.get(s, 0) + (val / portfolio_total) * 100
     sector_list = [
-        {"sector": s, "weight": round(w, 2), "breach": w > MAX_SECTOR_PCT}
+        {"sector": s, "weight": round(w, 2), "notable": w > NOTABLE_SECTOR_PCT}
         for s, w in sorted(sectors.items(), key=lambda x: x[1], reverse=True)
     ]
 
@@ -341,32 +341,32 @@ def _compute_concentration(holdings, portfolio_total, total_cash):
         "positions": positions,
         "sectors": sector_list,
         "assetClasses": ac_list,
-        "alerts": _concentration_alerts(positions, sectors, crypto_pct),
+        "alerts": _concentration_alerts(positions, sector_list, crypto_pct),
     }
 
 
 def _concentration_alerts(positions, sectors, crypto_pct):
-    """Generate concentration breach alerts."""
+    """Generate concentration awareness alerts (no hard limits per investment policy)."""
     alerts = []
     for p in positions:
-        if p.get("breach"):
+        if p.get("notable"):
             alerts.append({
-                "type": "position",
-                "severity": "warning",
-                "message": f"{p['ticker']} is {p['weight']:.1f}% of portfolio (limit: {MAX_SINGLE_STOCK_PCT}%)",
+                "type": "concentration",
+                "severity": "info",
+                "message": f"{p['ticker']} is {p['weight']:.1f}% of portfolio — notable concentration",
             })
-    for s, w in sectors.items():
-        if w > MAX_SECTOR_PCT:
+    for s in sectors:
+        if isinstance(s, dict) and s.get("notable"):
             alerts.append({
-                "type": "sector",
-                "severity": "warning",
-                "message": f"{s} sector is {w:.1f}% of portfolio (limit: {MAX_SECTOR_PCT}%)",
+                "type": "concentration",
+                "severity": "info",
+                "message": f"{s['sector']} sector is {s['weight']:.1f}% of portfolio — notable concentration",
             })
     if crypto_pct > MAX_CRYPTO_PCT:
         alerts.append({
             "type": "crypto",
             "severity": "warning",
-            "message": f"Crypto allocation is {crypto_pct:.1f}% (limit: {MAX_CRYPTO_PCT}%)",
+            "message": f"Crypto allocation is {crypto_pct:.1f}% (glidepath target: {MAX_CRYPTO_PCT}%)",
         })
     return alerts
 

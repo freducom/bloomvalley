@@ -27,7 +27,7 @@ interface Position {
   sector: string | null;
   valueCents: number;
   weight: number;
-  breach: boolean;
+  notable: boolean;
 }
 
 interface ConcentrationAlert {
@@ -38,7 +38,7 @@ interface ConcentrationAlert {
 
 interface Concentration {
   positions: Position[];
-  sectors: { sector: string; weight: number; breach: boolean }[];
+  sectors: { sector: string; weight: number; notable: boolean }[];
   assetClasses: { assetClass: string; weight: number }[];
   alerts: ConcentrationAlert[];
 }
@@ -148,7 +148,11 @@ export default function RiskPage() {
           {data.concentration.alerts.map((alert, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border bg-yellow-900/20 border-yellow-700/50 text-yellow-400 text-sm"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm ${
+                alert.severity === "warning"
+                  ? "bg-yellow-900/20 border-yellow-700/50 text-yellow-400"
+                  : "bg-blue-900/20 border-blue-700/50 text-blue-400"
+              }`}
             >
               <span className="font-mono text-xs uppercase">{alert.type}</span>
               <span>{alert.message}</span>
@@ -271,16 +275,16 @@ function TopPositionsCard({ positions }: { positions: Position[] }) {
       <div className="space-y-1.5">
         {top.map((p, i) => (
           <div key={`${p.ticker}-${i}`} className="flex items-center gap-2">
-            <span className={`font-mono text-sm w-20 ${p.breach ? "text-yellow-400" : ""}`}>
-              <TickerLink ticker={p.ticker} className={`font-mono hover:underline ${p.breach ? "text-yellow-400" : "text-terminal-accent"}`} />
+            <span className={`font-mono text-sm w-20 ${p.notable ? "text-yellow-400" : ""}`}>
+              <TickerLink ticker={p.ticker} className={`font-mono hover:underline ${p.notable ? "text-yellow-400" : "text-terminal-accent"}`} />
             </span>
             <div className="flex-1 h-2 bg-terminal-bg-tertiary rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${p.breach ? "bg-yellow-400" : "bg-blue-500"}`}
+                className={`h-full rounded-full ${p.notable ? "bg-yellow-400" : "bg-blue-500"}`}
                 style={{ width: `${Math.min(p.weight * 2, 100)}%` }}
               />
             </div>
-            <span className={`font-mono text-sm w-14 text-right ${p.breach ? "text-yellow-400" : ""}`}>
+            <span className={`font-mono text-sm w-14 text-right ${p.notable ? "text-yellow-400" : ""}`}>
               {p.weight.toFixed(1)}%
             </span>
           </div>
@@ -290,23 +294,23 @@ function TopPositionsCard({ positions }: { positions: Position[] }) {
   );
 }
 
-function SectorCard({ sectors }: { sectors: { sector: string; weight: number; breach: boolean }[] }) {
+function SectorCard({ sectors }: { sectors: { sector: string; weight: number; notable: boolean }[] }) {
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
       <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Sector Exposure</h3>
       <div className="space-y-1.5">
         {sectors.map((s) => (
           <div key={s.sector} className="flex items-center gap-2">
-            <span className={`text-sm w-32 truncate ${s.breach ? "text-yellow-400" : ""}`}>
+            <span className={`text-sm w-32 truncate ${s.notable ? "text-yellow-400" : ""}`}>
               {s.sector}
             </span>
             <div className="flex-1 h-2 bg-terminal-bg-tertiary rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full ${s.breach ? "bg-yellow-400" : "bg-purple-500"}`}
+                className={`h-full rounded-full ${s.notable ? "bg-yellow-400" : "bg-purple-500"}`}
                 style={{ width: `${Math.min(s.weight * 2, 100)}%` }}
               />
             </div>
-            <span className={`font-mono text-sm w-14 text-right ${s.breach ? "text-yellow-400" : ""}`}>
+            <span className={`font-mono text-sm w-14 text-right ${s.notable ? "text-yellow-400" : ""}`}>
               {s.weight.toFixed(1)}%
             </span>
           </div>
