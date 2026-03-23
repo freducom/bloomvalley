@@ -318,6 +318,9 @@ function ActiveTab() {
           </span>
         )}
         <div className="ml-auto flex items-center gap-4">
+          <span className="text-xs text-terminal-text-tertiary font-mono">
+            {new Date(r.recommendedDate).toLocaleString("fi-FI", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </span>
           {r.entryPriceCents && (
             <span className="text-xs font-mono text-terminal-text-secondary">
               Entry: <Private>{formatCurrency(r.entryPriceCents, r.currency)}</Private>
