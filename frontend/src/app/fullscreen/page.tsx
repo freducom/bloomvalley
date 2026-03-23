@@ -265,7 +265,7 @@ export default function FullscreenDashboard() {
           </div>
 
           {/* Clock */}
-          <span className="font-mono text-lg text-terminal-text-secondary ml-2">{helsinkiTime}</span>
+          <span className="font-mono text-lg text-terminal-text-secondary ml-2" suppressHydrationWarning>{helsinkiTime}</span>
 
           {/* Privacy toggle */}
           <button
