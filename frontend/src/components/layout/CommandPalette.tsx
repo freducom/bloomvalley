@@ -176,7 +176,7 @@ export function CommandPalette() {
             id: `s-${s.id}`,
             label: `${s.ticker} — ${s.name}`,
             category: "security" as const,
-            href: `/charts?security=${s.id}`,
+            href: `/security/${s.ticker}`,
             badge: s.assetClass,
           }))
         );
@@ -214,8 +214,8 @@ export function CommandPalette() {
       (a) => a.label.toLowerCase().includes(q)
     ).slice(0, 5);
 
-    if (matchedFeatures.length > 0) sections.push({ category: "Features", items: matchedFeatures });
     if (securities.length > 0) sections.push({ category: "Securities", items: securities });
+    if (matchedFeatures.length > 0) sections.push({ category: "Features", items: matchedFeatures });
     if (matchedActions.length > 0) sections.push({ category: "Actions", items: matchedActions });
 
     return sections;
