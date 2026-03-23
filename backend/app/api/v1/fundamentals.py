@@ -62,10 +62,17 @@ class EarningsReportCreate(BaseModel):
 # ── Helpers ──
 
 def _fundamentals_to_dict(f: SecurityFundamentals, sec: Security, current_price: int | None = None) -> dict:
-    # Calculate DCF upside/downside
+    # Calculate DCF upside/downside (compare total DCF value to market cap)
     dcf_upside = None
-    if f.dcf_value_cents and current_price and current_price > 0:
-        dcf_upside = round((f.dcf_value_cents - current_price) / current_price * 100, 2)
+    if f.dcf_value_cents and f.market_cap_cents and f.market_cap_cents > 0:
+        dcf_upside = round((f.dcf_value_cents - f.market_cap_cents) / f.market_cap_cents * 100, 2)
+
+    # Compute per-share DCF value: dcf_total / shares_outstanding
+    # shares_outstanding = market_cap / current_price
+    dcf_per_share_cents = None
+    if f.dcf_value_cents and f.market_cap_cents and current_price and current_price > 0 and f.market_cap_cents > 0:
+        shares_outstanding = f.market_cap_cents / current_price
+        dcf_per_share_cents = round(f.dcf_value_cents / shares_outstanding)
 
     return {
         "id": f.id,
@@ -79,6 +86,7 @@ def _fundamentals_to_dict(f: SecurityFundamentals, sec: Security, current_price:
         "freeCashFlowCents": f.free_cash_flow_cents,
         "fcfCurrency": f.fcf_currency,
         "dcfValueCents": f.dcf_value_cents,
+        "dcfPerShareCents": dcf_per_share_cents,
         "dcfDiscountRate": float(f.dcf_discount_rate) if f.dcf_discount_rate is not None else None,
         "dcfTerminalGrowth": float(f.dcf_terminal_growth) if f.dcf_terminal_growth is not None else None,
         "dcfModelNotes": f.dcf_model_notes,

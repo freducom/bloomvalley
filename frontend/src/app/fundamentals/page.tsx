@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent, formatLargeNumber } from "@/lib/format";
+import { TickerLink } from "@/components/ui/TickerLink";
 
 /* ── Types ── */
 
@@ -17,6 +18,7 @@ interface Fundamentals {
   freeCashFlowCents: number | null;
   fcfCurrency: string | null;
   dcfValueCents: number | null;
+  dcfPerShareCents: number | null;
   dcfDiscountRate: number | null;
   dcfTerminalGrowth: number | null;
   dcfModelNotes: string | null;
@@ -183,7 +185,7 @@ function OverviewTab() {
           {data.map((f) => (
             <tr key={f.id} className="border-b border-terminal-border/50 hover:bg-terminal-bg-tertiary">
               <td className="p-3">
-                <span className="font-mono text-terminal-accent mr-2">{f.ticker}</span>
+                <TickerLink ticker={f.ticker} className="font-mono text-terminal-accent mr-2 hover:underline" />
                 <span className="text-xs text-terminal-text-secondary">{f.securityName}</span>
               </td>
               <td className="text-right p-3 font-mono text-xs">
@@ -289,7 +291,7 @@ function DcfTab() {
             className="flex items-center gap-3 p-4 cursor-pointer hover:bg-terminal-bg-tertiary"
             onClick={() => setExpanded(expanded === f.id ? null : f.id)}
           >
-            <span className="font-mono text-terminal-accent">{f.ticker}</span>
+            <TickerLink ticker={f.ticker} />
             <span className="text-xs text-terminal-text-secondary">{f.securityName}</span>
             <div className="ml-auto flex items-center gap-6">
               <div className="text-right">
@@ -297,8 +299,8 @@ function DcfTab() {
                 <span className="font-mono text-sm">{f.currentPriceCents ? formatCurrency(f.currentPriceCents, f.currency) : "-"}</span>
               </div>
               <div className="text-right">
-                <span className="text-xs text-terminal-text-secondary block">DCF Value</span>
-                <span className="font-mono text-sm">{f.dcfValueCents ? formatCurrency(f.dcfValueCents, f.currency) : "-"}</span>
+                <span className="text-xs text-terminal-text-secondary block">DCF / Share</span>
+                <span className="font-mono text-sm">{f.dcfPerShareCents ? formatCurrency(f.dcfPerShareCents, f.currency) : "-"}</span>
               </div>
               <div className="text-right">
                 <span className="text-xs text-terminal-text-secondary block">Upside</span>
@@ -404,7 +406,7 @@ function ShortsTab() {
               f.shortSqueezeRisk === "high" ? "bg-terminal-warning/5" : ""
             }`}>
               <td className="p-3">
-                <span className="font-mono text-terminal-accent mr-2">{f.ticker}</span>
+                <TickerLink ticker={f.ticker} className="font-mono text-terminal-accent mr-2 hover:underline" />
                 <span className="text-xs text-terminal-text-secondary">{f.securityName}</span>
               </td>
               <td className={`text-right p-3 font-mono text-xs font-medium ${
@@ -475,7 +477,7 @@ function SmartMoneyTab() {
         <div key={f.id} className="border border-terminal-border rounded bg-terminal-bg-secondary p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-terminal-accent">{f.ticker}</span>
+              <TickerLink ticker={f.ticker} />
               <span className="text-xs text-terminal-text-secondary">{f.securityName}</span>
             </div>
             <div className="flex items-center gap-4">
@@ -548,7 +550,7 @@ function EarningsTab() {
               className="flex items-center gap-3 p-4 cursor-pointer hover:bg-terminal-bg-tertiary"
               onClick={() => setExpanded(expanded === r.id ? null : r.id)}
             >
-              <span className="font-mono text-terminal-accent">{r.ticker}</span>
+              {r.ticker && <TickerLink ticker={r.ticker} />}
               <span className="text-xs text-terminal-text-secondary">{r.securityName}</span>
               <span className="text-xs font-mono text-terminal-text-primary ml-2">{r.fiscalQuarter}</span>
               {r.recommendation && (
