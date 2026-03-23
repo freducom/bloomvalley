@@ -269,8 +269,8 @@ function TopPositionsCard({ positions }: { positions: Position[] }) {
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
       <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Top 10 Positions</h3>
       <div className="space-y-1.5">
-        {top.map((p) => (
-          <div key={p.ticker} className="flex items-center gap-2">
+        {top.map((p, i) => (
+          <div key={`${p.ticker}-${i}`} className="flex items-center gap-2">
             <span className={`font-mono text-sm w-20 ${p.breach ? "text-yellow-400" : ""}`}>
               <TickerLink ticker={p.ticker} className={`font-mono hover:underline ${p.breach ? "text-yellow-400" : "text-terminal-accent"}`} />
             </span>
