@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { apiGet, apiGetRaw } from "@/lib/api";
+import { apiGet, apiGetRaw, apiPost } from "@/lib/api";
 import { TickerLink } from "@/components/ui/TickerLink";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -281,8 +281,186 @@ export default function PortfolioPage() {
               </div>
             )}
           </div>
+
+          {/* Brinson Attribution */}
+          <BrinsonAttribution />
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Brinson Return Attribution ── */
+
+interface AttributionRow {
+  group: string;
+  portfolioWeight: number;
+  benchmarkWeight: number;
+  portfolioReturn: number;
+  benchmarkReturn: number;
+  allocationEffect: number;
+  selectionEffect: number;
+  interactionEffect: number;
+  activeReturn: number;
+  holdings: number;
+}
+
+interface AttributionData {
+  attribution: AttributionRow[];
+  summary: {
+    portfolioReturn: number;
+    benchmarkReturn: number;
+    activeReturn: number;
+    allocationEffect: number;
+    selectionEffect: number;
+    interactionEffect: number;
+  };
+  benchmark: { ticker: string | null; found: boolean };
+  period: { from: string; to: string };
+  groupBy: string;
+}
+
+function BrinsonAttribution() {
+  const [data, setData] = useState<AttributionData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<"sector" | "assetClass">("sector");
+  const [snapshotting, setSnapshotting] = useState(false);
+
+  // Default: last 30 days
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().split("T")[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  const fetchAttribution = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiGetRaw<{ data: AttributionData }>(
+        `/attribution/brinson?from=${fromDate}&to=${toDate}&groupBy=${groupBy}`
+      );
+      setData(res.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load attribution");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [fromDate, toDate, groupBy]);
+
+  useEffect(() => { fetchAttribution(); }, [fetchAttribution]);
+
+  const takeSnapshot = async () => {
+    setSnapshotting(true);
+    try {
+      await apiPost("/portfolio/snapshot");
+      fetchAttribution();
+    } catch { /* */ }
+    finally { setSnapshotting(false); }
+  };
+
+  const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+  const colorPct = (v: number) => v > 0 ? "text-terminal-positive" : v < 0 ? "text-terminal-negative" : "text-terminal-text-tertiary";
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">Return Attribution (Brinson)</h2>
+        <div className="flex items-center gap-2">
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+            className="bg-terminal-bg-secondary border border-terminal-border rounded px-2 py-1 text-xs font-mono" />
+          <span className="text-terminal-text-tertiary text-xs">to</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+            className="bg-terminal-bg-secondary border border-terminal-border rounded px-2 py-1 text-xs font-mono" />
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "sector" | "assetClass")}
+            className="bg-terminal-bg-secondary border border-terminal-border rounded px-2 py-1 text-xs">
+            <option value="sector">By Sector</option>
+            <option value="assetClass">By Asset Class</option>
+          </select>
+          <button onClick={takeSnapshot} disabled={snapshotting}
+            className="px-2 py-1 text-xs font-mono border border-terminal-border text-terminal-text-secondary rounded hover:text-terminal-accent hover:border-terminal-accent disabled:opacity-40">
+            {snapshotting ? "..." : "Snapshot"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="text-sm text-terminal-warning bg-terminal-warning/10 border border-terminal-warning/20 rounded p-3 mb-3">
+          {error}. Try taking a snapshot first.
+        </div>
+      )}
+
+      {loading ? (
+        <div className="h-32 bg-terminal-bg-secondary rounded animate-pulse" />
+      ) : data ? (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+            <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
+              <div className="text-xs text-terminal-text-tertiary">Portfolio</div>
+              <div className={`text-sm font-mono font-bold ${colorPct(data.summary.portfolioReturn)}`}>{fmtPct(data.summary.portfolioReturn)}</div>
+            </div>
+            <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
+              <div className="text-xs text-terminal-text-tertiary">Benchmark{data.benchmark.ticker ? ` (${data.benchmark.ticker})` : ""}</div>
+              <div className={`text-sm font-mono font-bold ${colorPct(data.summary.benchmarkReturn)}`}>{fmtPct(data.summary.benchmarkReturn)}</div>
+            </div>
+            <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
+              <div className="text-xs text-terminal-text-tertiary">Active Return</div>
+              <div className={`text-sm font-mono font-bold ${colorPct(data.summary.activeReturn)}`}>{fmtPct(data.summary.activeReturn)}</div>
+            </div>
+            <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
+              <div className="text-xs text-terminal-text-tertiary">Allocation</div>
+              <div className={`text-sm font-mono font-bold ${colorPct(data.summary.allocationEffect)}`}>{fmtPct(data.summary.allocationEffect)}</div>
+            </div>
+            <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
+              <div className="text-xs text-terminal-text-tertiary">Selection</div>
+              <div className={`text-sm font-mono font-bold ${colorPct(data.summary.selectionEffect)}`}>{fmtPct(data.summary.selectionEffect)}</div>
+            </div>
+            <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
+              <div className="text-xs text-terminal-text-tertiary">Interaction</div>
+              <div className={`text-sm font-mono font-bold ${colorPct(data.summary.interactionEffect)}`}>{fmtPct(data.summary.interactionEffect)}</div>
+            </div>
+          </div>
+
+          {/* Attribution table */}
+          <div className="border border-terminal-border rounded-md overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-terminal-bg-secondary text-terminal-text-secondary text-xs">
+                  <th className="text-left px-3 py-2 font-medium">{groupBy === "sector" ? "Sector" : "Asset Class"}</th>
+                  <th className="text-right px-3 py-2 font-medium">Wt (P)</th>
+                  <th className="text-right px-3 py-2 font-medium">Wt (B)</th>
+                  <th className="text-right px-3 py-2 font-medium">Ret (P)</th>
+                  <th className="text-right px-3 py-2 font-medium">Ret (B)</th>
+                  <th className="text-right px-3 py-2 font-medium">Allocation</th>
+                  <th className="text-right px-3 py-2 font-medium">Selection</th>
+                  <th className="text-right px-3 py-2 font-medium">Interaction</th>
+                  <th className="text-right px-3 py-2 font-medium">Active</th>
+                  <th className="text-right px-3 py-2 font-medium">#</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-terminal-border">
+                {data.attribution.map((a) => (
+                  <tr key={a.group} className="hover:bg-terminal-bg-secondary/50">
+                    <td className="px-3 py-2 font-medium">{a.group}</td>
+                    <td className="px-3 py-2 text-right font-mono">{a.portfolioWeight.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right font-mono text-terminal-text-tertiary">{a.benchmarkWeight.toFixed(1)}%</td>
+                    <td className={`px-3 py-2 text-right font-mono ${colorPct(a.portfolioReturn)}`}>{fmtPct(a.portfolioReturn)}</td>
+                    <td className={`px-3 py-2 text-right font-mono text-terminal-text-tertiary`}>{fmtPct(a.benchmarkReturn)}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${colorPct(a.allocationEffect)}`}>{fmtPct(a.allocationEffect)}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${colorPct(a.selectionEffect)}`}>{fmtPct(a.selectionEffect)}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${colorPct(a.interactionEffect)}`}>{fmtPct(a.interactionEffect)}</td>
+                    <td className={`px-3 py-2 text-right font-mono font-medium ${colorPct(a.activeReturn)}`}>{fmtPct(a.activeReturn)}</td>
+                    <td className="px-3 py-2 text-right text-terminal-text-tertiary">{a.holdings}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
@@ -35,15 +35,38 @@ interface DividendByHolding {
   annualIncomeCents: number;
 }
 
-type SortKey = "ticker" | "name" | "accountName" | "assetClass" | "quantity" | "avgCostCents" | "currentPriceCents" | "marketValueEurCents" | "unrealizedPnlCents" | "unrealizedPnlPct" | "upcomingDivCents";
+interface LiveQuote {
+  securityId: number;
+  ticker: string;
+  current: number;
+  change: number;
+  changePercent: number;
+}
+
+type SortKey = "ticker" | "name" | "accountName" | "assetClass" | "quantity" | "avgCostCents" | "currentPriceCents" | "marketValueEurCents" | "unrealizedPnlCents" | "unrealizedPnlPct" | "upcomingDivCents" | "liveChange";
 
 export default function HoldingsPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [divMap, setDivMap] = useState<Record<number, number>>({}); // securityId -> 6-month income cents
+  const [quoteMap, setQuoteMap] = useState<Record<number, LiveQuote>>({});
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  const [quotesTime, setQuotesTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("marketValueEurCents");
   const [sortAsc, setSortAsc] = useState(false);
   const [filterAccount, setFilterAccount] = useState<string>("all");
+
+  const fetchQuotes = useCallback(async () => {
+    setQuotesLoading(true);
+    try {
+      const res = await apiGetRaw<{ data: LiveQuote[]; meta: { timestamp: string } }>("/quotes/live");
+      const qm: Record<number, LiveQuote> = {};
+      for (const q of res.data) qm[q.securityId] = q;
+      setQuoteMap(qm);
+      setQuotesTime(new Date(res.meta.timestamp).toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" }));
+    } catch { /* */ }
+    finally { setQuotesLoading(false); }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -66,7 +89,10 @@ export default function HoldingsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+    fetchQuotes();
+    const interval = setInterval(fetchQuotes, 5 * 60 * 1000); // 5 min refresh
+    return () => clearInterval(interval);
+  }, [fetchQuotes]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -89,6 +115,7 @@ export default function HoldingsPage() {
     }
     if (sortKey === "quantity") { av = parseFloat(a.quantity) || 0; bv = parseFloat(b.quantity) || 0; }
     else if (sortKey === "upcomingDivCents") { av = divMap[a.securityId] ?? 0; bv = divMap[b.securityId] ?? 0; }
+    else if (sortKey === "liveChange") { av = quoteMap[a.securityId]?.changePercent ?? -Infinity; bv = quoteMap[b.securityId]?.changePercent ?? -Infinity; }
     else { av = (a[sortKey] ?? -Infinity) as number; bv = (b[sortKey] ?? -Infinity) as number; }
     return sortAsc ? av - bv : bv - av;
   });
@@ -145,6 +172,11 @@ export default function HoldingsPage() {
                 Div 6M: <Private>{formatCurrency(totalDiv6m)}</Private>
               </span>
             )}
+            {quotesTime && (
+              <span className="ml-3 text-terminal-text-tertiary text-xs">
+                Live {quotesTime}{quotesLoading ? " ..." : ""}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -159,7 +191,8 @@ export default function HoldingsPage() {
               <TH k="assetClass" align="text-left">Class</TH>
               <TH k="quantity">Qty</TH>
               <TH k="avgCostCents">Avg Cost</TH>
-              <TH k="currentPriceCents">Price</TH>
+              <TH k="currentPriceCents">Close</TH>
+              <TH k="liveChange">Live</TH>
               <TH k="marketValueEurCents">Market Value</TH>
               <TH k="unrealizedPnlCents">P&L</TH>
               <TH k="unrealizedPnlPct">P&L %</TH>
@@ -204,6 +237,18 @@ export default function HoldingsPage() {
                     {h.currentPriceCents != null
                       ? formatCurrency(h.currentPriceCents, h.priceCurrency)
                       : <span className="text-terminal-text-tertiary">--</span>}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono text-sm">
+                    {quoteMap[h.securityId] ? (
+                      <div>
+                        <span className="text-terminal-text-primary">{quoteMap[h.securityId].current.toFixed(2)}</span>
+                        <span className={`ml-1 text-xs ${quoteMap[h.securityId].changePercent >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
+                          {quoteMap[h.securityId].changePercent >= 0 ? "+" : ""}{quoteMap[h.securityId].changePercent.toFixed(2)}%
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-terminal-text-tertiary">--</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-sm">
                     <Private>{h.marketValueEurCents != null ? formatCurrency(h.marketValueEurCents) : "--"}</Private>

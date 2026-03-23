@@ -24,6 +24,7 @@ import {
   ThumbsUp,
   Bell,
   Activity,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -69,6 +70,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Risk", href: "/risk", icon: ShieldAlert },
       { label: "Research", href: "/research", icon: BookOpen },
       { label: "Fundamentals", href: "/fundamentals", icon: BarChart3 },
+      { label: "Earnings", href: "/earnings", icon: CalendarClock },
     ],
   },
   {
