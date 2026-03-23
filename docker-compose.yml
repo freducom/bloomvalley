@@ -78,3 +78,24 @@ services:
       - TZ=Europe/Helsinki
     command: ["python", "cron_scheduler.py"]
     restart: unless-stopped
+
+  # AI Analyst Swarm — runs 9 analysts + portfolio manager on schedule
+  # Configure via analyst-swarm/config.local.yaml or env vars
+  analyst-swarm:
+    build: ./analyst-swarm
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      - TZ=Europe/Helsinki
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-claude}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-}
+      - BACKEND_URL=http://backend:8000/api/v1
+      - MAX_PARALLEL=${MAX_PARALLEL:-4}
+    volumes:
+      - ./.claude/agents:/app/agents:ro
+      - ./analyst-swarm/config.local.yaml:/app/config.local.yaml:ro
+    restart: unless-stopped

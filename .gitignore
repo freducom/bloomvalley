@@ -61,3 +61,6 @@ data/
 .claude/settings*.json
 .claude/projects/
 memory/
+
+# Analyst swarm local config (contains API keys)
+analyst-swarm/config.local.yaml

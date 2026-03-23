@@ -1,0 +1,60 @@
+# Analyst Swarm Configuration
+# Copy to config.local.yaml and customize for your deployment
+
+# LLM Provider: "claude" or "ollama"
+llm_provider: "claude"
+
+# Claude API settings (used when llm_provider: "claude")
+claude:
+  api_key: ""  # Set via ANTHROPIC_API_KEY env var or here
+  model: "claude-sonnet-4-20250514"  # or claude-opus-4-20250514 for highest quality
+  max_tokens: 8192
+
+# Ollama settings (used when llm_provider: "ollama")
+ollama:
+  base_url: "http://host.docker.internal:11434"  # Ollama server URL
+  model: "llama3.1:70b"  # or mistral-large, qwen2.5:72b, etc.
+  max_tokens: 8192
+
+# Backend API
+backend_url: "http://backend:8000/api/v1"
+
+# Schedule (cron expressions, timezone Europe/Helsinki)
+schedule:
+  - "0 7 * * *"    # 7:00 AM
+  - "0 12 * * *"   # 12:00 PM
+  - "0 19 * * *"   # 7:00 PM
+
+# Which agents to run (order matters — portfolio-manager runs last)
+agents:
+  - research-analyst
+  - risk-manager
+  - quant-analyst
+  - macro-strategist
+  - fixed-income-analyst
+  - tax-strategist
+  - technical-analyst
+  - compliance-officer
+  - portfolio-manager  # Always last — synthesizes all inputs
+
+# Parallel execution: how many agents run simultaneously
+# Set to 1 for local LLMs with limited VRAM
+max_parallel: 4
+
+# Pipeline refresh: run all data pipelines before analyst swarm
+refresh_pipelines: true
+pipelines:
+  - yahoo_daily_prices
+  - ecb_fx_rates
+  - fred_macro_indicators
+  - ecb_macro_indicators
+  - yahoo_dividends
+  - google_news
+  - regional_news
+  - openinsider
+  - nasdaq_nordic_insider
+  - fi_se_insider
+  - yahoo_fundamentals
+
+# Pipeline wait timeout (seconds)
+pipeline_timeout: 300
