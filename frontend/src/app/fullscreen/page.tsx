@@ -292,12 +292,16 @@ export default function FullscreenDashboard() {
   const [time, setTime] = useState(new Date());
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const [page, setPage] = useState(0);
+  const touchStartX = useRef(0);
+
   // Data state
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>([]);
+  const [holdingAnalysis, setHoldingAnalysis] = useState<Record<string, string>>({});
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Clock
@@ -349,6 +353,23 @@ export default function FullscreenDashboard() {
       if (n.status === "fulfilled") setNews(n.value);
       if (a.status === "fulfilled" && a.value?.data) setHeatmapData(a.value.data);
       setLastUpdated(new Date());
+
+      // Extract per-ticker analysis from research analyst report
+      try {
+        const analystRes = await apiGetRaw<{ data: { thesis: string }[] }>(
+          "/research/notes?tag=research-analyst&limit=1"
+        );
+        if (analystRes?.data?.[0]?.thesis) {
+          const report = analystRes.data[0].thesis;
+          const sections: Record<string, string> = {};
+          const pattern = /^## (?:W-)?\d+\.\s+(\S+)\s*[—–-]\s*[^\n]*\n([\s\S]*?)(?=\n## (?:W-)?\d+\.|$)/gm;
+          let match;
+          while ((match = pattern.exec(report)) !== null) {
+            sections[match[1]] = match[2].trim();
+          }
+          setHoldingAnalysis(sections);
+        }
+      } catch { /* */ }
     } catch {}
   }, []);
 
@@ -371,7 +392,7 @@ export default function FullscreenDashboard() {
     } catch {}
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts + page navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f") {
@@ -381,6 +402,8 @@ export default function FullscreenDashboard() {
       if (e.key === "Escape" && !document.fullscreenElement) {
         router.push("/portfolio");
       }
+      if (e.key === "ArrowLeft") setPage(0);
+      if (e.key === "ArrowRight") setPage(1);
     };
     document.addEventListener("keydown", handler);
 
@@ -462,8 +485,31 @@ export default function FullscreenDashboard() {
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 grid grid-cols-[2fr_1fr] grid-rows-3 gap-[2px] p-[2px] min-h-0">
+      {/* Page indicator */}
+      <div className="flex justify-center gap-2 py-1 shrink-0">
+        {[0, 1].map((p) => (
+          <button
+            key={p}
+            onClick={() => setPage(p)}
+            className={`w-2 h-2 rounded-full transition-colors ${page === p ? "bg-terminal-accent" : "bg-terminal-text-tertiary/30"}`}
+          />
+        ))}
+      </div>
+
+      {/* Swipeable content */}
+      <div
+        className="flex-1 min-h-0 overflow-hidden"
+        onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          const dx = e.changedTouches[0].clientX - touchStartX.current;
+          if (dx > 60) setPage(Math.max(0, page - 1));
+          if (dx < -60) setPage(Math.min(1, page + 1));
+        }}
+      >
+
+      {/* Page 1: Dashboard */}
+      <div className={`h-full ${page === 0 ? "" : "hidden"}`}>
+      <div className="h-full grid grid-cols-[2fr_1fr] grid-rows-3 gap-[2px] p-[2px]">
         {/* Panel 1: Portfolio Summary */}
         <div className="bg-terminal-bg-secondary rounded p-6 flex flex-col justify-center overflow-hidden">
           <div className="flex items-start justify-between">
@@ -713,6 +759,82 @@ export default function FullscreenDashboard() {
             Last updated: {lastUpdated?.toLocaleTimeString("fi-FI", { timeZone: "Europe/Helsinki" }) ?? "---"}
           </div>
         </div>
+      </div>
+      </div>
+
+      {/* Page 2: Holdings Analysis */}
+      <div className={`h-full ${page === 1 ? "" : "hidden"}`}>
+        <div className="h-full overflow-y-auto p-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+            {[...holdings]
+              .sort((a, b) => b.marketValueEurCents - a.marketValueEurCents)
+              .map((h) => {
+                const analysis = holdingAnalysis[h.ticker] || "";
+                // Extract bull/bear cases from the analysis section
+                const bullMatch = analysis.match(/\*\*Bull Case\*\*[^*]*\n([\s\S]*?)(?=\*\*Bear Case\*\*|\*\*Base Case\*\*|\*\*Moat|\n##|$)/i);
+                const bearMatch = analysis.match(/\*\*Bear Case\*\*[^*]*\n([\s\S]*?)(?=\*\*Base Case\*\*|\*\*Moat|\*\*Intrinsic|\n##|$)/i);
+                // Extract first paragraph as summary (investment thesis)
+                const thesisMatch = analysis.match(/\*\*Investment Thesis\*\*\n([\s\S]*?)(?=\n\*\*|\n##|$)/i);
+                const summary = thesisMatch?.[1]?.trim().slice(0, 300) || analysis.slice(0, 300);
+                const bull = bullMatch?.[1]?.trim().slice(0, 200) || "";
+                const bear = bearMatch?.[1]?.trim().slice(0, 200) || "";
+                const pct = h.unrealizedPnlPct;
+
+                return (
+                  <div
+                    key={`${h.securityId}-tile`}
+                    className="bg-terminal-bg-secondary border border-terminal-border rounded p-4 flex flex-col gap-2"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-terminal-accent text-sm">{h.ticker}</span>
+                        <span className="text-xs text-terminal-text-tertiary truncate max-w-[150px]">{h.name}</span>
+                      </div>
+                      <span className={`font-mono text-xs font-bold ${pct >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
+                        {pct >= 0 ? "+" : ""}{pct.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    {/* Value */}
+                    <div className="text-xs text-terminal-text-secondary">
+                      <Private>{formatCurrency(h.marketValueEurCents)}</Private>
+                      <span className="text-terminal-text-tertiary"> · {parseFloat(h.quantity).toFixed(0)} shares</span>
+                    </div>
+
+                    {/* AI Summary or placeholder */}
+                    {summary ? (
+                      <p className="text-[11px] text-terminal-text-secondary leading-relaxed line-clamp-3">
+                        {summary.replace(/\*\*/g, "")}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-terminal-text-tertiary italic">No analysis available</p>
+                    )}
+
+                    {/* Bull / Bear */}
+                    {(bull || bear) && (
+                      <div className="grid grid-cols-2 gap-2 mt-auto">
+                        {bull && (
+                          <div className="text-[10px] leading-snug">
+                            <span className="font-semibold text-terminal-positive">Bull</span>
+                            <p className="text-terminal-text-tertiary mt-0.5 line-clamp-3">{bull.replace(/\*\*/g, "")}</p>
+                          </div>
+                        )}
+                        {bear && (
+                          <div className="text-[10px] leading-snug">
+                            <span className="font-semibold text-terminal-negative">Bear</span>
+                            <p className="text-terminal-text-tertiary mt-0.5 line-clamp-3">{bear.replace(/\*\*/g, "")}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+
       </div>
     </div>
   );
