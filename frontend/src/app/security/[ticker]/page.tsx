@@ -308,9 +308,11 @@ export default function SecurityDetailPage() {
           if (analystRes?.data?.[0]?.thesis) {
             const report = analystRes.data[0].thesis;
             // Find section by ticker (e.g. "### 5. TEAM" or "(TEAM)")
+            const esc = ticker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const patterns = [
-              new RegExp(`###[^\\n]*\\b${ticker}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s|\\n---\\s*\\n|$)`),
-              new RegExp(`##[^\\n]*\\b${ticker}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|\\n---\\s*\\n|$)`),
+              new RegExp(`## \\d+\\.\\s+${esc}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n## \\d+\\.|$)`),
+              new RegExp(`###[^\\n]*\\b${esc}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s|\\n---\\s*\\n|$)`),
+              new RegExp(`##[^\\n]*\\b${esc}\\b[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|\\n---\\s*\\n|$)`),
             ];
             for (const pat of patterns) {
               const match = report.match(pat);
