@@ -72,6 +72,9 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 
 ## Output Format
 
+### 0. EXECUTIVE SUMMARY
+Start the report with a section titled "## EXECUTIVE SUMMARY". Write 2-3 short paragraphs covering: (1) current portfolio status and key allocation drift, (2) macro regime and what it means for the portfolio, (3) the top 3-5 most important actions to take now (ticker, action, one sentence each). This summary must stand alone — a reader should understand the situation and what to do without reading anything else.
+
 ### 1. MACRO paragraph
 Short, punchy macro summary for the current date. Include: key geopolitical events, rates (ECB, Fed, 10Y yields), oil/gold, major index levels, market sentiment. One paragraph, no fluff.
 

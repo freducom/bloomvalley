@@ -138,6 +138,28 @@ function PortfolioManagerBrief() {
     return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   })();
 
+  // Split into executive summary and full report
+  const thesis = note.thesis;
+  let summary = "";
+  let fullReport = thesis;
+
+  // Try to find EXECUTIVE SUMMARY section
+  const execMatch = thesis.match(/##\s*EXECUTIVE SUMMARY\s*\n([\s\S]*?)(?=\n##\s|\n---\s*\n##)/i);
+  if (execMatch) {
+    summary = execMatch[1].trim();
+    fullReport = thesis;
+  } else {
+    // Fallback: use content up to the second ## heading
+    const headings = [...thesis.matchAll(/\n##\s/g)];
+    if (headings.length >= 2) {
+      summary = thesis.slice(0, headings[1].index).trim();
+    } else {
+      summary = thesis.slice(0, 1500);
+    }
+  }
+
+  const proseClasses = "text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent";
+
   return (
     <div className="mb-6 border border-terminal-border rounded bg-terminal-bg-secondary p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -149,21 +171,15 @@ function PortfolioManagerBrief() {
           onClick={() => setExpanded(!expanded)}
           className="text-xs text-terminal-accent hover:underline font-mono"
         >
-          {expanded ? "Collapse" : "Full report"}
+          {expanded ? "Show summary" : "Full report"}
         </button>
       </div>
 
-      {!expanded && (
-        <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.thesis.slice(0, 2000)}</ReactMarkdown>
-        </div>
-      )}
-
-      {expanded && (
-        <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.thesis}</ReactMarkdown>
-        </div>
-      )}
+      <div className={proseClasses}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {expanded ? fullReport : summary}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 }

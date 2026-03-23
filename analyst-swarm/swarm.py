@@ -186,6 +186,7 @@ AGENT_DATA = {
     "research-analyst": [
         "/portfolio/holdings", "/portfolio/summary", "/fundamentals?limit=200",
         "/news?limit=20", "/insiders/signals", "/prices/latest",
+        "/watchlists/",
     ],
     "risk-manager": [
         "/portfolio/holdings", "/portfolio/summary", "/risk/metrics",
