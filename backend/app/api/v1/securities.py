@@ -1,6 +1,9 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
+import structlog
+import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +12,7 @@ from app.api.schemas.securities import SecurityCreate, SecurityResponse
 from app.db.engine import get_session
 from app.db.models.securities import Security
 
+logger = structlog.get_logger()
 router = APIRouter()
 
 
@@ -112,4 +116,44 @@ async def create_security(
             "cacheAge": None,
             "stale": False,
         },
+    }
+
+
+def _yf_lookup(ticker: str) -> dict | None:
+    """Fetch basic info for a ticker from Yahoo Finance (blocking)."""
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info or {}
+        name = info.get("longName") or info.get("shortName")
+        if not name:
+            return None
+        qtype = info.get("quoteType", "").upper()
+        asset_class = "crypto" if qtype == "CRYPTOCURRENCY" else "etf" if qtype == "ETF" else "stock"
+        return {
+            "ticker": ticker.upper(),
+            "name": name,
+            "assetClass": asset_class,
+            "currency": info.get("currency", "USD"),
+            "exchange": info.get("exchange"),
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "country": info.get("country"),
+            "quoteType": qtype,
+            "marketCap": info.get("marketCap"),
+            "currentPrice": info.get("currentPrice") or info.get("regularMarketPrice"),
+        }
+    except Exception as e:
+        logger.warning("yf_lookup_failed", ticker=ticker, error=str(e))
+        return None
+
+
+@router.get("/lookup/{ticker}")
+async def lookup_ticker(ticker: str):
+    """Look up a ticker from Yahoo Finance. Returns basic info without saving."""
+    result = await asyncio.to_thread(_yf_lookup, ticker)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' not found on Yahoo Finance")
+    return {
+        "data": result,
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

@@ -50,6 +50,20 @@ interface SecurityResult {
   assetClass: string;
 }
 
+interface YahooLookup {
+  ticker: string;
+  name: string;
+  assetClass: string;
+  currency: string;
+  exchange: string | null;
+  sector: string | null;
+  industry: string | null;
+  country: string | null;
+  quoteType: string;
+  marketCap: number | null;
+  currentPrice: number | null;
+}
+
 interface AccountResult {
   id: number;
   name: string;
@@ -61,9 +75,15 @@ type AccountType = "regular" | "osakesaastotili";
 function AddSingleHolding() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SecurityResult[]>([]);
+  const [lookupResult, setLookupResult] = useState<YahooLookup | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
   const [selected, setSelected] = useState<SecurityResult | null>(null);
   const [accounts, setAccounts] = useState<AccountResult[]>([]);
   const [accountId, setAccountId] = useState<number | "">("");
+  const [showNewAccount, setShowNewAccount] = useState(false);
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountType, setNewAccountType] = useState("regular");
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [quantity, setQuantity] = useState("");
   const [avgPrice, setAvgPrice] = useState("");
   const [currency, setCurrency] = useState("EUR");
@@ -75,17 +95,22 @@ function AddSingleHolding() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    apiGetRaw<{ data: AccountResult[] }>("/accounts").then((r) => {
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const r = await apiGetRaw<{ data: AccountResult[] }>("/accounts");
       setAccounts(r.data);
-      if (r.data.length > 0) setAccountId(r.data[0].id);
-    }).catch(() => {});
-  }, []);
+      if (r.data.length > 0 && accountId === "") setAccountId(r.data[0].id);
+    } catch { /* */ }
+  }, [accountId]);
+
+  useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
 
   const searchSecurities = useCallback(async (q: string) => {
-    if (q.length < 2) { setResults([]); return; }
+    if (q.length < 2) { setResults([]); setLookupResult(null); return; }
     setSearching(true);
+    setLookupResult(null);
     try {
+      // Search local DB first
       const res = await apiGetRaw<{ data: SecurityResult[] }>(`/securities?q=${encodeURIComponent(q)}&limit=10`);
       setResults(res.data);
     } catch { setResults([]); }
@@ -97,10 +122,75 @@ function AddSingleHolding() {
     return () => clearTimeout(timer);
   }, [query, searchSecurities]);
 
+  const handleLookup = async () => {
+    if (!query.trim()) return;
+    setLookingUp(true);
+    setError(null);
+    try {
+      const res = await apiGet<YahooLookup>(`/securities/lookup/${encodeURIComponent(query.trim())}`);
+      setLookupResult(res);
+    } catch {
+      setError(`Ticker "${query.trim()}" not found on Yahoo Finance`);
+      setLookupResult(null);
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  const handleSelectLookup = async (lk: YahooLookup) => {
+    // Create security in DB, then select it
+    setSaving(true);
+    try {
+      const res = await apiPost<{ data: SecurityResult }>("/securities", {
+        ticker: lk.ticker,
+        name: lk.name,
+        asset_class: lk.assetClass,
+        currency: lk.currency,
+        exchange: lk.exchange,
+        sector: lk.sector,
+        industry: lk.industry,
+        country: lk.country,
+      });
+      const sec = (res as unknown as { data: SecurityResult }).data;
+      setSelected(sec);
+      setCurrency(lk.currency);
+      if (lk.currentPrice) setAvgPrice(String(lk.currentPrice));
+      setQuery("");
+      setResults([]);
+      setLookupResult(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add security");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSelect = (sec: SecurityResult) => {
     setSelected(sec);
     setQuery("");
     setResults([]);
+    setLookupResult(null);
+  };
+
+  const handleCreateAccount = async () => {
+    if (!newAccountName.trim()) return;
+    setCreatingAccount(true);
+    try {
+      const res = await apiPost<{ data: AccountResult }>("/accounts", {
+        name: newAccountName.trim(),
+        type: newAccountType,
+        currency: "EUR",
+      });
+      const acct = (res as unknown as { data: AccountResult }).data;
+      await fetchAccounts();
+      setAccountId(acct.id);
+      setShowNewAccount(false);
+      setNewAccountName("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create account");
+    } finally {
+      setCreatingAccount(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -169,27 +259,71 @@ function AddSingleHolding() {
           </div>
         ) : (
           <>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search security by name or ticker..."
-              className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-3 py-1.5 font-mono text-sm text-terminal-text-primary placeholder-terminal-text-tertiary focus:outline-none focus:border-terminal-accent"
-            />
-            {searching && <div className="absolute right-3 top-2 text-xs text-terminal-text-tertiary">searching...</div>}
-            {results.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-terminal-bg-primary border border-terminal-border rounded shadow-md max-h-48 overflow-y-auto">
-                {results.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleSelect(s)}
-                    className="w-full text-left px-3 py-2 hover:bg-terminal-bg-tertiary flex items-center gap-2 text-sm"
-                  >
-                    <span className="font-mono font-medium text-terminal-accent w-24 shrink-0">{s.ticker || "—"}</span>
-                    <span className="text-terminal-text-primary truncate">{s.name}</span>
-                    <span className="text-xs text-terminal-text-tertiary ml-auto shrink-0">{s.assetClass}</span>
-                  </button>
-                ))}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
+                placeholder="Search by name, or enter ticker and press Look Up..."
+                className="flex-1 bg-terminal-bg-primary border border-terminal-border rounded px-3 py-1.5 font-mono text-sm text-terminal-text-primary placeholder-terminal-text-tertiary focus:outline-none focus:border-terminal-accent"
+              />
+              <button
+                onClick={handleLookup}
+                disabled={lookingUp || !query.trim()}
+                className="px-3 py-1.5 text-sm font-mono border border-terminal-border text-terminal-text-secondary rounded hover:text-terminal-text-primary hover:border-terminal-accent transition-colors disabled:opacity-40"
+              >
+                {lookingUp ? "Looking up..." : "Look Up"}
+              </button>
+            </div>
+            {searching && <div className="absolute right-28 top-2 text-xs text-terminal-text-tertiary">searching...</div>}
+
+            {/* Local DB results */}
+            {(results.length > 0 || lookupResult) && (
+              <div className="absolute z-10 w-full mt-1 bg-terminal-bg-primary border border-terminal-border rounded shadow-md max-h-64 overflow-y-auto">
+                {results.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-xs text-terminal-text-tertiary bg-terminal-bg-tertiary font-mono">YOUR SECURITIES</div>
+                    {results.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleSelect(s)}
+                        className="w-full text-left px-3 py-2 hover:bg-terminal-bg-tertiary flex items-center gap-2 text-sm"
+                      >
+                        <span className="font-mono font-medium text-terminal-accent w-24 shrink-0">{s.ticker || "—"}</span>
+                        <span className="text-terminal-text-primary truncate">{s.name}</span>
+                        <span className="text-xs text-terminal-text-tertiary ml-auto shrink-0">{s.assetClass}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {lookupResult && (
+                  <>
+                    <div className="px-3 py-1 text-xs text-terminal-text-tertiary bg-terminal-bg-tertiary font-mono border-t border-terminal-border">YAHOO FINANCE</div>
+                    <button
+                      onClick={() => handleSelectLookup(lookupResult)}
+                      className="w-full text-left px-3 py-2 hover:bg-terminal-bg-tertiary text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-medium text-terminal-warning w-24 shrink-0">{lookupResult.ticker}</span>
+                        <span className="text-terminal-text-primary truncate">{lookupResult.name}</span>
+                        <span className="text-xs text-terminal-text-tertiary ml-auto shrink-0">{lookupResult.assetClass}</span>
+                      </div>
+                      <div className="flex gap-3 mt-1 text-xs text-terminal-text-tertiary">
+                        {lookupResult.exchange && <span>{lookupResult.exchange}</span>}
+                        {lookupResult.currency && <span>{lookupResult.currency}</span>}
+                        {lookupResult.sector && <span>{lookupResult.sector}</span>}
+                        {lookupResult.country && <span>{lookupResult.country}</span>}
+                        {lookupResult.currentPrice != null && <span className="text-terminal-text-secondary font-mono">{lookupResult.currentPrice} {lookupResult.currency}</span>}
+                      </div>
+                    </button>
+                  </>
+                )}
+                {results.length === 0 && !lookupResult && !searching && query.length >= 2 && (
+                  <div className="px-3 py-2 text-xs text-terminal-text-tertiary">
+                    No local matches. Click &quot;Look Up&quot; to search Yahoo Finance.
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -200,15 +334,59 @@ function AddSingleHolding() {
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-3">
         <div>
           <label className="text-xs text-terminal-text-tertiary">Account</label>
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(Number(e.target.value))}
-            className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm"
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          {showNewAccount ? (
+            <div className="flex flex-col gap-1">
+              <input
+                type="text"
+                value={newAccountName}
+                onChange={(e) => setNewAccountName(e.target.value)}
+                placeholder="Account name"
+                className="w-full bg-terminal-bg-primary border border-terminal-accent/50 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-terminal-accent"
+                autoFocus
+              />
+              <select
+                value={newAccountType}
+                onChange={(e) => setNewAccountType(e.target.value)}
+                className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1 text-xs"
+              >
+                <option value="regular">Regular (AOT)</option>
+                <option value="osakesaastotili">OST</option>
+                <option value="pension">Pension</option>
+                <option value="crypto">Crypto</option>
+              </select>
+              <div className="flex gap-1">
+                <button
+                  onClick={handleCreateAccount}
+                  disabled={creatingAccount || !newAccountName.trim()}
+                  className="flex-1 px-2 py-1 text-xs font-mono bg-terminal-accent/20 text-terminal-accent rounded hover:bg-terminal-accent/30 disabled:opacity-40"
+                >
+                  {creatingAccount ? "..." : "Create"}
+                </button>
+                <button
+                  onClick={() => setShowNewAccount(false)}
+                  className="px-2 py-1 text-xs text-terminal-text-tertiary hover:text-terminal-text-primary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <select
+                value={accountId}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") { setShowNewAccount(true); return; }
+                  setAccountId(Number(e.target.value));
+                }}
+                className="w-full bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1.5 text-sm"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+                <option value="__new__">+ New account...</option>
+              </select>
+            </div>
+          )}
         </div>
         <div>
           <label className="text-xs text-terminal-text-tertiary">Type</label>
