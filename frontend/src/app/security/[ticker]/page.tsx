@@ -801,7 +801,7 @@ export default function SecurityDetailPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-xs">
-                      {trade.shares.toLocaleString("en-US")}
+                      {Number(trade.shares).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-xs">
                       {trade.valueCents != null

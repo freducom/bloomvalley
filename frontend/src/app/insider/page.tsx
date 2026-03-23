@@ -259,7 +259,7 @@ function TradesTab() {
                     </span>
                   </td>
                   <td className="text-right p-3 font-mono text-xs">
-                    {parseFloat(t.shares).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {parseFloat(t.shares).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                   </td>
                   <td className="text-right p-3 font-mono text-xs">
                     {t.valueCents ? formatCurrency(t.valueCents, t.currency) : "-"}
