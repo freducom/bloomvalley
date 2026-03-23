@@ -119,6 +119,17 @@ async def create_security(
     }
 
 
+_COUNTRY_TO_ISO = {
+    "United States": "US", "United Kingdom": "GB", "Germany": "DE", "France": "FR",
+    "Finland": "FI", "Sweden": "SE", "Denmark": "DK", "Norway": "NO", "Netherlands": "NL",
+    "Switzerland": "CH", "Japan": "JP", "China": "CN", "Canada": "CA", "Australia": "AU",
+    "Ireland": "IE", "Belgium": "BE", "Austria": "AT", "Spain": "ES", "Italy": "IT",
+    "Portugal": "PT", "Luxembourg": "LU", "South Korea": "KR", "Taiwan": "TW",
+    "India": "IN", "Brazil": "BR", "Mexico": "MX", "Singapore": "SG", "Hong Kong": "HK",
+    "Israel": "IL", "South Africa": "ZA", "Poland": "PL", "Greece": "GR",
+}
+
+
 def _yf_lookup(ticker: str) -> dict | None:
     """Fetch basic info for a ticker from Yahoo Finance (blocking)."""
     try:
@@ -129,6 +140,8 @@ def _yf_lookup(ticker: str) -> dict | None:
             return None
         qtype = info.get("quoteType", "").upper()
         asset_class = "crypto" if qtype == "CRYPTOCURRENCY" else "etf" if qtype == "ETF" else "stock"
+        country_raw = info.get("country") or ""
+        country_code = _COUNTRY_TO_ISO.get(country_raw, country_raw[:2].upper() if country_raw else None)
         return {
             "ticker": ticker.upper(),
             "name": name,
@@ -137,7 +150,8 @@ def _yf_lookup(ticker: str) -> dict | None:
             "exchange": info.get("exchange"),
             "sector": info.get("sector"),
             "industry": info.get("industry"),
-            "country": info.get("country"),
+            "country": country_code,
+            "countryName": country_raw or None,
             "quoteType": qtype,
             "marketCap": info.get("marketCap"),
             "currentPrice": info.get("currentPrice") or info.get("regularMarketPrice"),

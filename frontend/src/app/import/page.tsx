@@ -59,6 +59,7 @@ interface YahooLookup {
   sector: string | null;
   industry: string | null;
   country: string | null;
+  countryName: string | null;
   quoteType: string;
   marketCap: number | null;
   currentPrice: number | null;
@@ -313,7 +314,7 @@ function AddSingleHolding() {
                         {lookupResult.exchange && <span>{lookupResult.exchange}</span>}
                         {lookupResult.currency && <span>{lookupResult.currency}</span>}
                         {lookupResult.sector && <span>{lookupResult.sector}</span>}
-                        {lookupResult.country && <span>{lookupResult.country}</span>}
+                        {(lookupResult.countryName || lookupResult.country) && <span>{lookupResult.countryName || lookupResult.country}</span>}
                         {lookupResult.currentPrice != null && <span className="text-terminal-text-secondary font-mono">{lookupResult.currentPrice} {lookupResult.currency}</span>}
                       </div>
                     </button>
