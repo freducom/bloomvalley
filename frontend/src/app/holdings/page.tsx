@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
@@ -29,10 +29,17 @@ interface Holding {
   currency: string;
 }
 
-type SortKey = "ticker" | "name" | "accountName" | "assetClass" | "quantity" | "avgCostCents" | "currentPriceCents" | "marketValueEurCents" | "unrealizedPnlCents" | "unrealizedPnlPct";
+interface DividendByHolding {
+  securityId: number;
+  ticker: string;
+  annualIncomeCents: number;
+}
+
+type SortKey = "ticker" | "name" | "accountName" | "assetClass" | "quantity" | "avgCostCents" | "currentPriceCents" | "marketValueEurCents" | "unrealizedPnlCents" | "unrealizedPnlPct" | "upcomingDivCents";
 
 export default function HoldingsPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [divMap, setDivMap] = useState<Record<number, number>>({}); // securityId -> 6-month income cents
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("marketValueEurCents");
   const [sortAsc, setSortAsc] = useState(false);
@@ -41,8 +48,18 @@ export default function HoldingsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiGet<Holding[]>("/portfolio/holdings");
-        setHoldings(data);
+        const [holdingsData, divData] = await Promise.all([
+          apiGet<Holding[]>("/portfolio/holdings"),
+          apiGetRaw<{ data: { byHolding: DividendByHolding[] } }>("/dividends/income-projection")
+            .catch(() => ({ data: { byHolding: [] } })),
+        ]);
+        setHoldings(holdingsData);
+        // Build map: securityId -> 6-month projected income (annual / 2)
+        const dm: Record<number, number> = {};
+        for (const d of divData.data.byHolding || []) {
+          dm[d.securityId] = Math.round(d.annualIncomeCents / 2);
+        }
+        setDivMap(dm);
       } catch (e) {
         console.error("Failed to load holdings:", e);
       } finally {
@@ -71,6 +88,7 @@ export default function HoldingsPage() {
       return sortAsc ? (av as string).localeCompare(bv as string) : (bv as string).localeCompare(av as string);
     }
     if (sortKey === "quantity") { av = parseFloat(a.quantity) || 0; bv = parseFloat(b.quantity) || 0; }
+    else if (sortKey === "upcomingDivCents") { av = divMap[a.securityId] ?? 0; bv = divMap[b.securityId] ?? 0; }
     else { av = (a[sortKey] ?? -Infinity) as number; bv = (b[sortKey] ?? -Infinity) as number; }
     return sortAsc ? av - bv : bv - av;
   });
@@ -80,6 +98,7 @@ export default function HoldingsPage() {
   const totalCost = filtered.reduce((s, h) => s + (h.costBasisEurCents ?? 0), 0);
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+  const totalDiv6m = filtered.reduce((s, h) => s + (divMap[h.securityId] ?? 0), 0);
 
   if (loading) {
     return (
@@ -121,6 +140,11 @@ export default function HoldingsPage() {
             <span className={`ml-2 ${totalPnl >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
               <Private>{formatCurrency(totalPnl)}</Private> (<Private>{formatPercent(totalPnlPct, true)}</Private>)
             </span>
+            {totalDiv6m > 0 && (
+              <span className="ml-3 text-terminal-positive">
+                Div 6M: <Private>{formatCurrency(totalDiv6m)}</Private>
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -139,6 +163,7 @@ export default function HoldingsPage() {
               <TH k="marketValueEurCents">Market Value</TH>
               <TH k="unrealizedPnlCents">P&L</TH>
               <TH k="unrealizedPnlPct">P&L %</TH>
+              <TH k="upcomingDivCents">Div 6M</TH>
             </tr>
           </thead>
           <tbody>
@@ -188,6 +213,15 @@ export default function HoldingsPage() {
                   </td>
                   <td className={`px-4 py-2 text-right font-mono text-sm ${pnlColor}`}>
                     <Private>{h.unrealizedPnlPct != null ? formatPercent(h.unrealizedPnlPct, true) : "--"}</Private>
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono text-sm">
+                    {divMap[h.securityId] ? (
+                      <Private>
+                        <span className="text-terminal-positive">{formatCurrency(divMap[h.securityId])}</span>
+                      </Private>
+                    ) : (
+                      <span className="text-terminal-text-tertiary">--</span>
+                    )}
                   </td>
                 </tr>
               );
