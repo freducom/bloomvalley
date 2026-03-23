@@ -181,8 +181,8 @@ export default function HoldingsPage() {
         </div>
       </div>
 
-      <div className="border border-terminal-border rounded-md overflow-hidden max-h-[80vh] overflow-y-auto">
-        <table className="w-full">
+      <div className="border border-terminal-border rounded-md overflow-hidden max-h-[80vh] overflow-y-auto overflow-x-auto">
+        <table className="w-full min-w-[800px]">
           <thead className="sticky top-0 z-10 bg-terminal-bg-secondary">
             <tr className="text-terminal-text-secondary text-sm">
               <TH k="ticker" align="text-left">Ticker</TH>

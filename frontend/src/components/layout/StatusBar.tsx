@@ -199,7 +199,7 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="flex items-center justify-between h-8 px-4 bg-terminal-bg-secondary border-t border-terminal-border shrink-0 text-xs font-mono">
+    <footer className="hidden md:flex items-center justify-between h-8 px-4 bg-terminal-bg-secondary border-t border-terminal-border shrink-0 text-xs font-mono">
       {/* Markets */}
       <div className="flex items-center gap-4">
         {Object.entries(statuses).map(([name, info]) => (

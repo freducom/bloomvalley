@@ -103,6 +103,7 @@ interface ResearchNote {
   summary: string | null;
   bullCase: string | null;
   bearCase: string | null;
+  tags?: string[];
   createdAt: string;
 }
 
@@ -291,7 +292,7 @@ export default function SecurityDetailPage() {
         if (fundRes?.data && fundRes.data.length > 0) setFundamentals(fundRes.data[0]);
         if (holdRes) setHoldings(holdRes.filter((h) => h.securityId === id));
         if (recRes?.data) setRecommendations(recRes.data.filter((r) => r.ticker === ticker));
-        if (researchRes?.data) setResearch(researchRes.data);
+        if (researchRes?.data) setResearch(researchRes.data.filter((n) => !n.tags?.includes("sec_filing")));
         if (insiderRes?.data) setInsiders(insiderRes.data);
         if (newsRes?.data) setNews(newsRes.data);
         if (divRes?.data) setDividends(divRes.data);

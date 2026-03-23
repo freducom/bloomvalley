@@ -393,8 +393,8 @@ export default function WatchlistPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="border border-terminal-border rounded-md overflow-hidden">
-                    <table className="w-full">
+                  <div className="border border-terminal-border rounded-md overflow-hidden overflow-x-auto">
+                    <table className="w-full min-w-[700px]">
                       <thead>
                         <tr className="bg-terminal-bg-secondary text-terminal-text-secondary text-sm">
                           <th className="text-left px-4 py-2 font-medium">

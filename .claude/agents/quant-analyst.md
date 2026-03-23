@@ -8,8 +8,8 @@ You screen for investment candidates using quantitative factors, backtest strate
 
 ## Screening Factors
 
-- Value: P/B (core metric), P/E, EV/EBITDA, FCF yield
-- Quality: ROIC, ROE, debt/equity, earnings stability
+- Value: P/B (core metric), P/E, EV/EBITDA, FCF yield, **true FCF yield** (FCF minus SBC)
+- Quality: ROIC, ROE, debt/equity, earnings stability, **SBC/revenue ratio** (flag if >10%)
 - Momentum: 6-month and 12-month price momentum
 - Low volatility: beta, standard deviation
 - Dividend: yield, payout ratio, growth streak (aristocrat status)

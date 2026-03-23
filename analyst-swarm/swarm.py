@@ -395,6 +395,80 @@ async def close_old_recommendations(backend_url: str):
             print(f"  [pm] Failed to close old recommendations: {e}", flush=True)
 
 
+EXTRACT_RECS_PROMPT = """Extract ALL actionable recommendations from this portfolio manager report.
+Return a JSON array of objects. Each object must have these fields:
+- "ticker": string (e.g. "VWCE", "ALYK", "MSFT", "INVE-B.ST", "KESKOB.HE")
+- "action": "buy" | "sell" | "hold"
+- "confidence": "high" | "medium" | "low"
+- "rationale": string (1-3 sentence summary of the recommendation)
+- "bull_case": string or null
+- "bear_case": string or null
+- "time_horizon": "short" | "medium" | "long" (short=<3m, medium=3-12m, long=>12m)
+
+Include ALL recommendations from the report, including hold recommendations.
+For "sell" actions on funds being redeemed, use "sell".
+Return ONLY the JSON array, no markdown fences, no explanation."""
+
+
+async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str):
+    """Parse the PM report into structured recommendations and POST them."""
+    backend_url = cfg["backend_url"]
+    print("  [pm] Extracting recommendations from report...", flush=True)
+
+    try:
+        result = await call_llm(
+            f"Portfolio manager report:\n\n{report}",
+            EXTRACT_RECS_PROMPT,
+            cfg,
+        )
+
+        # Parse JSON — handle markdown fences if present
+        text = result.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        recs = json.loads(text)
+        if not isinstance(recs, list):
+            print("  [pm] LLM did not return a JSON array", flush=True)
+            return
+
+        # Resolve tickers to security IDs
+        async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+            sec_resp = await client.get("/securities?limit=500")
+            securities = {s["ticker"]: s["id"] for s in sec_resp.json().get("data", [])}
+
+            posted = 0
+            for rec in recs:
+                ticker = rec.get("ticker", "")
+                sec_id = securities.get(ticker)
+                if not sec_id:
+                    print(f"  [pm] Skipping {ticker} — not found in securities", flush=True)
+                    continue
+
+                payload = {
+                    "security_id": sec_id,
+                    "action": rec.get("action", "hold"),
+                    "confidence": rec.get("confidence", "medium"),
+                    "rationale": rec.get("rationale", ""),
+                    "bull_case": rec.get("bull_case"),
+                    "bear_case": rec.get("bear_case"),
+                    "source": "portfolio-manager",
+                    "time_horizon": rec.get("time_horizon", "medium"),
+                    "recommended_date": date_str,
+                }
+
+                resp = await client.post("/recommendations", json=payload)
+                if resp.status_code in (200, 201):
+                    posted += 1
+                else:
+                    print(f"  [pm] Failed to post {ticker}: {resp.status_code}", flush=True)
+
+            print(f"  [pm] Posted {posted} recommendations", flush=True)
+
+    except Exception as e:
+        print(f"  [pm] Failed to extract recommendations: {e}", flush=True)
+
+
 # ── Main Swarm Run ──
 
 async def run_swarm(cfg: dict):
@@ -438,7 +512,11 @@ async def run_swarm(cfg: dict):
     # Step 4: Run portfolio manager last (needs analyst outputs)
     if "portfolio-manager" in agents:
         print("\n[swarm] Running portfolio manager (final synthesis)...", flush=True)
-        await run_agent("portfolio-manager", cfg, date_str)
+        pm_report = await run_agent("portfolio-manager", cfg, date_str)
+
+        # Step 5: Extract and post structured recommendations from PM report
+        if pm_report:
+            await extract_and_post_recommendations(pm_report, cfg, date_str)
 
     elapsed = round(time.time() - start, 1)
     print(f"\n{'='*60}", flush=True)

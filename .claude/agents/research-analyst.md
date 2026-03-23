@@ -79,6 +79,14 @@ Check EVERY one of these. A single flag is a concern; three or more is a sell si
 
 10. **Management Compensation vs Metrics**: What metrics drive management bonuses? If compensation is tied to adjusted EBITDA and adjustments are growing, management has incentive to manipulate. Flag the size and nature of "non-recurring" adjustments.
 
+11. **Stock-Based Compensation (SBC) Dilution**: Calculate SBC as % of revenue and SBC as % of FCF. Tech companies routinely exclude SBC from "adjusted" metrics, but SBC is a real cost — it dilutes existing shareholders. Red flags:
+    - SBC > 15% of revenue (extreme: Atlassian, Snowflake, Palantir-class)
+    - SBC > 50% of reported FCF (the "FCF" is largely illusory — you're paying employees in equity)
+    - SBC growing faster than revenue (dilution accelerating)
+    - Company reports "FCF" or "adjusted earnings" excluding SBC while simultaneously doing buybacks to offset dilution (circular: paying employees in stock, then buying back stock to hide the share count increase — net cash out is the same as paying them cash)
+    - Compare GAAP operating income to non-GAAP: if the gap is >30%, SBC is likely the primary driver
+    - For any company where SBC > 10% of revenue, calculate "true FCF" = reported FCF - SBC expense. If true FCF is negative or near zero, the company is not actually generating free cash flow for shareholders.
+
 ### Earnings Quality Score
 
 Rate every analyzed security: **High / Medium / Low / Red Flag**
