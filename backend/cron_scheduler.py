@@ -8,6 +8,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 
 BACKEND_URL = "http://backend:8000/api/v1/pipelines"
+BACKEND_BASE_URL = "http://backend:8000/api/v1"
 
 
 def trigger(name: str) -> None:
@@ -16,6 +17,15 @@ def trigger(name: str) -> None:
         print(f"[cron] {name} -> {r.status_code}", flush=True)
     except Exception as e:
         print(f"[cron] {name} FAILED: {e}", flush=True)
+
+
+def trigger_endpoint(path: str, label: str) -> None:
+    """Trigger an arbitrary backend endpoint (non-pipeline)."""
+    try:
+        r = httpx.post(f"{BACKEND_BASE_URL}/{path}", timeout=300)
+        print(f"[cron] {label} -> {r.status_code}", flush=True)
+    except Exception as e:
+        print(f"[cron] {label} FAILED: {e}", flush=True)
 
 
 def main() -> None:
@@ -101,6 +111,20 @@ def main() -> None:
     # GDELT global events — every 6 hours
     scheduler.add_job(trigger, "interval", args=["gdelt_events"],
                       hours=6, id="gdelt_events")
+
+    # Regional news (Reuters, ECB, Kauppalehti, DI, Nikkei) — every 4 hours
+    scheduler.add_job(trigger, "interval", args=["regional_news"],
+                      hours=4, id="regional_news")
+
+    # Yahoo fundamentals (ROIC, P/B, FCF, margins, DCF) — weekdays at 23:45
+    scheduler.add_job(trigger, "cron", args=["yahoo_fundamentals"],
+                      day_of_week="mon-fri", hour=23, minute=45,
+                      id="yahoo_fundamentals")
+
+    # News retention cleanup — daily at 04:00 Helsinki time
+    scheduler.add_job(trigger_endpoint, "cron",
+                      args=["news/cleanup", "news_cleanup"],
+                      hour=4, minute=0, id="news_cleanup")
 
     jobs = scheduler.get_jobs()
     print(f"[cron] Starting scheduler with {len(jobs)} jobs (TZ=Europe/Helsinki):", flush=True)

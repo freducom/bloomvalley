@@ -10,6 +10,7 @@ from sqlalchemy import func, select, and_
 from app.db.engine import async_session
 from app.db.models.news import NewsItem, NewsItemSecurity
 from app.db.models.securities import Security
+from app.services.news_cleanup import cleanup_old_news
 
 logger = structlog.get_logger()
 
@@ -59,6 +60,16 @@ def _link_to_dict(link: NewsItemSecurity, sec: Security | None = None) -> dict:
         "impactDirection": link.impact_direction,
         "impactSeverity": link.impact_severity,
         "impactReasoning": link.impact_reasoning,
+    }
+
+
+@router.post("/cleanup")
+async def cleanup_news():
+    """Run news retention cleanup: strip old summaries, delete expired items."""
+    result = await cleanup_old_news()
+    return {
+        "data": result,
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
 
 
