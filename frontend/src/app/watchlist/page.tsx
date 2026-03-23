@@ -276,23 +276,23 @@ export default function WatchlistPage() {
           </p>
         </div>
       ) : (
-        <div className="flex gap-4">
-          {/* Watchlist tabs (sidebar) */}
-          <div className="w-48 shrink-0">
-            <div className="space-y-1">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Watchlist tabs — horizontal scroll on mobile, vertical sidebar on desktop */}
+          <div className="md:w-48 md:shrink-0">
+            <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0">
               {watchlists.map((wl) => (
                 <button
                   key={wl.id}
                   onClick={() => setActiveId(wl.id)}
-                  className={`w-full text-left px-3 py-2 rounded text-sm transition-colors group ${
+                  className={`text-left px-3 py-2 rounded text-sm transition-colors group whitespace-nowrap ${
                     activeId === wl.id
                       ? "bg-terminal-bg-tertiary text-terminal-text-primary"
                       : "text-terminal-text-secondary hover:bg-terminal-bg-secondary hover:text-terminal-text-primary"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
                     <span className="font-medium truncate">{wl.name}</span>
-                    <span className="text-xs text-terminal-text-tertiary ml-1">
+                    <span className="text-xs text-terminal-text-tertiary">
                       {wl.itemCount}
                     </span>
                   </div>

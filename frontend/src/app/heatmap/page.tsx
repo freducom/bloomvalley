@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 
@@ -189,8 +189,23 @@ export default function HeatmapPage() {
   const [watchlists, setWatchlists] = useState<WatchlistOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupBy, setGroupBy] = useState<"none" | "sector" | "assetClass">("none");
-  const [containerW] = useState(1200);
-  const [containerH] = useState(600);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = useState(1200);
+  const [containerH, setContainerH] = useState(600);
+
+  useEffect(() => {
+    const measure = () => {
+      if (containerRef.current) {
+        const w = containerRef.current.clientWidth;
+        setContainerW(w);
+        // Aspect ratio: taller on mobile, wider on desktop
+        setContainerH(w < 640 ? Math.round(w * 1.2) : Math.round(w * 0.5));
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -284,7 +299,7 @@ export default function HeatmapPage() {
           <option value="assetClass">By Asset Class</option>
         </select>
 
-        <div className="ml-auto flex items-center gap-4 text-xs text-terminal-text-secondary">
+        <div className="flex items-center gap-4 text-xs text-terminal-text-secondary">
           <span className="text-terminal-positive">{gainers} up</span>
           <span className="text-terminal-negative">{losers} down</span>
           <span className={avgChange >= 0 ? "text-terminal-positive" : "text-terminal-negative"}>
@@ -297,6 +312,7 @@ export default function HeatmapPage() {
       </div>
 
       {/* Heatmap */}
+      <div ref={containerRef}>
       {loading ? (
         <div className="text-terminal-text-secondary text-sm p-4">Loading...</div>
       ) : data.length === 0 ? (
@@ -331,8 +347,8 @@ export default function HeatmapPage() {
                     </h3>
                   )}
                   <div
-                    className="relative border border-terminal-border rounded overflow-hidden"
-                    style={{ width: containerW, height: groupH, maxWidth: "100%" }}
+                    className="relative border border-terminal-border rounded overflow-hidden w-full"
+                    style={{ height: groupH }}
                   >
                     {rects.map((r) => {
                       const minDim = Math.min(r.w, r.h);
@@ -376,9 +392,10 @@ export default function HeatmapPage() {
             })}
         </div>
       )}
+      </div>
 
       {/* Legend */}
-      <div className="mt-4 flex items-center gap-2 text-xs text-terminal-text-secondary">
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-terminal-text-secondary">
         <span>Color:</span>
         <div className="flex gap-0.5">
           <div className="w-6 h-3 rounded-sm bg-red-600" />
