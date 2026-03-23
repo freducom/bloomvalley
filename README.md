@@ -264,27 +264,133 @@ Add these lines (adjust paths and timezone):
 
 ---
 
-## Backup
+## Backup & Migration
 
-### Database Backup
+### What to back up
+
+| File / Directory | Contains | Critical? | Size |
+|-----------------|----------|-----------|------|
+| `data/postgres/` | All portfolio data, prices, fundamentals, recommendations, news, research notes | **Yes** | ~100-500 MB |
+| `data/redis/` | Pipeline cache, session state | No (regenerated) | ~1 MB |
+| `.env` | API keys (FRED, Alpha Vantage, Finnhub), DB passwords | **Yes** | <1 KB |
+| `.claude/agents/` | AI analyst agent definitions and strategy rules | **Yes** (in git) | ~50 KB |
+| `analyst-swarm/config.local.yaml` | Swarm LLM provider config, schedule | **Yes** | <1 KB |
+| `~/.claude/` | Claude CLI auth tokens (for claude_cli provider) | **Yes** if using claude_cli | ~10 KB |
+
+### Database backup
 
 ```bash
-# Docker
-docker compose exec db pg_dump -U warren warren > backup_$(date +%Y%m%d).sql
+# Create a timestamped SQL dump (run from project root)
+docker compose exec db pg_dump -U warren warren > backup_$(date +%Y%m%d_%H%M).sql
 
-# Local
-pg_dump bloomvalley > backup_$(date +%Y%m%d).sql
+# Compressed backup (recommended for large databases)
+docker compose exec db pg_dump -U warren warren | gzip > backup_$(date +%Y%m%d).sql.gz
 ```
 
-### Restore
+### Database restore
 
 ```bash
-# Docker
-docker compose exec -T db psql -U warren warren < backup_20260320.sql
+# Stop backend first to prevent writes during restore
+docker compose stop backend cron analyst-swarm
 
-# Local
-psql bloomvalley < backup_20260320.sql
+# Restore from SQL dump
+docker compose exec -T db psql -U warren warren < backup_20260323.sql
+
+# Restore from compressed dump
+gunzip -c backup_20260323.sql.gz | docker compose exec -T db psql -U warren warren
+
+# Restart services
+docker compose up -d
 ```
+
+### Full backup script
+
+Save as `backup.sh` and run via cron (`0 2 * * * /path/to/backup.sh`):
+
+```bash
+#!/bin/bash
+BACKUP_DIR="/path/to/backups"
+PROJECT_DIR="/path/to/bloomvalley"
+DATE=$(date +%Y%m%d)
+
+# Database
+cd "$PROJECT_DIR"
+docker compose exec -T db pg_dump -U warren warren | gzip > "$BACKUP_DIR/db_${DATE}.sql.gz"
+
+# Config files
+cp "$PROJECT_DIR/.env" "$BACKUP_DIR/env_${DATE}"
+cp "$PROJECT_DIR/analyst-swarm/config.local.yaml" "$BACKUP_DIR/swarm_config_${DATE}.yaml" 2>/dev/null
+
+# Keep last 30 days
+find "$BACKUP_DIR" -name "db_*.sql.gz" -mtime +30 -delete
+find "$BACKUP_DIR" -name "env_*" -mtime +30 -delete
+
+echo "[backup] Done: $BACKUP_DIR/db_${DATE}.sql.gz"
+```
+
+### Migrating to a new server
+
+**On the old server:**
+
+```bash
+cd /path/to/bloomvalley
+
+# 1. Create database dump
+docker compose exec db pg_dump -U warren warren | gzip > migration_backup.sql.gz
+
+# 2. Bundle config files
+tar czf migration_config.tar.gz .env analyst-swarm/config.local.yaml .claude/agents/
+
+# 3. Copy Claude auth (if using claude_cli provider)
+tar czf migration_claude_auth.tar.gz -C ~ .claude/
+```
+
+**Transfer to new server:**
+
+```bash
+scp migration_backup.sql.gz migration_config.tar.gz migration_claude_auth.tar.gz user@newserver:/tmp/
+```
+
+**On the new server:**
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/freducom/bloomvalley.git
+cd bloomvalley
+
+# 2. Restore config files
+tar xzf /tmp/migration_config.tar.gz
+
+# 3. Restore Claude auth (if using claude_cli)
+tar xzf /tmp/migration_claude_auth.tar.gz -C ~/
+
+# 4. Create data directories and start database
+mkdir -p data/postgres data/redis
+docker compose up -d db redis
+sleep 10  # Wait for DB to initialize
+
+# 5. Run migrations to create schema
+docker compose up -d backend
+sleep 5
+docker compose exec backend alembic upgrade head
+
+# 6. Restore data
+gunzip -c /tmp/migration_backup.sql.gz | docker compose exec -T db psql -U warren warren
+
+# 7. Start all services
+docker compose up -d --build
+
+# 8. Verify
+curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/api/v1/portfolio/summary
+```
+
+### What you do NOT need to copy
+
+- `data/postgres/` raw directory — use SQL dump instead (portable across architectures)
+- `data/redis/` — regenerated automatically by pipelines
+- `node_modules/`, `.venv/`, `__pycache__/` — rebuilt by Docker
+- `frontend/.next/` — rebuilt on container start
 
 ---
 
