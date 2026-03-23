@@ -342,7 +342,7 @@ export function StatusBar() {
         ) : swarmStatus?.status !== "running" ? (
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-terminal-positive" />
-            <span className="text-terminal-text-secondary">OK</span>
+            <span className="text-terminal-text-secondary">All systems functional</span>
           </div>
         ) : null}
       </div>
