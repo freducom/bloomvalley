@@ -52,6 +52,12 @@ REGIONAL_FEEDS = [
         "fallback_url": None,
         "is_global": True,
     },
+    {
+        "name": "Yardeni QuickTakes",
+        "url": "https://www.yardeniquicktakes.com/rss/",
+        "fallback_url": None,
+        "is_global": True,
+    },
 ]
 
 
