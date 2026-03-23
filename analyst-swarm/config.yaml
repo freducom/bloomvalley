@@ -1,14 +1,23 @@
 # Analyst Swarm Configuration
 # Copy to config.local.yaml and customize for your deployment
 
-# LLM Provider: "claude" or "ollama"
-llm_provider: "claude"
+# LLM Provider: "claude", "claude_cli", or "ollama"
+#   claude     = Claude API (requires ANTHROPIC_API_KEY, you pay per token)
+#   claude_cli = Claude Code CLI (uses your company subscription, no API credits needed)
+#   ollama     = Local LLM via Ollama
+llm_provider: "claude_cli"
 
 # Claude API settings (used when llm_provider: "claude")
 claude:
   api_key: ""  # Set via ANTHROPIC_API_KEY env var or here
   model: "claude-sonnet-4-20250514"  # or claude-opus-4-20250514 for highest quality
   max_tokens: 8192
+
+# Claude CLI settings (used when llm_provider: "claude_cli")
+# Requires `claude` CLI installed and authenticated on the host/container
+claude_cli:
+  binary: "claude"  # Path to claude binary
+  model: ""  # Empty = use default model. Or: "sonnet", "opus", "haiku"
 
 # Ollama settings (used when llm_provider: "ollama")
 ollama:

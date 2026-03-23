@@ -98,4 +98,6 @@ services:
     volumes:
       - ./.claude/agents:/app/agents:ro
       - ./analyst-swarm/config.local.yaml:/app/config.local.yaml:ro
+      # Mount Claude auth for claude_cli provider (company subscription)
+      - ${HOME}/.claude:/root/.claude:ro
     restart: unless-stopped

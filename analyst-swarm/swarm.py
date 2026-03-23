@@ -38,6 +38,10 @@ def load_config() -> dict:
         cfg.setdefault("ollama", {})["model"] = os.environ["OLLAMA_MODEL"]
     if os.environ.get("CLAUDE_MODEL"):
         cfg.setdefault("claude", {})["model"] = os.environ["CLAUDE_MODEL"]
+    if os.environ.get("CLAUDE_CLI_BINARY"):
+        cfg.setdefault("claude_cli", {})["binary"] = os.environ["CLAUDE_CLI_BINARY"]
+    if os.environ.get("CLAUDE_CLI_MODEL"):
+        cfg.setdefault("claude_cli", {})["model"] = os.environ["CLAUDE_CLI_MODEL"]
     if os.environ.get("BACKEND_URL"):
         cfg["backend_url"] = os.environ["BACKEND_URL"]
     if os.environ.get("MAX_PARALLEL"):
@@ -98,11 +102,59 @@ async def call_ollama(prompt: str, system: str, cfg: dict) -> str:
         return data["message"]["content"]
 
 
+async def call_claude_cli(prompt: str, system: str, cfg: dict) -> str:
+    """Call Claude via the claude CLI (uses company subscription, not API credits)."""
+    import subprocess
+    import tempfile
+
+    cli_cfg = cfg.get("claude_cli", {})
+    claude_bin = cli_cfg.get("binary", "claude")
+    model = cli_cfg.get("model", "")  # empty = use default
+
+    # Combine system + user prompt for the CLI
+    full_prompt = f"{system}\n\n---\n\n{prompt}"
+
+    # Write prompt to a temp file to avoid shell escaping issues
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write(full_prompt)
+        tmp_path = f.name
+
+    try:
+        cmd = [claude_bin, "-p", "--output-format", "text"]
+        if model:
+            cmd.extend(["--model", model])
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        with open(tmp_path, "rb") as f:
+            stdin_data = f.read()
+
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=stdin_data),
+            timeout=600,
+        )
+
+        if proc.returncode != 0:
+            err = stderr.decode().strip()
+            raise RuntimeError(f"claude CLI failed (rc={proc.returncode}): {err[:500]}")
+
+        return stdout.decode().strip()
+    finally:
+        os.unlink(tmp_path)
+
+
 async def call_llm(prompt: str, system: str, cfg: dict) -> str:
     """Route to the configured LLM backend."""
     provider = cfg.get("llm_provider", "claude")
     if provider == "claude":
         return await call_claude(prompt, system, cfg)
+    elif provider == "claude_cli":
+        return await call_claude_cli(prompt, system, cfg)
     elif provider == "ollama":
         return await call_ollama(prompt, system, cfg)
     else:
