@@ -17,7 +17,7 @@ class AssetClass(str, enum.Enum):
 
 
 securities_asset_class_enum = ENUM(
-    "stock", "bond", "etf", "crypto",
+    "stock", "bond", "etf", "crypto", "fund",
     name="securities_asset_class_enum",
     create_type=False,
 )

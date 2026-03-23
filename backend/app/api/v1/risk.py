@@ -35,8 +35,9 @@ MAX_CRYPTO_PCT = 10.0
 # Map asset_class to glidepath categories
 ASSET_CLASS_MAP = {
     "stock": "equity",
-    "etf": "equity",  # Most ETFs are equity; could be refined
+    "etf": "equity",
     "bond": "fixed_income",
+    "fund": "fixed_income",
     "crypto": "crypto",
 }
 
@@ -45,27 +46,27 @@ STRESS_SCENARIOS = {
     "2008_crash": {
         "name": "2008 Financial Crisis",
         "description": "Equity -50%, crypto -80%, bonds +5%",
-        "shocks": {"stock": -0.50, "etf": -0.50, "bond": 0.05, "crypto": -0.80},
+        "shocks": {"stock": -0.50, "etf": -0.50, "fund": 0.05, "bond": 0.05, "crypto": -0.80},
     },
     "rate_shock": {
         "name": "Rate Shock (+200bp)",
-        "description": "Equity -15%, bonds -10%, crypto -20%",
-        "shocks": {"stock": -0.15, "etf": -0.15, "bond": -0.10, "crypto": -0.20},
+        "description": "Equity -15%, bonds/funds -10%, crypto -20%",
+        "shocks": {"stock": -0.15, "etf": -0.15, "fund": -0.10, "bond": -0.10, "crypto": -0.20},
     },
     "crypto_winter": {
         "name": "Crypto Winter",
         "description": "Crypto -85%, equity -5%",
-        "shocks": {"stock": -0.05, "etf": -0.05, "bond": 0.02, "crypto": -0.85},
+        "shocks": {"stock": -0.05, "etf": -0.05, "fund": 0.02, "bond": 0.02, "crypto": -0.85},
     },
     "stagflation": {
         "name": "Stagflation",
-        "description": "Equity -30%, bonds -15%, crypto -50%",
-        "shocks": {"stock": -0.30, "etf": -0.30, "bond": -0.15, "crypto": -0.50},
+        "description": "Equity -30%, bonds/funds -15%, crypto -50%",
+        "shocks": {"stock": -0.30, "etf": -0.30, "fund": -0.15, "bond": -0.15, "crypto": -0.50},
     },
     "nordic_housing": {
         "name": "Nordic Housing Crisis",
         "description": "Finnish/Nordic equities -40%, other equity -15%",
-        "shocks": {"stock": -0.30, "etf": -0.20, "bond": 0.03, "crypto": -0.10},
+        "shocks": {"stock": -0.30, "etf": -0.20, "fund": 0.03, "bond": 0.03, "crypto": -0.10},
     },
 }
 
