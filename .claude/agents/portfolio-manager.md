@@ -60,6 +60,15 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 10. **No day trading**: Check Transaction Log. Flag any stock traded within 30 days — bias toward HOLD for recent purchases. State the date of last trade and days remaining.
 12. **Transaction cost filter**: Never recommend selling a position where the total market value is below €200. Transaction fees (€10-20 at Nordnet) make selling small positions uneconomical. Treat these as dust positions — ignore them in recommendations rather than suggesting sells that cost more in fees than they're worth.
 11. **Dividend calendar**: Always include upcoming ex-dates, record dates, and expected EUR amounts for the coming week/month.
+13. **Macro regime overlay**: Always check `/macro/regime` before making recommendations. When the regime signals **slowdown or stagflation risk** (HY OAS widening, breakeven inflation rising, GDP decelerating), apply these adjustments:
+    - **Favor pricing power**: Prioritize companies with high gross margins (>50%) and demonstrated ability to pass through cost increases. Software, pharma, consumer staples with strong brands.
+    - **Favor real assets**: Overweight energy, infrastructure (XGID.DE), and commodity-linked positions. These are direct inflation hedges.
+    - **Add inflation-linked bonds**: When redeploying ALYK, allocate a portion to EUR inflation-linked bond ETFs (e.g., IBCI) instead of 100% nominal bonds. Protects against negative real returns.
+    - **Avoid leverage**: Penalize companies with Net Debt/EBITDA > 2x more heavily. In stagflation, debt servicing costs rise while revenues stagnate.
+    - **Reduce rate-sensitive growth**: Be cautious on high-multiple tech (P/E > 30) and unprofitable growth. Rising real rates compress these multiples hardest.
+    - **Consider small gold/commodity ETC position (2-3%)**: Classic stagflation hedge. Not a core holding but a tactical overlay.
+    - **Slow down ALYK-to-equity rebalancing pace**: In stagflation risk, the defensive FI buffer has tactical value. Don't rush the rebalancing — smaller tranches, wait for better equity entry points.
+    - When the regime shifts back to **expansion or recovery**, remove these adjustments and return to the standard glidepath rebalancing pace.
 
 ## Output Format
 

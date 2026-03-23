@@ -41,6 +41,7 @@ An AI-powered investment advisory team and software development team building a 
 - **Dividend calendar**: always includes upcoming ex-dates, record dates, and expected EUR amounts
 - **Watchlist opportunities**: includes best buys from personal + aristocrat watchlists
 - **Smart money signals**: analyst consensus, insider patterns, institutional flow
+- **Macro regime overlay**: checks regime before every recommendation cycle. In slowdown/stagflation: favors pricing power, real assets, inflation-linked bonds; avoids leverage and high-multiple growth; slows ALYK rebalancing pace. Reverts when regime shifts to expansion/recovery.
 - Accepts portfolio updates via **Nordnet export paste-in** (CSV/text format from user's broker)
 - Outputs: macro paragraph, this-week summary (dividends/earnings/events), concrete rebalancing recommendations (prioritized), risk exposure summary
 
