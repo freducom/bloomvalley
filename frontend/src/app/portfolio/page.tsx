@@ -326,15 +326,19 @@ function BrinsonAttribution() {
   const [error, setError] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<"sector" | "assetClass">("sector");
   const [snapshotting, setSnapshotting] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
 
-  // Default: last 2 days (snapshots may be recent)
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 2);
-    return d.toISOString().split("T")[0];
-  });
-  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const today = new Date().toISOString().split("T")[0];
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate, setToDate] = useState(today);
 
   const fetchAttribution = useCallback(async () => {
+    if (fromDate >= toDate) {
+      setError("Select a date range where 'from' is before 'to'.");
+      setData(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -344,18 +348,22 @@ function BrinsonAttribution() {
       setData(res.data);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load attribution";
-      if (msg.includes("snapshot")) {
-        setError("No holdings snapshot found for this date range. Click \"Snapshot\" to capture current holdings.");
+      if (msg.includes("snapshot") || msg.includes("404")) {
+        setError("No holdings snapshot found for this date range. Click \"Snapshot\" to capture today's holdings, then select a valid range.");
+      } else if (msg.includes("from must be before to")) {
+        setError("Select a date range where 'from' is before 'to'.");
       } else {
         setError(msg);
       }
       setData(null);
     } finally {
       setLoading(false);
+      setHasFetched(true);
     }
   }, [fromDate, toDate, groupBy]);
 
-  useEffect(() => { fetchAttribution(); }, [fetchAttribution]);
+  // Don't auto-fetch — wait for user to set dates or take a snapshot
+  // Only auto-fetch if dates are valid (from < to)
 
   const takeSnapshot = async () => {
     setSnapshotting(true);
@@ -384,6 +392,10 @@ function BrinsonAttribution() {
             <option value="sector">By Sector</option>
             <option value="assetClass">By Asset Class</option>
           </select>
+          <button onClick={fetchAttribution} disabled={loading || fromDate >= toDate}
+            className="px-2 py-1 text-xs font-mono bg-terminal-accent/20 text-terminal-accent border border-terminal-accent/50 rounded hover:bg-terminal-accent/30 disabled:opacity-40">
+            {loading ? "..." : "Run"}
+          </button>
           <button onClick={takeSnapshot} disabled={snapshotting}
             className="px-2 py-1 text-xs font-mono border border-terminal-border text-terminal-text-secondary rounded hover:text-terminal-accent hover:border-terminal-accent disabled:opacity-40">
             {snapshotting ? "..." : "Snapshot"}
@@ -391,9 +403,15 @@ function BrinsonAttribution() {
         </div>
       </div>
 
+      {!hasFetched && !loading && !data && !error && (
+        <div className="text-sm text-terminal-text-tertiary bg-terminal-bg-secondary border border-terminal-border rounded p-4">
+          Select a date range and click Run. Take a Snapshot first to capture today&apos;s holdings.
+        </div>
+      )}
+
       {error && (
         <div className="text-sm text-terminal-warning bg-terminal-warning/10 border border-terminal-warning/20 rounded p-3 mb-3">
-          {error}. Try taking a snapshot first.
+          {error}
         </div>
       )}
 
