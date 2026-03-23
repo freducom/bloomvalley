@@ -336,8 +336,8 @@ function CorrelationCard({ correlation }: { correlation: CorrelationMatrix }) {
           <thead>
             <tr>
               <th className="p-1" />
-              {tickers.map((t) => (
-                <th key={t} className="p-1 font-mono text-terminal-text-secondary -rotate-45 origin-bottom-left h-12">
+              {tickers.map((t, i) => (
+                <th key={i} className="p-1 font-mono text-terminal-text-secondary -rotate-45 origin-bottom-left h-12">
                   {t}
                 </th>
               ))}
@@ -345,7 +345,7 @@ function CorrelationCard({ correlation }: { correlation: CorrelationMatrix }) {
           </thead>
           <tbody>
             {tickers.map((t, i) => (
-              <tr key={t}>
+              <tr key={i}>
                 <td className="p-1 font-mono text-terminal-text-secondary whitespace-nowrap pr-2">{t}</td>
                 {matrix[i].map((val, j) => (
                   <td key={j} className="p-0">
