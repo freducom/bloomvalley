@@ -81,59 +81,60 @@ function getLocalTime(tz: string): { hour: number; minute: number; dayOfWeek: nu
   return { hour, minute, dayOfWeek: dayMap[weekday] ?? 0 };
 }
 
-function getNextOpen(schedule: ExchangeSchedule): string {
-  /**
-   * Calculate time until next market open, accounting for weekends.
-   * Returns a human-readable string like "opens in 14h 23m" or "opens Mon 10:00".
-   */
-  const now = new Date();
+function _fmtDuration(totalMin: number): string {
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
 
-  // Get current time in the exchange's timezone
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: schedule.tz,
-    year: "numeric", month: "2-digit", day: "2-digit",
+function _getLocalParts(tz: string): { day: number; minutes: number } {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
     hour: "2-digit", minute: "2-digit", hour12: false,
     weekday: "short",
-  });
-  const parts = formatter.formatToParts(now);
+  }).formatToParts(now);
   const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
   const dayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
-  const currentDay = dayMap[get("weekday")] ?? 0;
-  const currentH = parseInt(get("hour"), 10);
-  const currentM = parseInt(get("minute"), 10);
-  const currentMinutes = currentH * 60 + currentM;
-  const openMinutes = schedule.openHour * 60 + schedule.openMinute;
+  return {
+    day: dayMap[get("weekday")] ?? 0,
+    minutes: parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10),
+  };
+}
 
-  // Check if market opens later today
-  const isTradeDay = schedule.tradingDays.includes(currentDay);
-  if (isTradeDay && currentMinutes < openMinutes) {
-    const diffMin = openMinutes - currentMinutes;
-    const h = Math.floor(diffMin / 60);
-    const m = diffMin % 60;
-    return h > 0 ? `opens in ${h}h ${m}m` : `opens in ${m}m`;
+function getTimeUntilOpen(schedule: ExchangeSchedule): string {
+  const { day, minutes } = _getLocalParts(schedule.tz);
+  const openMin = schedule.openHour * 60 + schedule.openMinute;
+
+  // Opens later today?
+  if (schedule.tradingDays.includes(day) && minutes < openMin) {
+    return `Opens in ${_fmtDuration(openMin - minutes)}`;
   }
 
   // Find next trading day
   let daysAhead = 1;
   for (let i = 1; i <= 7; i++) {
-    const nextDay = (currentDay + i) % 7;
-    if (schedule.tradingDays.includes(nextDay)) {
-      daysAhead = i;
-      break;
-    }
+    if (schedule.tradingDays.includes((day + i) % 7)) { daysAhead = i; break; }
   }
 
   if (daysAhead === 1) {
-    // Tomorrow
-    const h = (24 * 60 - currentMinutes + openMinutes) / 60;
-    return `opens in ${Math.floor(h)}h`;
+    return `Opens in ${_fmtDuration(24 * 60 - minutes + openMin)}`;
   }
 
-  // Multiple days away — show day name and time
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const nextDayName = dayNames[(currentDay + daysAhead) % 7];
   const openStr = `${String(schedule.openHour).padStart(2, "0")}:${String(schedule.openMinute).padStart(2, "0")}`;
-  return `opens ${nextDayName} ${openStr}`;
+  return `Opens ${dayNames[(day + daysAhead) % 7]} ${openStr}`;
+}
+
+function getTimeUntilClose(schedule: ExchangeSchedule): string {
+  const { minutes } = _getLocalParts(schedule.tz);
+  const closeMin = schedule.closeHour * 60 + schedule.closeMinute;
+  if (minutes < closeMin) {
+    return `Closes in ${_fmtDuration(closeMin - minutes)}`;
+  }
+  return "Closing soon";
 }
 
 function getExchangeStatus(schedule: ExchangeSchedule): MarketStatusType {
@@ -161,20 +162,23 @@ function getExchangeStatus(schedule: ExchangeSchedule): MarketStatusType {
 }
 
 export function StatusBar() {
-  const [statuses, setStatuses] = useState<Record<string, { status: MarketStatusType; nextOpen?: string }>>({});
+  const [statuses, setStatuses] = useState<Record<string, { status: MarketStatusType; tooltip?: string }>>({});
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
 
   useEffect(() => {
     function update() {
-      const s: Record<string, { status: MarketStatusType; nextOpen?: string }> = {};
+      const s: Record<string, { status: MarketStatusType; tooltip?: string }> = {};
       for (const [name, schedule] of Object.entries(EXCHANGES)) {
         const status = getExchangeStatus(schedule);
-        s[name] = {
-          status,
-          nextOpen: status === "closed" ? getNextOpen(schedule) : undefined,
-        };
+        let tooltip: string | undefined;
+        if (status === "open") {
+          tooltip = getTimeUntilClose(schedule);
+        } else {
+          tooltip = getTimeUntilOpen(schedule);
+        }
+        s[name] = { status, tooltip };
       }
-      s["Crypto"] = { status: "open" }; // 24/7
+      s["Crypto"] = { status: "open", tooltip: "24/7 market" }; // 24/7
       setStatuses(s);
     }
     update();
@@ -199,7 +203,7 @@ export function StatusBar() {
       {/* Markets */}
       <div className="flex items-center gap-4">
         {Object.entries(statuses).map(([name, info]) => (
-          <StatusDot key={name} label={name} status={info.status} nextOpen={info.nextOpen} />
+          <StatusDot key={name} label={name} status={info.status} tooltip={info.tooltip} />
         ))}
       </div>
 
@@ -223,11 +227,11 @@ export function StatusBar() {
 function StatusDot({
   label,
   status,
-  nextOpen,
+  tooltip,
 }: {
   label: string;
   status: MarketStatusType;
-  nextOpen?: string;
+  tooltip?: string;
 }) {
   const dotColor = {
     open: "bg-terminal-positive",
@@ -244,13 +248,10 @@ function StatusDot({
   }[status];
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 cursor-default" title={tooltip}>
       <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
       <span className="text-terminal-text-secondary">
         {label}: {statusLabel}
-        {nextOpen && (
-          <span className="text-terminal-text-tertiary ml-1">({nextOpen})</span>
-        )}
       </span>
     </div>
   );
