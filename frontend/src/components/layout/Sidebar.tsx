@@ -232,83 +232,99 @@ export function Sidebar() {
       </nav>
 
       {/* Footer actions */}
-      <div className={`border-t border-terminal-border mx-1 pt-1 ${mobile ? "pb-4" : ""}`}>
-        <Link
-          href="/fullscreen"
-          className={`
-            flex items-center gap-2.5 px-2.5 rounded-sm
-            text-terminal-text-secondary hover:text-terminal-text-primary
-            hover:bg-terminal-bg-hover transition-colors duration-150
-            ${mobile ? "h-11" : "h-9"}
-          `}
-          title={!mobile && collapsed ? "TV Dashboard" : undefined}
-        >
-          <Monitor size={mobile ? 20 : 18} className={!mobile && collapsed ? "mx-auto" : ""} />
-          {(mobile || !collapsed) && (
-            <>
-              <span className={`flex-1 ${mobile ? "text-base" : "text-sm"}`}>TV Dashboard</span>
-              {!mobile && (
+      {mobile ? (
+        <div className="border-t border-terminal-border mx-1 pt-2 pb-4 flex justify-center gap-6">
+          <button
+            onClick={togglePrivacy}
+            className={`p-2.5 rounded-sm transition-colors ${
+              privacyMode
+                ? "text-terminal-warning"
+                : "text-terminal-text-secondary hover:text-terminal-text-primary"
+            }`}
+            aria-label={privacyMode ? "Privacy On" : "Privacy Off"}
+          >
+            {privacyMode ? <EyeOff size={22} /> : <Eye size={22} />}
+          </button>
+          <button
+            onClick={() => {
+              document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
+            }}
+            className="p-2.5 rounded-sm text-terminal-text-secondary hover:text-terminal-text-primary transition-colors"
+            aria-label="Search"
+          >
+            <Search size={22} />
+          </button>
+        </div>
+      ) : (
+        <div className="border-t border-terminal-border mx-1 pt-1">
+          <Link
+            href="/fullscreen"
+            className="
+              flex items-center gap-2.5 h-9 px-2.5 rounded-sm
+              text-terminal-text-secondary hover:text-terminal-text-primary
+              hover:bg-terminal-bg-hover transition-colors duration-150
+            "
+            title={collapsed ? "TV Dashboard" : undefined}
+          >
+            <Monitor size={18} className={collapsed ? "mx-auto" : ""} />
+            {!collapsed && (
+              <>
+                <span className="text-sm flex-1">TV Dashboard</span>
                 <kbd className="text-[10px] text-terminal-text-tertiary bg-terminal-bg-tertiary px-1.5 py-0.5 rounded font-mono">
                   {"\u2318\u21E7"}F
                 </kbd>
-              )}
-            </>
-          )}
-        </Link>
+              </>
+            )}
+          </Link>
 
-        <button
-          onClick={togglePrivacy}
-          className={`
-            flex items-center gap-2.5 w-full px-2.5 rounded-sm
-            transition-colors duration-150
-            ${mobile ? "h-11" : "h-9"}
-            ${privacyMode
-              ? "text-terminal-warning hover:text-terminal-warning hover:bg-terminal-bg-hover"
-              : "text-terminal-text-secondary hover:text-terminal-text-primary hover:bg-terminal-bg-hover"
+          <button
+            onClick={togglePrivacy}
+            className={`
+              flex items-center gap-2.5 h-9 w-full px-2.5 rounded-sm
+              transition-colors duration-150
+              ${privacyMode
+                ? "text-terminal-warning hover:text-terminal-warning hover:bg-terminal-bg-hover"
+                : "text-terminal-text-secondary hover:text-terminal-text-primary hover:bg-terminal-bg-hover"
+              }
+            `}
+            title={collapsed ? `Privacy ${privacyMode ? "On" : "Off"}` : undefined}
+          >
+            {privacyMode
+              ? <EyeOff size={18} className={collapsed ? "mx-auto" : ""} />
+              : <Eye size={18} className={collapsed ? "mx-auto" : ""} />
             }
-          `}
-          title={!mobile && collapsed ? `Privacy ${privacyMode ? "On" : "Off"}` : undefined}
-        >
-          {privacyMode
-            ? <EyeOff size={mobile ? 20 : 18} className={!mobile && collapsed ? "mx-auto" : ""} />
-            : <Eye size={mobile ? 20 : 18} className={!mobile && collapsed ? "mx-auto" : ""} />
-          }
-          {(mobile || !collapsed) && (
-            <>
-              <span className={`flex-1 ${mobile ? "text-base" : "text-sm"}`}>{privacyMode ? "Privacy On" : "Privacy Off"}</span>
-              {!mobile && (
+            {!collapsed && (
+              <>
+                <span className="text-sm flex-1">{privacyMode ? "Privacy On" : "Privacy Off"}</span>
                 <kbd className="text-[10px] text-terminal-text-tertiary bg-terminal-bg-tertiary px-1.5 py-0.5 rounded font-mono">
                   {"\u2318\u21E7"}P
                 </kbd>
-              )}
-            </>
-          )}
-        </button>
+              </>
+            )}
+          </button>
 
-        <button
-          onClick={() => {
-            document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
-          }}
-          className={`
-            flex items-center gap-2.5 w-full px-2.5 rounded-sm
-            text-terminal-text-secondary hover:text-terminal-text-primary
-            hover:bg-terminal-bg-hover transition-colors duration-150
-            ${mobile ? "h-11" : "h-9"}
-          `}
-        >
-          <Search size={mobile ? 20 : 18} className={!mobile && collapsed ? "mx-auto" : ""} />
-          {(mobile || !collapsed) && (
-            <>
-              <span className={`flex-1 ${mobile ? "text-base" : "text-sm"}`}>Search</span>
-              {!mobile && (
+          <button
+            onClick={() => {
+              document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
+            }}
+            className="
+              flex items-center gap-2.5 h-9 w-full px-2.5 rounded-sm
+              text-terminal-text-secondary hover:text-terminal-text-primary
+              hover:bg-terminal-bg-hover transition-colors duration-150
+            "
+          >
+            <Search size={18} className={collapsed ? "mx-auto" : ""} />
+            {!collapsed && (
+              <>
+                <span className="text-sm flex-1">Search</span>
                 <kbd className="text-[10px] text-terminal-text-tertiary bg-terminal-bg-tertiary px-1.5 py-0.5 rounded font-mono">
                   {"\u2318"}K
                 </kbd>
-              )}
-            </>
-          )}
-        </button>
-      </div>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </>
   );
 
