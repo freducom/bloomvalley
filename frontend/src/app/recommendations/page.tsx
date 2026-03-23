@@ -263,7 +263,7 @@ function AnalystSummaries() {
     (async () => {
       try {
         const res = await apiGetRaw<{ data: AnalystNote[] }>(
-          "/research/notes?tags=analyst_report&limit=20&sort=-created_at"
+          "/research/notes?tag=analyst_report&limit=20"
         );
         setNotes(res.data);
       } catch { /* */ }

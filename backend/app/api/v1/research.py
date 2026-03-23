@@ -88,7 +88,7 @@ async def list_notes(
     async with async_session() as session:
         query = (
             select(ResearchNote, Security)
-            .join(Security, ResearchNote.security_id == Security.id)
+            .outerjoin(Security, ResearchNote.security_id == Security.id)
             .order_by(ResearchNote.updated_at.desc())
         )
 
@@ -119,7 +119,7 @@ async def list_notes(
     prices = await _get_latest_prices()
     data = []
     for note, sec in rows:
-        pc = prices.get(sec.id, {}).get("close_cents") if sec.id in prices else None
+        pc = prices.get(sec.id, {}).get("close_cents") if sec and sec.id in prices else None
         data.append(_note_to_dict(note, sec, pc))
 
     return {
