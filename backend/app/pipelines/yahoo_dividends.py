@@ -86,6 +86,13 @@ class YahooDividends(PipelineAdapter):
                 except Exception:
                     yahoo_ccy = sec.currency
 
+                # Yahoo sometimes reports "GBP" instead of "GBp" for London-listed
+                # securities, but dividends are still in pence. Force GBp for .L tickers.
+                if yahoo_ccy == "GBP" and (
+                    yahoo_ticker.endswith(".L") or sec.exchange in ("XLON", "LSE")
+                ):
+                    yahoo_ccy = "GBp"
+
                 minor = MINOR_CURRENCY_MAP.get(yahoo_ccy)
                 divisor = minor[1] if minor else 1
                 currency = minor[0] if minor else yahoo_ccy
