@@ -298,11 +298,13 @@ Add these lines (adjust paths and timezone):
 
 ```bash
 # Create a timestamped SQL dump (run from project root)
-docker compose exec db pg_dump -U warren warren > backup_$(date +%Y%m%d_%H%M).sql
+docker compose exec db pg_dump -U warren --disable-triggers warren > backup_$(date +%Y%m%d_%H%M).sql
 
 # Compressed backup (recommended for large databases)
-docker compose exec db pg_dump -U warren warren | gzip > backup_$(date +%Y%m%d).sql.gz
+docker compose exec db pg_dump -U warren --disable-triggers warren | gzip > backup_$(date +%Y%m%d).sql.gz
 ```
+
+> **Note:** TimescaleDB's internal tables (`hypertable`, `chunk`, `continuous_agg`) have circular foreign-key constraints that produce warnings during `pg_dump`. The `--disable-triggers` flag ensures clean restore. These warnings are cosmetic and do not affect the backup data.
 
 ### Database restore
 
@@ -311,10 +313,10 @@ docker compose exec db pg_dump -U warren warren | gzip > backup_$(date +%Y%m%d).
 docker compose stop backend cron analyst-swarm
 
 # Restore from SQL dump
-docker compose exec -T db psql -U warren warren < backup_20260323.sql
+docker compose exec -T db psql -U warren --single-transaction warren < backup_20260323.sql
 
 # Restore from compressed dump
-gunzip -c backup_20260323.sql.gz | docker compose exec -T db psql -U warren warren
+gunzip -c backup_20260323.sql.gz | docker compose exec -T db psql -U warren --single-transaction warren
 
 # Restart services
 docker compose up -d
@@ -332,7 +334,7 @@ DATE=$(date +%Y%m%d)
 
 # Database
 cd "$PROJECT_DIR"
-docker compose exec -T db pg_dump -U warren warren | gzip > "$BACKUP_DIR/db_${DATE}.sql.gz"
+docker compose exec -T db pg_dump -U warren --disable-triggers warren | gzip > "$BACKUP_DIR/db_${DATE}.sql.gz"
 
 # Config files
 cp "$PROJECT_DIR/.env" "$BACKUP_DIR/env_${DATE}"
@@ -353,7 +355,7 @@ echo "[backup] Done: $BACKUP_DIR/db_${DATE}.sql.gz"
 cd /path/to/bloomvalley
 
 # 1. Create database dump
-docker compose exec db pg_dump -U warren warren | gzip > migration_backup.sql.gz
+docker compose exec db pg_dump -U warren --disable-triggers warren | gzip > migration_backup.sql.gz
 
 # 2. Bundle config files
 tar czf migration_config.tar.gz .env analyst-swarm/config.local.yaml .claude/agents/

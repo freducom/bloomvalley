@@ -43,7 +43,8 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 
-# Personal data — Nordnet exports, portfolio files
+# Personal data — analyst reports, Nordnet exports, portfolio files
+reports/
 *.csv
 *.tsv
 imports/
