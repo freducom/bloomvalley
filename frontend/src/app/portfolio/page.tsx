@@ -61,23 +61,19 @@ interface PortfolioSummary {
 
 export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
-  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"overview" | "holdings">("overview");
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [sum, hld, recRaw] = await Promise.all([
+        const [sum, recRaw] = await Promise.all([
           apiGet<PortfolioSummary>("/portfolio/summary"),
-          apiGet<Holding[]>("/portfolio/holdings"),
           apiGetRaw<{ data: Recommendation[]; pagination: Record<string, unknown> }>(
             "/recommendations?status=active&limit=10"
           ).catch(() => ({ data: [] as Recommendation[], pagination: {} })),
         ]);
         setSummary(sum);
-        setHoldings(hld);
         setRecommendations(recRaw.data);
       } catch (e) {
         console.error("Failed to load portfolio:", e);
@@ -115,21 +111,6 @@ export default function PortfolioPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Portfolio Dashboard</h1>
-        <div className="flex gap-1">
-          {(["overview", "holdings"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3 py-1 text-sm font-mono rounded ${
-                tab === t
-                  ? "bg-terminal-accent/20 text-terminal-accent"
-                  : "text-terminal-text-secondary hover:text-terminal-text-primary"
-              }`}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Hero Metrics */}
@@ -180,7 +161,7 @@ export default function PortfolioPage() {
             </p>
           </div>
         </div>
-      ) : tab === "overview" ? (
+      ) : (
         <div className="space-y-6">
           {/* Allocation */}
           <div>
@@ -300,106 +281,6 @@ export default function PortfolioPage() {
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        /* Holdings tab */
-        <div className="border border-terminal-border rounded-md overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-terminal-bg-secondary text-terminal-text-secondary text-sm">
-                <th className="text-left px-4 py-2 font-medium">Ticker</th>
-                <th className="text-left px-4 py-2 font-medium">Name</th>
-                <th className="text-left px-4 py-2 font-medium">Account</th>
-                <th className="text-left px-4 py-2 font-medium">Class</th>
-                <th className="text-right px-4 py-2 font-medium">Qty</th>
-                <th className="text-right px-4 py-2 font-medium">Avg Cost</th>
-                <th className="text-right px-4 py-2 font-medium">Price</th>
-                <th className="text-right px-4 py-2 font-medium">
-                  Market Value
-                </th>
-                <th className="text-right px-4 py-2 font-medium">P&L</th>
-                <th className="text-right px-4 py-2 font-medium">P&L %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {holdings.map((h) => {
-                const pnlColor =
-                  (h.unrealizedPnlCents ?? 0) > 0
-                    ? "text-terminal-positive"
-                    : (h.unrealizedPnlCents ?? 0) < 0
-                    ? "text-terminal-negative"
-                    : "text-terminal-text-tertiary";
-                return (
-                  <tr
-                    key={`${h.accountId}-${h.securityId}`}
-                    className="border-t border-terminal-border hover:bg-terminal-bg-secondary/50 transition-colors"
-                  >
-                    <td className="px-4 py-2 font-mono text-terminal-accent text-sm">
-                      <TickerLink ticker={h.ticker} />
-                    </td>
-                    <td className="px-4 py-2 text-sm">{h.name}</td>
-                    <td className="px-4 py-2 text-xs text-terminal-text-secondary">
-                      {h.accountName}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded font-mono ${
-                          h.assetClass === "stock"
-                            ? "bg-terminal-info/20 text-terminal-info"
-                            : h.assetClass === "etf"
-                            ? "bg-terminal-accent/20 text-terminal-accent"
-                            : h.assetClass === "crypto"
-                            ? "bg-terminal-warning/20 text-terminal-warning"
-                            : "bg-terminal-bg-tertiary text-terminal-text-tertiary"
-                        }`}
-                      >
-                        {h.assetClass}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-sm">
-                      <Private>{parseFloat(h.quantity).toLocaleString("en-US", {
-                        maximumFractionDigits: 4,
-                      })}</Private>
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-sm">
-                      <Private>{formatCurrency(h.avgCostCents, h.currency)}</Private>
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-sm">
-                      {h.currentPriceCents != null ? (
-                        <span>
-                          {formatCurrency(
-                            h.currentPriceCents,
-                            h.priceCurrency
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-terminal-text-tertiary">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-sm">
-                      <Private>{h.marketValueEurCents != null
-                        ? formatCurrency(h.marketValueEurCents)
-                        : "--"}</Private>
-                    </td>
-                    <td
-                      className={`px-4 py-2 text-right font-mono text-sm ${pnlColor}`}
-                    >
-                      <Private>{h.unrealizedPnlCents != null
-                        ? formatCurrency(h.unrealizedPnlCents)
-                        : "--"}</Private>
-                    </td>
-                    <td
-                      className={`px-4 py-2 text-right font-mono text-sm ${pnlColor}`}
-                    >
-                      <Private>{h.unrealizedPnlPct != null
-                        ? formatPercent(h.unrealizedPnlPct, true)
-                        : "--"}</Private>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

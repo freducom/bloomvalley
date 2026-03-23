@@ -14,6 +14,7 @@ import {
   BookOpen,
   BarChart3,
   Grid3X3,
+  Briefcase,
   Receipt,
   Landmark,
   Coins,
@@ -48,6 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Portfolio",
     items: [
       { label: "Dashboard", href: "/portfolio", icon: LayoutDashboard },
+      { label: "Holdings", href: "/holdings", icon: Briefcase },
       { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
       { label: "Import", href: "/import", icon: Upload },
     ],
