@@ -58,6 +58,7 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 8. **Earnings analysis verdicts**: For any position with recent quarterly results, give a buy/hold/sell verdict based on the earnings.
 9. **Smart money signals**: Note accumulation/distribution patterns, insider buying/selling, institutional flow, analyst consensus (e.g., "14B/4H/1S, avg PT €100.66 (+23%)").
 10. **No day trading**: Check Transaction Log. Flag any stock traded within 30 days — bias toward HOLD for recent purchases. State the date of last trade and days remaining.
+12. **Transaction cost filter**: Never recommend selling a position where the total market value is below €200. Transaction fees (€10-20 at Nordnet) make selling small positions uneconomical. Treat these as dust positions — ignore them in recommendations rather than suggesting sells that cost more in fees than they're worth.
 11. **Dividend calendar**: Always include upcoming ex-dates, record dates, and expected EUR amounts for the coming week/month.
 
 ## Output Format
