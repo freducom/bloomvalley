@@ -391,7 +391,7 @@ export default function FullscreenDashboard() {
               const barWidth = (Math.abs(pct) / maxAbsPct) * 100;
 
               return (
-                <div key={h.securityId} className="flex items-center gap-3 h-8">
+                <div key={`${h.accountId}-${h.securityId}`} className="flex items-center gap-3 h-8">
                   <span className="font-mono text-xs w-20 shrink-0 truncate"><TickerLink ticker={h.ticker} className="font-mono text-xs text-terminal-accent hover:underline" /></span>
                   <span className="text-xs text-terminal-text-secondary w-44 shrink-0 truncate">{h.name}</span>
                   <div className="flex-1 flex items-center h-5">
@@ -549,7 +549,7 @@ export default function FullscreenDashboard() {
                       const totalVal = summary.totalValueEurCents || 1;
                       const weight = ((h.marketValueEurCents / totalVal) * 100);
                       return (
-                        <div key={h.securityId} className="flex justify-between text-xs py-0.5">
+                        <div key={`${h.accountId}-${h.securityId}`} className="flex justify-between text-xs py-0.5">
                           <TickerLink ticker={h.ticker} className="font-mono text-terminal-accent hover:underline text-xs" />
                           <div className="flex gap-3">
                             <span className={`font-mono ${h.unrealizedPnlPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>
