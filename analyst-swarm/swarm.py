@@ -161,6 +161,24 @@ async def call_llm(prompt: str, system: str, cfg: dict) -> str:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
 
+# ── Status Reporting ──
+
+async def report_status(backend_url: str, status: str, agent: str | None = None,
+                        completed: int = 0, total: int = 0, message: str | None = None):
+    """Report swarm status to the backend (stored in Redis)."""
+    try:
+        async with httpx.AsyncClient(timeout=5, base_url=backend_url) as client:
+            await client.post("/swarm/status", json={
+                "status": status,
+                "agent": agent,
+                "completed": completed,
+                "total": total,
+                "message": message,
+            })
+    except Exception:
+        pass  # Non-critical — don't fail the swarm over status reporting
+
+
 # ── Data Fetching ──
 
 async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
@@ -481,23 +499,32 @@ async def run_swarm(cfg: dict):
     print(f"{'='*60}", flush=True)
 
     start = time.time()
+    backend_url = cfg["backend_url"]
 
     # Step 1: Refresh pipelines
     if cfg.get("refresh_pipelines", True):
+        await report_status(backend_url, "running", message="Refreshing data pipelines...")
         await refresh_pipelines(cfg)
 
     # Step 2: Run analysts (parallel, excluding portfolio-manager)
     agents = cfg.get("agents", [])
     analysts = [a for a in agents if a != "portfolio-manager"]
+    total_agents = len(agents)
     max_parallel = cfg.get("max_parallel", 4)
 
     print(f"\n[swarm] Running {len(analysts)} analysts (max {max_parallel} parallel)...", flush=True)
 
     semaphore = asyncio.Semaphore(max_parallel)
+    completed_count = 0
 
     async def run_with_limit(agent_name):
+        nonlocal completed_count
         async with semaphore:
-            return await run_agent(agent_name, cfg, date_str)
+            await report_status(backend_url, "running", agent=agent_name,
+                                completed=completed_count, total=total_agents)
+            result = await run_agent(agent_name, cfg, date_str)
+            completed_count += 1
+            return result
 
     analyst_tasks = [run_with_limit(a) for a in analysts]
     results = await asyncio.gather(*analyst_tasks, return_exceptions=True)
@@ -508,18 +535,25 @@ async def run_swarm(cfg: dict):
 
     # Step 3: Close old recommendations
     if "portfolio-manager" in agents:
-        await close_old_recommendations(cfg["backend_url"])
+        await close_old_recommendations(backend_url)
 
     # Step 4: Run portfolio manager last (needs analyst outputs)
     if "portfolio-manager" in agents:
         print("\n[swarm] Running portfolio manager (final synthesis)...", flush=True)
+        await report_status(backend_url, "running", agent="portfolio-manager",
+                            completed=completed_count, total=total_agents)
         pm_report = await run_agent("portfolio-manager", cfg, date_str)
+        completed_count += 1
 
         # Step 5: Extract and post structured recommendations from PM report
         if pm_report:
+            await report_status(backend_url, "running", message="Posting recommendations...")
             await extract_and_post_recommendations(pm_report, cfg, date_str)
 
     elapsed = round(time.time() - start, 1)
+    await report_status(backend_url, "idle",
+                        completed=completed_count, total=total_agents,
+                        message=f"Complete in {elapsed}s")
     print(f"\n{'='*60}", flush=True)
     print(f"[swarm] Swarm run complete in {elapsed}s", flush=True)
     print(f"{'='*60}\n", flush=True)

@@ -1,9 +1,39 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+
+interface PipelineStatus {
+  name: string;
+  isRunning: boolean;
+  lastRunStatus: string | null;
+}
+
+const PIPELINE_LABELS: Record<string, string> = {
+  yahoo_daily_prices: "Prices",
+  ecb_fx_rates: "FX Rates",
+  coingecko_prices: "Crypto",
+  fred_macro_indicators: "FRED",
+  ecb_macro_indicators: "ECB Macro",
+  yahoo_dividends: "Dividends",
+  google_news: "News",
+  regional_news: "Regional News",
+  openinsider: "Insiders (US)",
+  nasdaq_nordic_insider: "Insiders (Nordic)",
+  fi_se_insider: "Insiders (FI/SE)",
+  yahoo_fundamentals: "Fundamentals",
+  alpha_vantage_prices: "Alpha Vantage",
+  sec_edgar_filings: "SEC Edgar",
+  quiver_congress_trades: "Congress",
+  morningstar_ratings: "Morningstar",
+  french_factors: "Factors",
+  gdelt_events: "GDELT",
+  justetf_profiles: "justETF",
+  finnhub_earnings: "Earnings",
+  news_cleanup: "Cleanup",
+};
 
 type MarketStatusType = "open" | "closed" | "pre-market" | "after-hours";
 
@@ -227,6 +257,9 @@ export function StatusBar() {
     return () => clearInterval(interval);
   }, [activeGroups, hasCrypto]);
 
+  const [runningPipelines, setRunningPipelines] = useState<string[]>([]);
+  const [failedCount, setFailedCount] = useState(0);
+
   useEffect(() => {
     apiGet<{ totalValueEurCents: number }>("/portfolio/summary")
       .then((d) => setPortfolioValue(d.totalValueEurCents))
@@ -239,6 +272,36 @@ export function StatusBar() {
     return () => clearInterval(interval);
   }, []);
 
+  const [swarmStatus, setSwarmStatus] = useState<{
+    status: string;
+    agent?: string;
+    completed?: number;
+    total?: number;
+    message?: string;
+  } | null>(null);
+
+  // Poll pipeline + swarm status
+  useEffect(() => {
+    function fetchStatus() {
+      apiGetRaw<{ data: PipelineStatus[] }>("/pipelines")
+        .then((res) => {
+          const running = res.data
+            .filter((p) => p.isRunning)
+            .map((p) => PIPELINE_LABELS[p.name] || p.name);
+          const failed = res.data.filter((p) => p.lastRunStatus === "failed").length;
+          setRunningPipelines(running);
+          setFailedCount(failed);
+        })
+        .catch(() => {});
+      apiGetRaw<{ data: { status: string; agent?: string; completed?: number; total?: number; message?: string } }>("/swarm/status")
+        .then((res) => setSwarmStatus(res.data))
+        .catch(() => {});
+    }
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <footer className="hidden md:flex items-center justify-between h-8 px-4 bg-terminal-bg-secondary border-t border-terminal-border shrink-0 text-xs font-mono">
       {/* Markets */}
@@ -248,10 +311,40 @@ export function StatusBar() {
         ))}
       </div>
 
-      {/* Pipeline health */}
-      <div className="flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full bg-terminal-positive" />
-        <span className="text-terminal-text-secondary">All systems operational</span>
+      {/* System status */}
+      <div className="flex items-center gap-4 min-w-0">
+        {/* Swarm status */}
+        {swarmStatus?.status === "running" && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+            <span className="text-purple-400 truncate">
+              {swarmStatus.agent
+                ? `${swarmStatus.agent} (${swarmStatus.completed || 0}/${swarmStatus.total || 0})`
+                : swarmStatus.message || "Swarm running"}
+            </span>
+          </div>
+        )}
+        {/* Pipeline status */}
+        {runningPipelines.length > 0 ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-terminal-accent animate-pulse" />
+            <span className="text-terminal-accent truncate">
+              {runningPipelines.join(", ")}
+            </span>
+          </div>
+        ) : failedCount > 0 ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-terminal-warning" />
+            <span className="text-terminal-text-secondary">
+              {failedCount} failed
+            </span>
+          </div>
+        ) : swarmStatus?.status !== "running" ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-terminal-positive" />
+            <span className="text-terminal-text-secondary">OK</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Portfolio value */}
