@@ -778,7 +778,7 @@ export default function FullscreenDashboard() {
                 const summary = thesisMatch?.[1]?.trim().slice(0, 300) || analysis.slice(0, 300);
                 const bull = bullMatch?.[1]?.trim().slice(0, 200) || "";
                 const bear = bearMatch?.[1]?.trim().slice(0, 200) || "";
-                const pct = h.unrealizedPnlPct;
+                const pct = h.unrealizedPnlPct ?? 0;
 
                 return (
                   <div
