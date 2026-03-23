@@ -129,12 +129,11 @@ interface NewsItem {
 }
 
 interface DividendEvent {
-  id: number;
   securityId: number;
   ticker: string | null;
   exDate: string | null;
-  payDate: string | null;
-  amountCents: number | null;
+  paymentDate: string | null;
+  amountPerShareCents: number | null;
   currency: string | null;
   frequency: string | null;
 }
@@ -833,20 +832,20 @@ export default function SecurityDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {dividends.map((div) => (
+                {dividends.map((div, idx) => (
                   <tr
-                    key={div.id}
+                    key={`${div.exDate}-${idx}`}
                     className="border-t border-terminal-border hover:bg-terminal-bg-secondary/50"
                   >
                     <td className="px-4 py-2 font-mono text-xs">
                       {div.exDate ? formatDate(div.exDate) : "-"}
                     </td>
                     <td className="px-4 py-2 font-mono text-xs">
-                      {div.payDate ? formatDate(div.payDate) : "-"}
+                      {div.paymentDate ? formatDate(div.paymentDate) : "-"}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-xs">
-                      {div.amountCents != null
-                        ? formatCurrency(div.amountCents, div.currency || currency)
+                      {div.amountPerShareCents != null
+                        ? formatCurrency(div.amountPerShareCents, div.currency || currency)
                         : "-"}
                     </td>
                     <td className="px-4 py-2 text-xs text-terminal-text-secondary capitalize">
