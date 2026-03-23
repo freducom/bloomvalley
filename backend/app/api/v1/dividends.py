@@ -55,30 +55,76 @@ async def _get_held_security_ids() -> dict[int, dict]:
         return {r.security_id: {"qty": float(r.qty)} for r in result.all()}
 
 
+FREQUENCY_DAYS = {
+    "monthly": 30,
+    "quarterly": 91,
+    "semi_annual": 182,
+    "annual": 365,
+}
+
+
 @router.get("/upcoming")
 async def upcoming_dividends(
     days: int = Query(90, ge=1, le=365),
 ):
-    """Upcoming dividend events for held securities."""
+    """Upcoming dividend events for held securities.
+
+    Includes actual future events from the database AND projected events
+    based on historical frequency when no future events exist.
+    """
     holdings = await _get_held_security_ids()
     if not holdings:
         return {"data": [], "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
 
     today = date.today()
     end = today + timedelta(days=days)
+    held_ids = list(holdings.keys())
 
+    # 1. Actual future events
     async with async_session() as session:
         result = await session.execute(
             select(DividendEvent, Security)
             .join(Security, DividendEvent.security_id == Security.id)
             .where(
-                DividendEvent.security_id.in_(list(holdings.keys())),
+                DividendEvent.security_id.in_(held_ids),
                 DividendEvent.ex_date >= today,
                 DividendEvent.ex_date <= end,
             )
             .order_by(DividendEvent.ex_date)
         )
         rows = result.all()
+
+    actual_secs = {sec.id for _, sec in rows}
+
+    # 2. For securities with no future events, project from last known event
+    projected_rows = []
+    missing_ids = [sid for sid in held_ids if sid not in actual_secs]
+    if missing_ids:
+        async with async_session() as session:
+            # Get the latest event per security
+            from sqlalchemy import distinct
+            for sid in missing_ids:
+                last_result = await session.execute(
+                    select(DividendEvent, Security)
+                    .join(Security, DividendEvent.security_id == Security.id)
+                    .where(DividendEvent.security_id == sid)
+                    .order_by(DividendEvent.ex_date.desc())
+                    .limit(1)
+                )
+                last_row = last_result.first()
+                if not last_row:
+                    continue
+                last_event, sec = last_row
+                freq = last_event.frequency
+                if not freq or freq not in FREQUENCY_DAYS:
+                    continue
+                interval = timedelta(days=FREQUENCY_DAYS[freq])
+                # Project forward from last ex_date
+                next_date = last_event.ex_date + interval
+                while next_date <= end:
+                    if next_date >= today:
+                        projected_rows.append((last_event, sec, next_date))
+                    next_date += interval
 
     prices = await _get_latest_prices()
     fx_rates = await _get_fx_rates()
@@ -92,38 +138,37 @@ async def upcoming_dividends(
                 func.sum(DividendEvent.amount_cents).label("ttm_cents"),
             )
             .where(
-                DividendEvent.security_id.in_(list(holdings.keys())),
+                DividendEvent.security_id.in_(held_ids),
                 DividendEvent.ex_date >= one_year_ago,
             )
             .group_by(DividendEvent.security_id)
         )
         ttm_by_sec = {r.security_id: int(r.ttm_cents) for r in ttm_result.all()}
 
-    data = []
-    for event, sec in rows:
+    def _build_entry(event, sec, ex_date, projected=False):
         qty = Decimal(str(holdings[sec.id]["qty"]))
         total_cents = int(event.amount_cents * qty)
 
-        # Current yield based on TTM dividends / current price
         price_data = prices.get(sec.id)
         current_yield = None
         ttm = ttm_by_sec.get(sec.id)
         if price_data and price_data["close_cents"] > 0 and ttm:
             current_yield = round((ttm / price_data["close_cents"]) * 100, 2)
 
-        # Convert to EUR
         total_eur_cents = total_cents
         if event.currency != "EUR":
             fx = fx_rates.get(event.currency)
             if fx:
                 total_eur_cents = int(total_cents / float(fx))
 
-        data.append({
+        return {
             "securityId": sec.id,
             "ticker": sec.ticker,
             "name": sec.name,
-            "exDate": event.ex_date.isoformat(),
-            "paymentDate": event.payment_date.isoformat() if event.payment_date else None,
+            "exDate": ex_date.isoformat(),
+            "paymentDate": None if projected else (
+                event.payment_date.isoformat() if event.payment_date else None
+            ),
             "amountPerShareCents": event.amount_cents,
             "currency": event.currency,
             "frequency": event.frequency,
@@ -131,7 +176,16 @@ async def upcoming_dividends(
             "totalCents": total_cents,
             "totalEurCents": total_eur_cents,
             "currentYield": current_yield,
-        })
+            "projected": projected,
+        }
+
+    data = []
+    for event, sec in rows:
+        data.append(_build_entry(event, sec, event.ex_date, projected=False))
+    for event, sec, proj_date in projected_rows:
+        data.append(_build_entry(event, sec, proj_date, projected=True))
+
+    data.sort(key=lambda d: d["exDate"])
 
     return {"data": data, "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
 

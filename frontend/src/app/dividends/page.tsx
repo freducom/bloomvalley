@@ -56,6 +56,7 @@ interface CalendarEvent {
   frequency: string | null;
   sharesHeld: string | null;
   totalCents: number | null;
+  projected?: boolean;
 }
 
 type Tab = "upcoming" | "yield" | "calendar" | "history";
@@ -221,7 +222,12 @@ function UpcomingTab({
             <tbody className="divide-y divide-terminal-border">
               {data.map((d, i) => (
                 <tr key={i} className="hover:bg-terminal-bg-secondary/50">
-                  <td className="px-3 py-2 font-mono text-xs">{d.exDate}</td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {d.exDate}
+                    {d.projected && (
+                      <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-tertiary">est</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono font-medium">
                     <TickerLink ticker={d.ticker} />
                   </td>
