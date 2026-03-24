@@ -3,6 +3,7 @@ import { Providers } from "@/components/providers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import "./globals.css";
@@ -44,6 +45,7 @@ export default function RootLayout({
             </div>
           </div>
           <CommandPalette />
+          <ChatWidget />
         </Providers>
       </body>
     </html>

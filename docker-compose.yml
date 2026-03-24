@@ -45,8 +45,16 @@ services:
       - .env
     volumes:
       - ./backend:/app
+      - ${HOME}/.claude:/root/.claude:ro
+      - ${HOME}/.claude.json:/root/.claude.json:ro
     environment:
       - TZ=Europe/Helsinki
+      - LLM_PROVIDER=${LLM_PROVIDER:-claude_cli}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-}
+      - CLAUDE_CLI_MODEL=${CLAUDE_CLI_MODEL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
     restart: unless-stopped
 
   frontend:

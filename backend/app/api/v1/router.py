@@ -30,6 +30,7 @@ from app.api.v1.screener import router as screener_router
 from app.api.v1.technical import router as technical_router
 from app.api.v1.attribution import router as attribution_router
 from app.api.v1.earnings import router as earnings_router
+from app.api.v1.chat import router as chat_router
 from app.api.v1.swarm import router as swarm_router
 from app.api.v1.quotes import router as quotes_router
 from app.api.v1.watchlists import router as watchlists_router
@@ -90,4 +91,5 @@ router.include_router(global_events_router, prefix="/global-events", tags=["Glob
 router.include_router(quotes_router, prefix="/quotes", tags=["Quotes"])
 router.include_router(earnings_router, prefix="/earnings", tags=["Earnings"])
 router.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])
+router.include_router(chat_router, prefix="/chat", tags=["Chat"])
 router.include_router(swarm_router, prefix="/swarm", tags=["Swarm"])
