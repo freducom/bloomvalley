@@ -52,6 +52,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Portfolio",
     items: [
       { label: "Dashboard", href: "/portfolio", icon: LayoutDashboard },
+      { label: "Recommendations", href: "/recommendations", icon: ThumbsUp },
       { label: "Holdings", href: "/holdings", icon: Briefcase },
       { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
       { label: "Import", href: "/import", icon: Upload },
@@ -95,7 +96,6 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Tracking",
     items: [
       { label: "Insider", href: "/insider", icon: UserSearch },
-      { label: "Recommendations", href: "/recommendations", icon: ThumbsUp },
       { label: "Alerts", href: "/alerts", icon: Bell },
     ],
   },
