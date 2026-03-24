@@ -1,32 +1,67 @@
 # Bloomvalley Terminal
 
-Personal Bloomberg-style terminal for investment tracking and analysis.
+Personal Bloomberg-style terminal for investment tracking and analysis, powered by AI analyst agents.
 
 ## Features
 
+### Portfolio & Trading
 - **Portfolio Dashboard** — real-time holdings, P&L, allocation by asset class and account
-- **Nordnet Import** — paste or upload Nordnet portfolio exports (UTF-16 Finnish CSV), automatic reconciliation of changes
-- **Watchlists** — create multiple watchlists, track securities with latest prices
-- **Charts** — TradingView candlestick/line charts with technical indicators (SMA, EMA, Bollinger, RSI, MACD)
-- **Macro Dashboard** — Finland, Eurozone, and US macroeconomic indicators with yield curves
+- **AI Recommendations** — buy/sell/hold signals from 9-role AI analyst swarm with bull/bear cases, confidence levels, target prices, and retrospective accuracy tracking
+- **Holdings** — current positions across accounts with cost basis, unrealized P&L, live quotes, dividend income
 - **Transactions** — filterable transaction log with type/account filters, search, pagination, and summary stats
-- **Risk Analysis** — portfolio volatility, Sharpe/Sortino ratios, max drawdown, VaR, correlation heatmap, stress tests, glidepath tracking
-- **Dividends** — upcoming dividend calendar, yield metrics (dividend yield, yield on cost), income projections, historical dividend events from Yahoo Finance
+- **Nordnet Import** — paste or upload Nordnet portfolio exports (UTF-16 Finnish CSV), automatic security matching and reconciliation
+
+### Market Data
+- **Data Feeds** — pipeline status dashboard with manual trigger controls for all 20+ data sources
+- **Watchlists** — create multiple watchlists, track securities with latest prices across Nordic, European, and US markets
+- **Charts** — TradingView candlestick/line charts with technical indicators (SMA, EMA, Bollinger, RSI, MACD)
+- **Heatmap** — treemap visualization of portfolio or watchlist with 1D/1W/1M/3M/6M/1Y/YTD period selection
+
+### Analysis
+- **Risk Analysis** — portfolio volatility, Sharpe/Sortino ratios, max drawdown, VaR, beta, correlation heatmap, stress tests, glidepath tracking
 - **Research** — per-security research notes with bull/bear/base cases, intrinsic value, margin of safety, moat ratings, tagging, full-text search
-- **Tax Analysis** — Finnish tax law (30/34% brackets), tax lot tracking with FIFO, deemed cost comparison (hankintameno-olettama), osakesäästötili tracker, loss harvesting candidates
-- **Insider Tracking** — insider trades (FI/SE/US), signal detection (cluster buying, CEO/CFO buys), congress trades (STOCK Act), share buyback programs
-- **News Feed** — aggregated financial news from Google News RSS, per-security linking, impact tagging, bookmarks, sentiment summary
-- **Data Pipelines** — automated fetching from Yahoo Finance, ECB, CoinGecko, FRED, Google News
+- **Fundamentals** — P/B ratio, free cash flow, DCF valuation, ROIC, margins, short interest
+- **Earnings** — earnings calendar with estimates, actual EPS, revenue surprises, Q-over-Q comparisons
+
+### Income & Tax
+- **Tax Analysis** — Finnish tax law (30/34% brackets), tax lot tracking with specific identification, deemed cost comparison (hankintameno-olettama), osakesäästötili tracker, loss harvesting candidates
+- **Fixed Income** — bond holdings with coupon rates, YTM, credit ratings, call dates, duration
+- **Dividends** — upcoming dividend calendar, yield metrics (dividend yield, yield on cost), income projections, historical dividend events
+
+### Macro & News
+- **Macro Dashboard** — Finland, Eurozone, and US macroeconomic indicators with yield curves and charts
+- **News Feed** — aggregated financial news from Google News RSS + regional sources (CNBC, ECB, YLE, DI, FT, Yardeni), per-security linking, impact tagging, bookmarks
+- **Global Events** — GDELT-powered macro event tracking with market impact categorization and sector analysis
+
+### Tracking & Alerts
+- **Insider Trading** — insider trades (FI/SE/US), signal detection (cluster buying, CEO/CFO buys), congress trades (STOCK Act), share buyback programs
+- **Alerts** — price, event, and position alerts with trigger history and notification tracking
+
+### AI Analyst Swarm
+- **9-role investment team**: Portfolio Manager, Research Analyst, Risk Manager, Quant Analyst, Macro Strategist, Fixed Income Analyst, Tax Strategist, Technical Analyst, Compliance Officer
+- **Scheduled runs**: 3x daily full analysis (07:00, 12:00, 19:00) + 2x nighttime research-only runs (01:00, 03:00)
+- **Automatic data refresh**: all pipelines triggered before each analysis run
+- **Watchlist rotation**: 20 securities per research batch, rotating through full watchlist
+- **Recommendation extraction**: portfolio manager synthesizes all analyst inputs into actionable buy/sell/hold recommendations
+
+### Special Features
+- **Security Detail Pages** — deep-dive view per ticker with fundamentals, charts, valuation, news, analyst reports, dividends, insider activity
+- **TV Dashboard** — 2-page fullscreen mode (`Cmd+Shift+F`) with portfolio summary, market status, holdings heatmap, recommendations, news feed, and per-holding analysis tiles with AI-generated bull/bear cases
+- **Command Palette** — `Cmd+K` search across features, securities, and quick actions
+- **Privacy Mode** — `Cmd+Shift+P` to blur all monetary amounts and quantities
+- **PWA** — installable on mobile with offline access to dashboard, recommendations, and holdings (service worker with network-first caching)
+- **Status Bar** — live pipeline status indicators, market hours for Nordic/EU/London/US/Crypto exchanges
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, TypeScript, TailwindCSS, TradingView Lightweight Charts |
+| Frontend | Next.js 14, TypeScript, TailwindCSS, TradingView Lightweight Charts, Recharts |
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2.0 (async), pandas, numpy |
 | Database | PostgreSQL 16 + TimescaleDB |
 | Cache | Redis 7 |
-| Deployment | Docker Compose |
+| AI | Claude Code CLI (analyst swarm), 9 agent definitions |
+| Deployment | Docker Compose, self-hosted |
 
 ---
 
@@ -169,9 +204,9 @@ This starts 6 services:
 | `db` | 5432 | TimescaleDB (PostgreSQL 16) |
 | `redis` | 6379 | Redis 7 with AOF persistence |
 | `backend` | 8000 | FastAPI application |
-| `frontend` | 3000 | Next.js application |
-| `cron` | — | Scheduled pipeline runner |
-| `analyst-swarm` | — | AI analyst agents (scheduled) |
+| `frontend` | 3000 | Next.js application (PWA-enabled) |
+| `cron` | — | Scheduled pipeline runner (20 jobs) |
+| `analyst-swarm` | — | AI analyst agents (3 daily + 2 nighttime runs) |
 
 ### 5. Run database migrations
 
@@ -205,6 +240,24 @@ curl -X POST "http://localhost:8000/api/v1/pipelines/fred_macro_indicators/run"
 
 # Fetch Eurozone/Finland macro indicators (ECB)
 curl -X POST "http://localhost:8000/api/v1/pipelines/ecb_macro_indicators/run"
+
+# Fetch dividends
+curl -X POST "http://localhost:8000/api/v1/pipelines/yahoo_dividends/run"
+
+# Fetch fundamentals
+curl -X POST "http://localhost:8000/api/v1/pipelines/yahoo_fundamentals/run"
+
+# Fetch insider trades
+curl -X POST "http://localhost:8000/api/v1/pipelines/openinsider/run"
+curl -X POST "http://localhost:8000/api/v1/pipelines/nasdaq_nordic_insider/run"
+curl -X POST "http://localhost:8000/api/v1/pipelines/fi_se_insider/run"
+
+# Fetch news
+curl -X POST "http://localhost:8000/api/v1/pipelines/google_news/run"
+curl -X POST "http://localhost:8000/api/v1/pipelines/regional_news/run"
+
+# Fetch global events
+curl -X POST "http://localhost:8000/api/v1/pipelines/gdelt_events/run"
 ```
 
 ---
@@ -216,9 +269,10 @@ All API keys are stored in `.env` (never committed to git).
 | Key | Required | Free? | Where to get it |
 |-----|----------|-------|-----------------|
 | `FRED_API_KEY` | Yes (for macro dashboard) | Yes | https://fred.stlouisfed.org/docs/api/api_key.html |
-| `ALPHA_VANTAGE_API_KEY` | No (future use) | Yes (limited) | https://www.alphavantage.co/support/#api-key |
+| `ALPHA_VANTAGE_API_KEY` | Optional (backup prices) | Yes (limited) | https://www.alphavantage.co/support/#api-key |
+| `FINNHUB_API_KEY` | Optional (earnings) | Yes (limited) | https://finnhub.io/ |
 
-**No API key needed for:** Yahoo Finance (yfinance library), ECB Statistical Data Warehouse, CoinGecko (public API).
+**No API key needed for:** Yahoo Finance (yfinance), ECB Statistical Data Warehouse, CoinGecko (public API), Google News RSS, OpenInsider (scraping), Nasdaq Nordic, Swedish FI, SEC EDGAR, Quiver Quantitative, Morningstar (public APIs), justETF, Kenneth French Data Library, GDELT, regional RSS feeds.
 
 ---
 
@@ -309,15 +363,30 @@ server {
 
 ### Available Pipelines
 
-| Pipeline | Source | Data | Frequency |
-|----------|--------|------|-----------|
-| `yahoo_daily_prices` | Yahoo Finance | OHLCV prices for all securities | Daily (weekdays) |
-| `ecb_fx_rates` | ECB | EUR-based exchange rates (USD, GBP, SEK, etc.) | Daily (weekdays) |
+| Pipeline | Source | Data | Schedule |
+|----------|--------|------|----------|
+| `yahoo_daily_prices` | Yahoo Finance | OHLCV prices for all securities | Weekdays 23:00 |
+| `yahoo_dividends` | Yahoo Finance | Dividend events (ex-dates, amounts, frequency) | Weekdays 23:30 |
+| `yahoo_fundamentals` | Yahoo Finance | Key metrics (ROIC, P/B, FCF, margins, DCF) | Weekdays 23:45 |
+| `ecb_fx_rates` | ECB | EUR-based exchange rates (USD, GBP, SEK, etc.) | Weekdays 17:00 |
+| `ecb_macro_indicators` | ECB SDW | ECB rates, Euro yield curve, HICP inflation, unemployment | Weekdays 12:00 |
+| `fred_macro_indicators` | FRED | US + Eurozone + Finland macro data (30+ series) | Daily 15:00 |
 | `coingecko_prices` | CoinGecko | Crypto prices (BTC, ETH) | Every 6 hours |
-| `fred_macro_indicators` | FRED | US + Eurozone + Finland macro data (30+ series) | Daily |
-| `ecb_macro_indicators` | ECB SDW | ECB rates, Euro yield curve, HICP inflation, unemployment | Daily (weekdays) |
-| `yahoo_dividends` | Yahoo Finance | Dividend events (ex-dates, amounts, frequency) for all stocks/ETFs | Daily |
-| `google_news` | Google News RSS | News articles for held securities + global macro topics | Every 30 min (market hours) |
+| `alpha_vantage_prices` | Alpha Vantage | Backup prices for stale securities + forex | Weekdays 00:00 |
+| `google_news` | Google News RSS | News for held securities + global macro topics | Every 4 hours |
+| `regional_news` | CNBC, ECB, YLE, DI, FT, Yardeni | Regional financial news from RSS feeds | Every 4 hours |
+| `gdelt_events` | GDELT DOC API | Global macro events (economic crisis, trade wars, sanctions) | Every 6 hours |
+| `openinsider` | OpenInsider.com | US insider transactions (SEC Form 4) | Weekdays 22:00 |
+| `nasdaq_nordic_insider` | Nasdaq News API | Finnish PDMR transactions | Weekdays 19:00 |
+| `fi_se_insider` | Swedish FI | Swedish insider transactions | Weekdays 19:30 |
+| `sec_edgar_filings` | SEC EDGAR | Form 4 & 13F-HR insider filings | Weekdays 21:00 |
+| `quiver_congress_trades` | Quiver Quantitative | US Congress member stock trades (STOCK Act) | Weekdays 20:00 |
+| `morningstar_ratings` | Morningstar | Star ratings, analyst ratings, expense ratios | Sundays 11:00 |
+| `justetf_profiles` | justETF.com | ETF profiles (TER, fund size, replication method) | Sundays 10:00 |
+| `french_factors` | Kenneth French Library | Fama-French 5-factor daily data (US & Europe) | Sundays 12:00 |
+| `news_cleanup` | — | Retention cleanup for old news items | Daily 04:00 |
+
+All times are Europe/Helsinki timezone.
 
 ### Manual Trigger
 
@@ -336,20 +405,6 @@ curl http://localhost:8000/api/v1/pipelines
 # View run history
 curl http://localhost:8000/api/v1/pipelines/{pipeline_name}/runs
 ```
-
-### Automated Scheduling (Docker)
-
-The `cron` service in Docker Compose runs all pipelines on schedule:
-
-| Pipeline | Schedule (Helsinki time) | Why |
-|----------|------------------------|-----|
-| `yahoo_daily_prices` | Weekdays 23:00 | After US/EU markets close |
-| `ecb_fx_rates` | Weekdays 17:00 | ECB publishes rates ~16:00 CET |
-| `coingecko_prices` | Every 6 hours | Crypto trades 24/7 |
-| `fred_macro_indicators` | Daily 15:00 | US data published morning ET |
-| `ecb_macro_indicators` | Weekdays 12:00 | ECB data published morning CET |
-
-The cron service is started automatically with `docker compose up`.
 
 ### Automated Scheduling (Local / Non-Docker Server)
 
@@ -374,6 +429,34 @@ Add these lines (adjust paths and timezone):
 # ECB macro — weekdays at 12:00
 0 12 * * 1-5 curl -s -X POST http://localhost:8000/api/v1/pipelines/ecb_macro_indicators/run > /dev/null 2>&1
 ```
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+K` | Open command palette (search features/securities) |
+| `Cmd+1` | Go to portfolio dashboard |
+| `Cmd+2` | Go to transactions |
+| `Cmd+3` | Go to import |
+| `Cmd+Shift+P` | Toggle privacy mode (blur amounts) |
+| `Cmd+Shift+F` | Toggle fullscreen TV dashboard |
+| `Arrow Left/Right` | Navigate fullscreen dashboard pages |
+| `Esc` | Close command palette or exit fullscreen |
+
+---
+
+## PWA / Mobile
+
+The app is installable as a Progressive Web App on mobile devices.
+
+- **Offline support**: Dashboard, Recommendations, and Holdings pages work offline with cached data
+- **Install prompt**: Shows on mobile after 60 seconds with instructions (iOS: Share > Add to Home Screen; Android: native install button)
+- **Service worker**: Network-first strategy — always tries fresh data, falls back to cache when offline
+- **Cached API endpoints**: portfolio summary, holdings, recommendations, dividend projections, live quotes
+
+Note: iOS Safari does not support background fetch in service workers. Data is cached when you visit — there is no background refresh on iPhone.
 
 ---
 
@@ -528,57 +611,109 @@ bloomvalley/
 ├── .env                    # Your API keys (git-ignored)
 ├── .gitignore
 ├── docker-compose.yml      # All services + cron scheduler
+├── CLAUDE.md               # AI agent instructions
+├── AGENTS.md               # Investment team definitions
 ├── data/                   # Persistent storage (git-ignored)
 │   ├── postgres/           # Database files
 │   └── redis/              # Redis AOF
+├── .claude/agents/         # AI analyst agent definitions
+│   ├── portfolio-manager.md
+│   ├── research-analyst.md
+│   ├── risk-manager.md
+│   ├── quant-analyst.md
+│   ├── macro-strategist.md
+│   ├── fixed-income-analyst.md
+│   ├── tax-strategist.md
+│   ├── technical-analyst.md
+│   └── compliance-officer.md
+├── analyst-swarm/
+│   ├── Dockerfile
+│   ├── swarm.py            # Orchestrator (schedules, runs agents, extracts recommendations)
+│   ├── config.yaml         # Default config
+│   └── config.local.yaml   # Local overrides (LLM provider, schedule)
 ├── backend/
 │   ├── Dockerfile
 │   ├── pyproject.toml
 │   ├── alembic.ini
 │   ├── alembic/            # Database migrations
+│   ├── cron_scheduler.py   # Pipeline scheduler (20 jobs)
 │   ├── app/
 │   │   ├── main.py         # FastAPI app + lifespan
 │   │   ├── config.py       # Pydantic settings from .env
 │   │   ├── db/
 │   │   │   ├── engine.py   # Async SQLAlchemy engine
-│   │   │   ├── models/     # ORM models (16 tables)
+│   │   │   ├── models/     # ORM models (20+ tables)
 │   │   │   └── seed.py     # Initial securities catalog
 │   │   ├── api/v1/
 │   │   │   ├── router.py   # All route registrations
-│   │   │   ├── portfolio.py
-│   │   │   ├── imports.py  # Nordnet import + reconciliation
-│   │   │   ├── watchlists.py
-│   │   │   ├── charts.py   # OHLC + technical indicators
-│   │   │   ├── macro.py    # Macro dashboard API
-│   │   │   ├── risk.py     # Risk analysis + stress tests
-│   │   │   ├── dividends.py # Dividend calendar + yield metrics
-│   │   │   ├── research.py # Research notes CRUD
-│   │   │   └── ...
-│   │   ├── pipelines/
-│   │   │   ├── runner.py   # Pipeline executor with retry
-│   │   │   ├── yahoo_finance.py
-│   │   │   ├── ecb.py      # FX rates
-│   │   │   ├── ecb_macro.py # ECB macro indicators
-│   │   │   ├── fred.py     # FRED macro indicators
-│   │   │   └── coingecko.py
+│   │   │   ├── portfolio.py, holdings.py, transactions.py
+│   │   │   ├── recommendations.py, research.py, fundamentals.py
+│   │   │   ├── risk.py, tax.py, dividends.py, fixed_income.py
+│   │   │   ├── macro.py, news.py, global_events.py
+│   │   │   ├── insider.py, alerts.py, earnings.py
+│   │   │   ├── charts.py, screener.py, technical.py
+│   │   │   ├── optimization.py, backtest.py, factors.py
+│   │   │   ├── attribution.py, projections.py, reports.py
+│   │   │   ├── quotes.py, swarm.py
+│   │   │   └── imports.py, watchlists.py, securities.py
+│   │   ├── pipelines/      # 20 data source adapters
+│   │   │   ├── yahoo_finance.py, yahoo_dividends.py, yahoo_fundamentals.py
+│   │   │   ├── ecb.py, ecb_macro.py, fred.py
+│   │   │   ├── coingecko.py, alpha_vantage.py
+│   │   │   ├── google_news.py, regional_news.py, gdelt.py
+│   │   │   ├── openinsider.py, nasdaq_nordic_insider.py, fi_se_insider.py
+│   │   │   ├── sec_edgar.py, quiver_congress.py
+│   │   │   ├── morningstar.py, justetf.py
+│   │   │   ├── french_factors.py, finnhub_earnings.py
+│   │   │   └── runner.py, base.py
 │   │   └── services/
-│   │       └── nordnet_parser.py
+│   │       ├── nordnet_parser.py, optimizer.py, monte_carlo.py
+│   │       ├── screener.py, backtester.py, factor_analysis.py
+│   │       ├── alert_evaluator.py, rebalancer.py
+│   │       ├── bond_calculator.py, technical.py
+│   │       └── sector_impact.py, news_cleanup.py
 │   └── tests/
 └── frontend/
     ├── Dockerfile
     ├── package.json
+    ├── next.config.mjs
+    ├── public/
+    │   ├── manifest.json   # PWA manifest
+    │   ├── sw.js           # Service worker (offline caching)
+    │   └── icon-*.svg      # PWA icons
     ├── src/app/
-    │   ├── portfolio/      # Dashboard, holdings, P&L
+    │   ├── layout.tsx      # Root layout with sidebar, status bar, PWA
+    │   ├── portfolio/      # Dashboard
+    │   ├── recommendations/# AI recommendations
+    │   ├── holdings/       # Current positions
+    │   ├── transactions/   # Trade history
     │   ├── import/         # Nordnet CSV import
+    │   ├── market/         # Data feed status
     │   ├── watchlist/      # Watchlist management
-    │   ├── charts/         # TradingView charts + indicators
-    │   └── macro/          # Macro dashboard (FI/EZ/US)
+    │   ├── charts/         # TradingView charts
+    │   ├── heatmap/        # Treemap visualization
+    │   ├── risk/           # Risk analysis
+    │   ├── research/       # Research notes
+    │   ├── fundamentals/   # Company fundamentals
+    │   ├── earnings/       # Earnings calendar
+    │   ├── tax/            # Tax analysis
+    │   ├── fixed-income/   # Bond analysis
+    │   ├── dividends/      # Dividend tracking
+    │   ├── macro/          # Macro dashboard
+    │   ├── news/           # News feed
+    │   ├── global-events/  # GDELT events
+    │   ├── insider/        # Insider trading
+    │   ├── alerts/         # Alert management
+    │   ├── security/[ticker]/ # Security detail
+    │   └── fullscreen/     # TV dashboard
     ├── src/components/
-    │   ├── layout/         # Sidebar, StatusBar
-    │   └── ui/             # MetricCard, etc.
+    │   ├── layout/         # Sidebar, StatusBar, CommandPalette
+    │   ├── pwa/            # InstallPrompt, ServiceWorkerRegistration
+    │   └── ui/             # MetricCard, TickerLink
     └── src/lib/
         ├── api.ts          # Fetch wrapper
-        └── format.ts       # Currency/number formatters
+        ├── format.ts       # Currency/number formatters
+        └── privacy.tsx     # Privacy mode context
 ```
 
 ---
