@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { apiGet, apiGetRaw, apiPost, apiPut } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
-import { Private } from "@/lib/privacy";
+import { Private, usePrivacy } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
 
 /* ── Types ── */
@@ -76,6 +76,38 @@ const HORIZON_LABELS: Record<string, string> = {
   long: "> 12m",
 };
 
+/* ── Privacy: blur only numbers inside markdown ── */
+
+function blurNumbers(text: string): React.ReactNode {
+  const parts = text.split(/([€$£¥]?\s?[\d][\d,. ]*[%€$£¥]?)/g);
+  if (parts.length <= 1) return text;
+  return parts.map((part, i) =>
+    /\d/.test(part) ? <Private key={i}>{part}</Private> : part
+  );
+}
+
+function blurChildren(children: React.ReactNode): React.ReactNode {
+  if (typeof children === "string") return blurNumbers(children);
+  if (Array.isArray(children)) {
+    return children.map((child, i) =>
+      typeof child === "string" ? <React.Fragment key={i}>{blurNumbers(child)}</React.Fragment> : child
+    );
+  }
+  return children;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PRIVACY_MD_COMPONENTS: Record<string, React.ComponentType<any>> = Object.fromEntries(
+  ["p", "li", "td", "th", "strong", "em", "a", "h1", "h2", "h3", "h4", "h5", "h6", "span", "code"].map((tag) => [
+    tag,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    ({ node, ...props }: { node?: unknown; children?: React.ReactNode; [k: string]: unknown }) => {
+      const Tag = tag as keyof JSX.IntrinsicElements;
+      return <Tag {...props}>{blurChildren(props.children)}</Tag>;
+    },
+  ])
+);
+
 export default function RecommendationsPage() {
   const [tab, setTab] = useState<Tab>("active");
 
@@ -119,6 +151,7 @@ export default function RecommendationsPage() {
 function PortfolioManagerBrief() {
   const [note, setNote] = useState<AnalystNote | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const { privacyMode } = usePrivacy();
 
   useEffect(() => {
     (async () => {
@@ -176,7 +209,7 @@ function PortfolioManagerBrief() {
       </div>
 
       <div className={proseClasses}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={privacyMode ? PRIVACY_MD_COMPONENTS : undefined}>
           {expanded ? fullReport : summary}
         </ReactMarkdown>
       </div>
@@ -208,6 +241,7 @@ interface AnalystNote {
 function AnalystSummaries() {
   const [notes, setNotes] = useState<AnalystNote[]>([]);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+  const { privacyMode } = usePrivacy();
 
   useEffect(() => {
     (async () => {
@@ -266,12 +300,12 @@ function AnalystSummaries() {
               </div>
               {!isExpanded && (
                 <p className="text-xs text-terminal-text-tertiary mt-1 line-clamp-2">
-                  {note.thesis.slice(0, 120)}...
+                  {privacyMode ? blurNumbers(note.thesis.slice(0, 120)) : note.thesis.slice(0, 120)}...
                 </p>
               )}
               {isExpanded && (
                 <div className="text-sm text-terminal-text-secondary mt-2 leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.thesis}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={privacyMode ? PRIVACY_MD_COMPONENTS : undefined}>{note.thesis}</ReactMarkdown>
                 </div>
               )}
             </div>
@@ -376,14 +410,14 @@ function ActiveTab() {
           )}
           {r.targetPriceCents && (
             <span className="text-xs font-mono text-terminal-text-secondary">
-              Target: {formatCurrency(r.targetPriceCents, r.currency)}
+              Target: <Private>{formatCurrency(r.targetPriceCents, r.currency)}</Private>
             </span>
           )}
           {r.unrealizedReturnPct !== undefined && (
             <span className={`text-sm font-mono font-medium ${
               r.unrealizedReturnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"
             }`}>
-              {formatPercent(r.unrealizedReturnPct, true)}
+              <Private>{formatPercent(r.unrealizedReturnPct, true)}</Private>
             </span>
           )}
         </div>
@@ -413,7 +447,7 @@ function ActiveTab() {
             {r.expiryDate && <span>Expires: {formatDate(r.expiryDate)}</span>}
             {r.source && <span>Source: {r.source}</span>}
             {r.currentPriceCents && (
-              <span>Current: {formatCurrency(r.currentPriceCents, r.currency)}</span>
+              <span>Current: <Private>{formatCurrency(r.currentPriceCents, r.currency)}</Private></span>
             )}
           </div>
 
@@ -558,7 +592,7 @@ function ClosedTab() {
                     ? r.returnPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"
                     : ""
                 }`}>
-                  {r.returnPct !== null ? formatPercent(r.returnPct, true) : "-"}
+                  {r.returnPct !== null ? <Private>{formatPercent(r.returnPct, true)}</Private> : "-"}
                 </td>
                 <td className="p-3 text-xs">{formatDate(r.recommendedDate)}</td>
                 <td className="p-3 text-xs">{r.closedDate ? formatDate(r.closedDate) : "-"}</td>
