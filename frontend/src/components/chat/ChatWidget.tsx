@@ -10,15 +10,30 @@ interface Message {
   content: string;
 }
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return mobile;
+}
+
 export function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const isMobile = useIsMobile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // On mobile, always use fullscreen
+  const isExpanded = fullscreen || isMobile;
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -158,25 +173,25 @@ export function ChatWidget() {
         </button>
       )}
 
-      {/* Backdrop for fullscreen */}
-      {open && fullscreen && (
+      {/* Backdrop for fullscreen / mobile */}
+      {open && isExpanded && (
         <div
           className="fixed inset-0 z-50 bg-black/60"
-          onClick={() => setFullscreen(false)}
+          onClick={() => { if (!isMobile) setFullscreen(false); }}
         />
       )}
 
       {/* Chat panel */}
       {open && (
-        <div className={`fixed z-50 flex flex-col rounded-lg border border-terminal-border bg-terminal-bg-secondary shadow-md transition-all duration-200 ${
-          fullscreen
-            ? "inset-0 m-auto w-[90vw] h-[90vh]"
-            : "bottom-14 right-4 w-96"
+        <div className={`fixed z-50 flex flex-col border border-terminal-border bg-terminal-bg-secondary shadow-md transition-all duration-200 ${
+          isExpanded
+            ? "inset-0 m-auto w-full h-full md:w-[90vw] md:h-[90vh] md:rounded-lg"
+            : "bottom-14 right-4 w-96 rounded-lg"
         }`}
-          style={fullscreen ? undefined : { height: "min(600px, calc(100vh - 120px))" }}
+          style={isExpanded ? undefined : { height: "min(600px, calc(100vh - 120px))" }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-terminal-border px-4 py-3">
+          <div className="flex items-center justify-between border-b border-terminal-border px-4 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-terminal-accent" />
               <span className="text-sm font-medium text-terminal-text-primary">
@@ -192,9 +207,10 @@ export function ChatWidget() {
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+              {/* Hide fullscreen toggle on mobile — it's always fullscreen */}
               <button
                 onClick={() => setFullscreen((f) => !f)}
-                className="rounded p-1.5 text-terminal-text-tertiary hover:bg-terminal-bg-hover hover:text-terminal-text-secondary transition-colors"
+                className="hidden md:block rounded p-1.5 text-terminal-text-tertiary hover:bg-terminal-bg-hover hover:text-terminal-text-secondary transition-colors"
                 aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
                 title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
@@ -211,7 +227,7 @@ export function ChatWidget() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
             {messages.length === 0 && (
               <div className="flex h-full items-center justify-center">
                 <p className="text-sm text-terminal-text-tertiary text-center">
@@ -246,8 +262,8 @@ export function ChatWidget() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="border-t border-terminal-border p-3">
+          {/* Input — env(safe-area-inset-bottom) handles iOS home bar */}
+          <div className="border-t border-terminal-border p-3 shrink-0" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}

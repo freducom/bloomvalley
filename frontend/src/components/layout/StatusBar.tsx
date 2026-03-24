@@ -11,6 +11,133 @@ interface PipelineStatus {
   lastRunStatus: string | null;
 }
 
+// Cron schedule definitions (matches cron_scheduler.py, TZ=Europe/Helsinki)
+interface CronJob {
+  label: string;
+  /** "cron" or "interval" */
+  type: "cron" | "interval";
+  /** For cron: { dayOfWeek?, hour, minute } */
+  dayOfWeek?: string; // "mon-fri", "sun", or undefined (daily)
+  hour?: number;
+  minute?: number;
+  /** For interval: hours between runs */
+  intervalHours?: number;
+}
+
+const CRON_JOBS: CronJob[] = [
+  { label: "Prices", type: "cron", dayOfWeek: "mon-fri", hour: 23, minute: 0 },
+  { label: "FX Rates", type: "cron", dayOfWeek: "mon-fri", hour: 17, minute: 0 },
+  { label: "Crypto", type: "interval", intervalHours: 6 },
+  { label: "FRED", type: "cron", hour: 15, minute: 0 },
+  { label: "ECB Macro", type: "cron", dayOfWeek: "mon-fri", hour: 12, minute: 0 },
+  { label: "Dividends", type: "cron", dayOfWeek: "mon-fri", hour: 23, minute: 30 },
+  { label: "News", type: "interval", intervalHours: 4 },
+  { label: "Insiders (US)", type: "cron", dayOfWeek: "mon-fri", hour: 22, minute: 0 },
+  { label: "Insiders (Nordic)", type: "cron", dayOfWeek: "mon-fri", hour: 19, minute: 0 },
+  { label: "Insiders (FI/SE)", type: "cron", dayOfWeek: "mon-fri", hour: 19, minute: 30 },
+  { label: "Alpha Vantage", type: "cron", dayOfWeek: "mon-fri", hour: 0, minute: 0 },
+  { label: "justETF", type: "cron", dayOfWeek: "sun", hour: 10, minute: 0 },
+  { label: "SEC Edgar", type: "cron", dayOfWeek: "mon-fri", hour: 21, minute: 0 },
+  { label: "Congress", type: "cron", dayOfWeek: "mon-fri", hour: 20, minute: 0 },
+  { label: "Morningstar", type: "cron", dayOfWeek: "sun", hour: 11, minute: 0 },
+  { label: "Factors", type: "cron", dayOfWeek: "sun", hour: 12, minute: 0 },
+  { label: "GDELT", type: "interval", intervalHours: 6 },
+  { label: "Regional News", type: "interval", intervalHours: 4 },
+  { label: "Fundamentals", type: "cron", dayOfWeek: "mon-fri", hour: 23, minute: 45 },
+  { label: "News Cleanup", type: "cron", hour: 4, minute: 0 },
+  { label: "Research Cleanup", type: "cron", hour: 4, minute: 30 },
+  // Analyst swarm (from analyst-swarm/config.yaml)
+  { label: "Analyst Swarm", type: "cron", hour: 7, minute: 0 },
+  { label: "Analyst Swarm", type: "cron", hour: 12, minute: 0 },
+  { label: "Analyst Swarm", type: "cron", hour: 19, minute: 0 },
+  { label: "Research Swarm", type: "cron", hour: 1, minute: 0 },
+  { label: "Research Swarm", type: "cron", hour: 3, minute: 0 },
+];
+
+const DOW_MAP: Record<string, number[]> = {
+  "mon-fri": [1, 2, 3, 4, 5],
+  sun: [0],
+};
+
+function getNextCronRun(): { label: string; timeStr: string; relativeStr: string } | null {
+  const tz = "Europe/Helsinki";
+  const now = new Date();
+
+  // Get current Helsinki time components
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    weekday: "short",
+  });
+  const parts = fmt.formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  const dayNameMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+  const curDay = dayNameMap[get("weekday")] ?? 0;
+  const curHour = parseInt(get("hour"), 10);
+  const curMin = parseInt(get("minute"), 10);
+  const curTotalMin = curHour * 60 + curMin;
+
+  let bestLabel = "";
+  let bestMinutesAway = Infinity;
+
+  for (const job of CRON_JOBS) {
+    if (job.type === "interval") {
+      // Interval jobs: approximate — next run within intervalHours
+      // We can't know exactly when they started, so show worst case
+      const mins = (job.intervalHours || 4) * 60;
+      if (mins < bestMinutesAway) {
+        bestMinutesAway = mins;
+        bestLabel = job.label;
+      }
+      continue;
+    }
+
+    const allowedDays = job.dayOfWeek ? (DOW_MAP[job.dayOfWeek] || [0,1,2,3,4,5,6]) : [0,1,2,3,4,5,6];
+    const jobMin = (job.hour || 0) * 60 + (job.minute || 0);
+
+    // Check today and next 7 days
+    for (let d = 0; d <= 7; d++) {
+      const checkDay = (curDay + d) % 7;
+      if (!allowedDays.includes(checkDay)) continue;
+
+      let minutesAway: number;
+      if (d === 0) {
+        if (jobMin <= curTotalMin) continue; // already passed today
+        minutesAway = jobMin - curTotalMin;
+      } else {
+        minutesAway = (d * 24 * 60) - curTotalMin + jobMin;
+      }
+
+      if (minutesAway < bestMinutesAway) {
+        bestMinutesAway = minutesAway;
+        bestLabel = job.label;
+      }
+      break; // found earliest occurrence for this job
+    }
+  }
+
+  if (!bestLabel) return null;
+
+  // Format time string
+  const nextDate = new Date(now.getTime() + bestMinutesAway * 60_000);
+  const timeFmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const timeStr = timeFmt.format(nextDate);
+
+  // Relative string
+  const h = Math.floor(bestMinutesAway / 60);
+  const m = bestMinutesAway % 60;
+  let relativeStr: string;
+  if (h > 0 && m > 0) relativeStr = `in ${h}h ${m}m`;
+  else if (h > 0) relativeStr = `in ${h}h`;
+  else relativeStr = `in ${m}m`;
+
+  return { label: bestLabel, timeStr, relativeStr };
+}
+
 const PIPELINE_LABELS: Record<string, string> = {
   yahoo_daily_prices: "Prices",
   ecb_fx_rates: "FX Rates",
@@ -259,6 +386,13 @@ export function StatusBar() {
 
   const [runningPipelines, setRunningPipelines] = useState<string[]>([]);
   const [failedCount, setFailedCount] = useState(0);
+  const [nextCron, setNextCron] = useState<{ label: string; timeStr: string; relativeStr: string } | null>(null);
+
+  useEffect(() => {
+    setNextCron(getNextCronRun());
+    const interval = setInterval(() => setNextCron(getNextCronRun()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     apiGet<{ totalValueEurCents: number }>("/portfolio/summary")
@@ -340,7 +474,10 @@ export function StatusBar() {
             </span>
           </div>
         ) : swarmStatus?.status !== "running" ? (
-          <div className="flex items-center gap-1.5">
+          <div
+            className="flex items-center gap-1.5 cursor-default"
+            title={nextCron ? `Next: ${nextCron.label} at ${nextCron.timeStr} (${nextCron.relativeStr})` : undefined}
+          >
             <div className="w-1.5 h-1.5 rounded-full bg-terminal-positive" />
             <span className="text-terminal-text-secondary hidden md:inline">All systems functional</span>
           </div>

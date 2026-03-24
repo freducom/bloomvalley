@@ -116,6 +116,20 @@ async def create_recommendation(body: RecommendationCreate):
 
         rec_date = date.fromisoformat(body.recommended_date) if body.recommended_date else date.today()
 
+        # Auto-close any existing active recommendation for the same security+action
+        existing = await session.execute(
+            select(Recommendation)
+            .where(
+                Recommendation.security_id == body.security_id,
+                Recommendation.action == body.action,
+                Recommendation.status == "active",
+            )
+        )
+        for old_rec in existing.scalars().all():
+            old_rec.status = "closed"
+            old_rec.closed_date = date.today()
+            old_rec.outcome_notes = "Superseded by new recommendation"
+
         # Auto-fill entry price from latest price if not provided
         entry_price = body.entry_price_cents
         if not entry_price:

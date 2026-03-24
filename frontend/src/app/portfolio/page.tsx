@@ -527,9 +527,17 @@ function BrinsonAttribution() {
 
   return (
     <div className="mt-8">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Return Attribution (Brinson)</h2>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Return Attribution (Brinson)</h2>
+          <span className="relative group">
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-terminal-text-tertiary text-terminal-text-tertiary text-[10px] cursor-help leading-none">i</span>
+            <span className="absolute left-6 top-0 z-10 hidden group-hover:block w-72 p-2 text-xs text-terminal-text-primary bg-terminal-bg-tertiary border border-terminal-border rounded shadow-md">
+              Brinson-Fachler attribution decomposes your portfolio&apos;s return vs. a benchmark into three effects: <strong>Allocation</strong> (over/underweighting sectors), <strong>Selection</strong> (picking better/worse securities within sectors), and <strong>Interaction</strong> (the combined effect of both decisions).
+            </span>
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
             className="bg-terminal-bg-secondary border border-terminal-border rounded px-2 py-1 text-xs font-mono" />
           <span className="text-terminal-text-tertiary text-xs">to</span>
@@ -596,8 +604,8 @@ function BrinsonAttribution() {
           </div>
 
           {/* Attribution table */}
-          <div className="border border-terminal-border rounded-md overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="border border-terminal-border rounded-md overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-terminal-bg-secondary text-terminal-text-secondary text-xs">
                   <th className="text-left px-3 py-2 font-medium">{groupBy === "sector" ? "Sector" : "Asset Class"}</th>
