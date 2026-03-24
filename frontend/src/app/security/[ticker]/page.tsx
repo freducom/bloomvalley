@@ -295,7 +295,12 @@ export default function SecurityDetailPage() {
         if (fundRes?.data && fundRes.data.length > 0) setFundamentals(fundRes.data[0]);
         if (holdRes) setHoldings(holdRes.filter((h) => h.securityId === id));
         if (recRes?.data) setRecommendations(recRes.data.filter((r) => r.ticker === ticker));
-        if (researchRes?.data) setResearch(researchRes.data.filter((n) => !n.tags?.includes("sec_filing")));
+        if (researchRes?.data) setResearch(researchRes.data.filter((n) => {
+              const tags = n.tags || [];
+              // Exclude machine-generated data notes that contain raw JSON, not prose
+              const dataTags = ["sec_filing", "etf_profile", "justetf", "fund_rating", "morningstar"];
+              return !dataTags.some((t) => tags.includes(t));
+            }));
         if (insiderRes?.data) setInsiders(insiderRes.data);
         if (newsRes?.data) setNews(newsRes.data);
         if (divRes?.data) setDividends(divRes.data);
