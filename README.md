@@ -66,14 +66,10 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 
 | | |
 |:---:|:---:|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![TV Dashboard](docs/screenshots/tv-dashboard.png) |
-| **Portfolio Dashboard** — value chart, P&L, allocation | **TV Dashboard** — fullscreen mode with heatmap & news |
 | ![Security](docs/screenshots/security-detail.png) | ![Recommendations](docs/screenshots/recommendations.png) |
 | **Security Detail** — single ticker with AI analyst overview, fundamentals, charts, insider activity | **AI Recommendations** — Portfolio Manager synthesizes input from Risk Manager, Tax Strategist, Macro Strategist, and 6 more analysts |
-| ![Charts](docs/screenshots/charts.png) | ![Macro Strategist](docs/screenshots/macro-strategist.png) |
-| **TradingView Charts** — candlesticks with technical indicators | **Macro Strategist Report** — AI-generated macro regime analysis |
-| ![Insider](docs/screenshots/insider.png) | ![News](docs/screenshots/news.png) |
-| **Insider Trading** — FI/SE/US signals, congress trades | **News Feed** — aggregated from 16+ sources |
+| ![Macro Strategist](docs/screenshots/macro-strategist.png) | |
+| **Macro Strategist Report** — AI-generated macro regime analysis | |
 
 ## Features
 
