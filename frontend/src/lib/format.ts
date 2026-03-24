@@ -53,6 +53,9 @@ export function formatLargeNumber(cents: number, currency: string = "EUR"): stri
   const abs = Math.abs(cents / 100);
   const sign = cents < 0 ? "-" : "";
 
+  if (abs >= 1_000_000_000_000) {
+    return `${sign}${symbol}${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  }
   if (abs >= 1_000_000_000) {
     return `${sign}${symbol}${(abs / 1_000_000_000).toFixed(2)}B`;
   }

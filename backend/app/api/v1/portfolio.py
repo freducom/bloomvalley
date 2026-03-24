@@ -382,6 +382,104 @@ async def get_portfolio_summary(
     }
 
 
+@router.get("/value-history")
+async def get_value_history(
+    days: int = Query(90, ge=7, le=730),
+):
+    """Compute daily portfolio value by replaying current holdings against historical prices."""
+    from collections import defaultdict
+
+    # 1. Get current holdings (quantities)
+    holdings_resp = await get_holdings(account_id=None)
+    holdings_data = holdings_resp["data"]
+    if not holdings_data:
+        return {"data": []}
+
+    # Build {security_id: quantity} and track currencies
+    positions: dict[int, float] = {}
+    sec_currencies: dict[int, str] = {}
+    for h in holdings_data:
+        sid = h["securityId"]
+        positions[sid] = float(h["quantity"])
+        sec_currencies[sid] = h["priceCurrency"] or h["currency"]
+
+    # 2. Fetch historical prices for these securities
+    from_date = date.today() - __import__("datetime").timedelta(days=days)
+    async with async_session() as session:
+        result = await session.execute(
+            select(Price.security_id, Price.date, Price.close_cents, Price.currency)
+            .where(Price.security_id.in_(list(positions.keys())))
+            .where(Price.date >= from_date)
+            .order_by(Price.date)
+        )
+        price_rows = result.all()
+
+    # 3. Fetch FX rate history for non-EUR currencies
+    needed_currencies = {c for c in sec_currencies.values() if c != "EUR"}
+    fx_history: dict[str, dict[date, float]] = {}
+    if needed_currencies:
+        async with async_session() as session:
+            fx_result = await session.execute(
+                select(FxRate.quote_currency, FxRate.date, FxRate.rate)
+                .where(FxRate.base_currency == "EUR")
+                .where(FxRate.quote_currency.in_(list(needed_currencies)))
+                .where(FxRate.date >= from_date)
+                .order_by(FxRate.date)
+            )
+            for row in fx_result.all():
+                fx_history.setdefault(row.quote_currency, {})[row.date] = float(row.rate)
+
+    # 4. Build daily value: for each date, sum(qty * close / fx_rate)
+    # Use last-known price for securities missing on a given day
+    daily_prices: dict[int, dict[date, tuple[int, str]]] = defaultdict(dict)
+    for row in price_rows:
+        daily_prices[row.security_id][row.date] = (row.close_cents, row.currency)
+
+    # Collect all dates
+    all_dates = sorted({row.date for row in price_rows})
+    if not all_dates:
+        return {"data": []}
+
+    # Forward-fill prices and FX rates
+    last_price: dict[int, tuple[int, str]] = {}
+    last_fx: dict[str, float] = {}
+    series = []
+
+    for d in all_dates:
+        total_eur_cents = 0
+        has_data = False
+
+        for sid, qty in positions.items():
+            if d in daily_prices[sid]:
+                last_price[sid] = daily_prices[sid][d]
+            if sid not in last_price:
+                continue
+
+            close_cents, currency = last_price[sid]
+            value_cents = close_cents * qty
+
+            if currency == "EUR":
+                total_eur_cents += value_cents
+            else:
+                if d in fx_history.get(currency, {}):
+                    last_fx[currency] = fx_history[currency][d]
+                fx = last_fx.get(currency)
+                if fx:
+                    total_eur_cents += value_cents / fx
+                else:
+                    total_eur_cents += value_cents  # fallback
+
+            has_data = True
+
+        if has_data:
+            series.append({
+                "date": d.isoformat(),
+                "valueCents": int(total_eur_cents),
+            })
+
+    return {"data": series}
+
+
 @router.post("/snapshot")
 async def take_snapshot():
     """Take a snapshot of current holdings for attribution analysis."""

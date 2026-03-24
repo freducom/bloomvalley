@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { apiGet, apiPost, apiPut, apiDelete, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ResearchNote {
   id: number;
@@ -69,6 +71,8 @@ const MOAT_OPTIONS = [
   { value: "narrow", label: "Narrow" },
   { value: "wide", label: "Wide" },
 ];
+
+const PROSE_CLASSES = "text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent";
 
 const MOAT_COLORS: Record<string, string> = {
   wide: "text-green-400",
@@ -561,9 +565,9 @@ function NoteDetail({
           <h3 className="text-sm font-semibold text-terminal-text-secondary mb-1">
             Investment Thesis
           </h3>
-          <p className="text-sm text-terminal-text-primary whitespace-pre-wrap leading-relaxed">
-            {note.thesis}
-          </p>
+          <div className={PROSE_CLASSES}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.thesis}</ReactMarkdown>
+          </div>
         </div>
       )}
 
@@ -908,9 +912,9 @@ function CaseCard({
       <div className="text-xs font-semibold text-terminal-text-secondary mb-1">
         {label}
       </div>
-      <p className="text-sm text-terminal-text-primary whitespace-pre-wrap leading-relaxed">
-        {text}
-      </p>
+      <div className={PROSE_CLASSES}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      </div>
     </div>
   );
 }

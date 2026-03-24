@@ -7,6 +7,9 @@ import { TickerLink } from "@/components/ui/TickerLink";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 interface Recommendation {
   id: number;
@@ -163,6 +166,9 @@ export default function PortfolioPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Value History Chart */}
+          <ValueHistoryChart />
+
           {/* Allocation */}
           <div>
             <h2 className="text-lg font-semibold mb-3">Asset Allocation</h2>
@@ -286,6 +292,148 @@ export default function PortfolioPage() {
           <BrinsonAttribution />
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Portfolio Value History Chart ── */
+
+interface ValuePoint {
+  date: string;
+  valueCents: number;
+}
+
+const PERIOD_OPTIONS = [
+  { label: "1M", days: 30 },
+  { label: "3M", days: 90 },
+  { label: "6M", days: 180 },
+  { label: "1Y", days: 365 },
+  { label: "2Y", days: 730 },
+];
+
+function ValueHistoryChart() {
+  const [data, setData] = useState<ValuePoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(90);
+
+  useEffect(() => {
+    setLoading(true);
+    apiGetRaw<{ data: ValuePoint[] }>(`/portfolio/value-history?days=${days}`)
+      .then((res) => setData(res.data))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+  }, [days]);
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Portfolio Value</h2>
+        <div className="h-64 bg-terminal-bg-secondary rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (data.length < 2) {
+    return null;
+  }
+
+  const first = data[0].valueCents;
+  const last = data[data.length - 1].valueCents;
+  const changePositive = last >= first;
+
+  const formatAxis = (cents: number) => {
+    const v = cents / 100;
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+    return v.toFixed(0);
+  };
+
+  const formatTooltipValue = (cents: number) => formatCurrency(cents);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">Portfolio Value</h2>
+        <div className="flex gap-1">
+          {PERIOD_OPTIONS.map((p) => (
+            <button
+              key={p.days}
+              onClick={() => setDays(p.days)}
+              className={`px-2 py-1 text-xs font-mono rounded transition-colors ${
+                days === p.days
+                  ? "bg-terminal-accent/20 text-terminal-accent border border-terminal-accent/50"
+                  : "text-terminal-text-secondary border border-terminal-border hover:text-terminal-text-primary"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
+        <Private>
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+              <defs>
+                <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor={changePositive ? "#22c55e" : "#ef4444"}
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={changePositive ? "#22c55e" : "#ef4444"}
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#6b7280" }}
+                tickFormatter={(d: string) => {
+                  const dt = new Date(d);
+                  return `${dt.getDate()}/${dt.getMonth() + 1}`;
+                }}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={40}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#6b7280" }}
+                tickFormatter={formatAxis}
+                axisLine={false}
+                tickLine={false}
+                width={50}
+                domain={["dataMin", "dataMax"]}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1a1f2e",
+                  border: "1px solid #2d3548",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                }}
+                labelStyle={{ color: "#9ca3af" }}
+                formatter={(value: number) => [formatTooltipValue(value), "Value"]}
+                labelFormatter={(d: string) => {
+                  const dt = new Date(d);
+                  return dt.toLocaleDateString("en-GB", {
+                    day: "numeric", month: "short", year: "numeric",
+                  });
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="valueCents"
+                stroke={changePositive ? "#22c55e" : "#ef4444"}
+                strokeWidth={1.5}
+                fill="url(#valueGrad)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Private>
+      </div>
     </div>
   );
 }

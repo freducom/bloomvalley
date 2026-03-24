@@ -588,7 +588,7 @@ export default function SecurityDetailPage() {
             />
             <MetricCell
               label="DCF Value"
-              value={fundamentals.dcfValueCents !== null ? formatCurrency(fundamentals.dcfValueCents, currency) : "-"}
+              value={fundamentals.dcfValueCents !== null ? formatLargeNumber(fundamentals.dcfValueCents, currency) : "-"}
             />
             <MetricCell
               label="DCF Upside"
