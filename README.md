@@ -21,9 +21,17 @@
 
 ---
 
-Personal Bloomberg-style terminal for monitoring your investments, tracking world news and insider activity, and getting AI-powered analysis of your portfolio. Built with a **9-agent AI analyst swarm** that runs on Claude or local LLMs (via Ollama), analyzing your holdings and watchlists multiple times per day.
+A personal Bloomberg-style terminal for monitoring your investments, tracking world news and insider activity, and getting AI-powered analysis of your portfolio.
 
-Deploy on your own server with `docker compose up`, or run locally on `localhost`.
+I started this project to explore three ideas:
+
+1. **An unbiased personal financial analyst.** No bank selling you products, no subscription service with conflicts of interest — just a data platform that pulls from 20+ sources and an AI analyst swarm that evaluates your holdings and watchlists on metrics that matter to you: ROIC, free cash flow, P/B, margin of safety, and whatever else you configure.
+
+2. **Spec-driven development, not vibe coding.** Every feature starts as a written specification. The entire system was built by AI agent teams with distinct roles — Product Owner, Architect, DBA, Frontend Developer, Backend Developer — each responsible for their domain. The result is a maintainable codebase with proper database schema, security boundaries, and the tech stack I actually wanted, not whatever the LLM felt like using.
+
+3. **Fully local, zero external dependencies at runtime.** The entire platform deploys with `docker compose up` on your own server or localhost. The analyst swarm runs on **Ollama** (local LLMs) or Claude — your choice. No data leaves your machine unless you want it to.
+
+The analyst swarm — 9 specialized agents from Portfolio Manager to Compliance Officer — runs multiple times per day, analyzing your current assets and watchlist securities for buy/sell/hold opportunities. And everything is tweakable: the agent definitions are plain Markdown files you can edit to match your own investment thesis.
 
 ![Portfolio Heatmap](docs/screenshots/heatmap.png)
 *Portfolio heatmap — treemap of your current holdings weighted by position size, color-coded by performance.*
