@@ -136,11 +136,93 @@ export default function FundamentalsPage() {
 
 type SortKey = "ticker" | "currentPriceCents" | "priceToBook" | "peRatio" | "roic" | "fcfYield" | "netDebtEbitda" | "dividendYield" | "grossMargin" | "operatingMargin" | "dcfUpsidePct" | "shortInterestPct" | "updatedAt";
 
+interface Filters {
+  preset: string;
+  assetClass: string;
+  minRoic: string;
+  maxPb: string;
+  maxPe: string;
+  maxDebt: string;
+  minFcfYield: string;
+  minGrossMargin: string;
+  hideMissing: boolean;
+}
+
+const DEFAULT_FILTERS: Filters = {
+  preset: "",
+  assetClass: "",
+  minRoic: "",
+  maxPb: "",
+  maxPe: "",
+  maxDebt: "",
+  minFcfYield: "",
+  minGrossMargin: "",
+  hideMissing: false,
+};
+
+const PRESETS: { key: string; label: string; filters: Partial<Filters> }[] = [
+  { key: "compounders", label: "Quality Compounders", filters: { minRoic: "0.15", minGrossMargin: "0.15", maxDebt: "3" } },
+  { key: "value", label: "Value", filters: { maxPe: "20", maxPb: "2", minFcfYield: "0.04" } },
+  { key: "dividend", label: "Dividend", filters: { minRoic: "0.10" } },
+  { key: "undervalued", label: "Undervalued (DCF)", filters: {} },
+  { key: "lowdebt", label: "Low Debt", filters: { maxDebt: "1" } },
+];
+
+function applyFilters(data: Fundamentals[], filters: Filters): Fundamentals[] {
+  return data.filter((f) => {
+    if (filters.assetClass && f.assetClass !== filters.assetClass) return false;
+
+    if (filters.minRoic) {
+      const min = parseFloat(filters.minRoic);
+      if (f.roic === null || f.roic < min) return false;
+    }
+    if (filters.maxPb) {
+      const max = parseFloat(filters.maxPb);
+      if (f.priceToBook === null || f.priceToBook > max) return false;
+    }
+    if (filters.maxPe) {
+      const max = parseFloat(filters.maxPe);
+      if (f.peRatio === null || f.peRatio > max) return false;
+    }
+    if (filters.maxDebt) {
+      const max = parseFloat(filters.maxDebt);
+      // Allow negative (net cash) — only filter out if > max
+      if (f.netDebtEbitda === null || f.netDebtEbitda > max) return false;
+    }
+    if (filters.minFcfYield) {
+      const min = parseFloat(filters.minFcfYield);
+      if (f.fcfYield === null || f.fcfYield < min) return false;
+    }
+    if (filters.minGrossMargin) {
+      const min = parseFloat(filters.minGrossMargin);
+      // For gross margin, compare as ratio (operatingMargin for "compounders" preset uses this too)
+      if (f.grossMargin === null || f.grossMargin < min) return false;
+    }
+
+    // Dividend preset: must have dividend yield > 2%
+    if (filters.preset === "dividend") {
+      if (f.dividendYield === null || f.dividendYield < 0.02) return false;
+    }
+
+    // Undervalued preset: must have DCF upside > 20%
+    if (filters.preset === "undervalued") {
+      if (f.dcfUpsidePct === null || f.dcfUpsidePct < 20) return false;
+    }
+
+    if (filters.hideMissing) {
+      if (f.roic === null && f.peRatio === null && f.priceToBook === null) return false;
+    }
+
+    return true;
+  });
+}
+
 function OverviewTab() {
   const [data, setData] = useState<Fundamentals[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("roic");
   const [sortAsc, setSortAsc] = useState(false);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
 
   useEffect(() => {
     (async () => {
@@ -152,6 +234,24 @@ function OverviewTab() {
     })();
   }, []);
 
+  const setFilter = (key: keyof Filters, value: string | boolean) => {
+    setFilters((prev) => ({ ...prev, preset: key === "preset" ? (value as string) : prev.preset, [key]: value }));
+  };
+
+  const applyPreset = (presetKey: string) => {
+    if (filters.preset === presetKey) {
+      // Toggle off
+      setFilters(DEFAULT_FILTERS);
+      return;
+    }
+    const preset = PRESETS.find((p) => p.key === presetKey);
+    if (!preset) return;
+    setFilters({ ...DEFAULT_FILTERS, preset: presetKey, ...preset.filters });
+  };
+
+  const clearFilters = () => setFilters(DEFAULT_FILTERS);
+  const hasActiveFilters = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortAsc(!sortAsc);
@@ -161,7 +261,9 @@ function OverviewTab() {
     }
   };
 
-  const sorted = [...data].sort((a, b) => {
+  const filtered = applyFilters(data, filters);
+
+  const sorted = [...filtered].sort((a, b) => {
     const av = a[sortKey] ?? (sortAsc ? Infinity : -Infinity);
     const bv = b[sortKey] ?? (sortAsc ? Infinity : -Infinity);
     if (typeof av === "string" && typeof bv === "string") return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -182,6 +284,8 @@ function OverviewTab() {
     );
   }
 
+  const SEL = "bg-terminal-bg-primary border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text-primary";
+
   const TH = ({ k, align, title, children }: { k: SortKey; align?: string; title: string; children: React.ReactNode }) => (
     <th
       className={`${align || "text-right"} p-3 cursor-pointer select-none hover:text-terminal-accent transition-colors whitespace-nowrap`}
@@ -193,6 +297,100 @@ function OverviewTab() {
   );
 
   return (
+    <div>
+      {/* Preset screens */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {PRESETS.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => applyPreset(p.key)}
+            className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
+              filters.preset === p.key
+                ? "bg-terminal-accent/20 text-terminal-accent border-terminal-accent/50"
+                : "bg-terminal-bg-secondary text-terminal-text-secondary border-terminal-border hover:text-terminal-text-primary hover:border-terminal-text-tertiary"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        {hasActiveFilters && (
+          <button onClick={clearFilters} className="px-2 py-1.5 text-xs text-terminal-text-tertiary hover:text-terminal-negative transition-colors">
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Column filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <select value={filters.assetClass} onChange={(e) => setFilter("assetClass", e.target.value)} className={SEL}>
+          <option value="">All classes</option>
+          <option value="stock">Stocks</option>
+          <option value="etf">ETFs</option>
+          <option value="crypto">Crypto</option>
+        </select>
+
+        <select value={filters.minRoic} onChange={(e) => setFilter("minRoic", e.target.value)} className={SEL}>
+          <option value="">ROIC: any</option>
+          <option value="0.10">&gt; 10%</option>
+          <option value="0.15">&gt; 15%</option>
+          <option value="0.20">&gt; 20%</option>
+          <option value="0.30">&gt; 30%</option>
+        </select>
+
+        <select value={filters.maxPb} onChange={(e) => setFilter("maxPb", e.target.value)} className={SEL}>
+          <option value="">P/B: any</option>
+          <option value="1">&lt; 1</option>
+          <option value="2">&lt; 2</option>
+          <option value="3">&lt; 3</option>
+          <option value="5">&lt; 5</option>
+        </select>
+
+        <select value={filters.maxPe} onChange={(e) => setFilter("maxPe", e.target.value)} className={SEL}>
+          <option value="">P/E: any</option>
+          <option value="15">&lt; 15</option>
+          <option value="20">&lt; 20</option>
+          <option value="30">&lt; 30</option>
+          <option value="50">&lt; 50</option>
+        </select>
+
+        <select value={filters.maxDebt} onChange={(e) => setFilter("maxDebt", e.target.value)} className={SEL}>
+          <option value="">Debt: any</option>
+          <option value="0">&lt; 0x (net cash)</option>
+          <option value="1">&lt; 1x</option>
+          <option value="2">&lt; 2x</option>
+          <option value="3">&lt; 3x</option>
+        </select>
+
+        <select value={filters.minFcfYield} onChange={(e) => setFilter("minFcfYield", e.target.value)} className={SEL}>
+          <option value="">FCF Yield: any</option>
+          <option value="0.03">&gt; 3%</option>
+          <option value="0.05">&gt; 5%</option>
+          <option value="0.08">&gt; 8%</option>
+        </select>
+
+        <select value={filters.minGrossMargin} onChange={(e) => setFilter("minGrossMargin", e.target.value)} className={SEL}>
+          <option value="">Gross Margin: any</option>
+          <option value="0.30">&gt; 30%</option>
+          <option value="0.50">&gt; 50%</option>
+          <option value="0.70">&gt; 70%</option>
+        </select>
+
+        <label className="flex items-center gap-1.5 text-xs text-terminal-text-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            checked={filters.hideMissing}
+            onChange={(e) => setFilter("hideMissing", e.target.checked)}
+            className="rounded border-terminal-border"
+          />
+          Hide missing
+        </label>
+      </div>
+
+      {/* Result count */}
+      <div className="text-xs text-terminal-text-tertiary mb-2">
+        {filtered.length} of {data.length} securities
+      </div>
+
     <div className="border border-terminal-border rounded bg-terminal-bg-secondary overflow-x-auto max-h-[80vh] overflow-y-auto">
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-terminal-bg-secondary">
@@ -282,6 +480,7 @@ function OverviewTab() {
           ))}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

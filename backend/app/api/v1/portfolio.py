@@ -2,9 +2,11 @@
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import Optional
 
 import structlog
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select, case, literal_column
 
 from app.db.engine import async_session
@@ -386,14 +388,19 @@ async def get_portfolio_summary(
 async def get_value_history(
     days: int = Query(90, ge=7, le=730),
 ):
-    """Compute daily portfolio value by replaying current holdings against historical prices."""
+    """Compute daily total portfolio value (holdings + cash) over time.
+
+    Holdings are replayed against historical prices. Cash balance is
+    reconstructed from deposit/withdrawal/buy/sell/dividend/fee transactions.
+    """
     from collections import defaultdict
+    from datetime import timedelta
+
+    from_date = date.today() - timedelta(days=days)
 
     # 1. Get current holdings (quantities)
     holdings_resp = await get_holdings(account_id=None)
     holdings_data = holdings_resp["data"]
-    if not holdings_data:
-        return {"data": []}
 
     # Build {security_id: quantity} and track currencies
     positions: dict[int, float] = {}
@@ -403,16 +410,17 @@ async def get_value_history(
         positions[sid] = float(h["quantity"])
         sec_currencies[sid] = h["priceCurrency"] or h["currency"]
 
-    # 2. Fetch historical prices for these securities
-    from_date = date.today() - __import__("datetime").timedelta(days=days)
-    async with async_session() as session:
-        result = await session.execute(
-            select(Price.security_id, Price.date, Price.close_cents, Price.currency)
-            .where(Price.security_id.in_(list(positions.keys())))
-            .where(Price.date >= from_date)
-            .order_by(Price.date)
-        )
-        price_rows = result.all()
+    # 2. Fetch historical prices
+    price_rows = []
+    if positions:
+        async with async_session() as session:
+            result = await session.execute(
+                select(Price.security_id, Price.date, Price.close_cents, Price.currency)
+                .where(Price.security_id.in_(list(positions.keys())))
+                .where(Price.date >= from_date)
+                .order_by(Price.date)
+            )
+            price_rows = result.all()
 
     # 3. Fetch FX rate history for non-EUR currencies
     needed_currencies = {c for c in sec_currencies.values() if c != "EUR"}
@@ -429,16 +437,83 @@ async def get_value_history(
             for row in fx_result.all():
                 fx_history.setdefault(row.quote_currency, {})[row.date] = float(row.rate)
 
-    # 4. Build daily value: for each date, sum(qty * close / fx_rate)
-    # Use last-known price for securities missing on a given day
+    # 4. Reconstruct daily cash balance from transactions
+    # Get current total cash across all accounts (in EUR)
+    fx_rates = await _get_fx_rates()
+    total_cash_now = 0
+    async with async_session() as session:
+        acct_result = await session.execute(
+            select(Account).where(Account.is_active.is_(True))
+        )
+        for acct in acct_result.scalars().all():
+            if acct.cash_currency == "EUR":
+                total_cash_now += acct.cash_balance_cents
+            else:
+                fx = fx_rates.get(acct.cash_currency, Decimal("1"))
+                total_cash_now += int(acct.cash_balance_cents / float(fx))
+
+    # Get all cash-affecting transactions to build historical cash deltas
+    # Positive to cash: sell proceeds, dividends, deposits, interest
+    # Negative from cash: buy cost, withdrawals, fees
+    async with async_session() as session:
+        tx_result = await session.execute(
+            select(
+                Transaction.trade_date,
+                Transaction.type,
+                Transaction.total_cents,
+                Transaction.fee_cents,
+                Transaction.currency,
+            )
+            .where(Transaction.trade_date >= from_date)
+            .where(Transaction.type.in_([
+                "buy", "sell", "dividend", "deposit", "withdrawal",
+                "fee", "interest",
+            ]))
+            .order_by(Transaction.trade_date)
+        )
+        cash_txns = tx_result.all()
+
+    # Build daily cash deltas (in EUR) from today backwards
+    daily_cash_delta: dict[date, int] = defaultdict(int)
+    for tx in cash_txns:
+        amount = tx.total_cents or 0
+        fee = tx.fee_cents or 0
+        fx = float(fx_rates.get(tx.currency, Decimal("1"))) if tx.currency != "EUR" else 1.0
+
+        if tx.type in ("sell", "dividend", "deposit", "interest"):
+            # These added cash — so going backwards, subtract them
+            delta = int((amount - fee) / fx)
+            daily_cash_delta[tx.trade_date] -= delta
+        elif tx.type == "buy":
+            # Buys removed cash — going backwards, add them back
+            delta = int((amount + fee) / fx)
+            daily_cash_delta[tx.trade_date] += delta
+        elif tx.type == "withdrawal":
+            # Withdrawals removed cash — going backwards, add them back
+            delta = int(amount / fx)
+            daily_cash_delta[tx.trade_date] += delta
+        elif tx.type == "fee":
+            # Fees removed cash — going backwards, add them back
+            delta = int(amount / fx)
+            daily_cash_delta[tx.trade_date] += delta
+
+    # 5. Build daily value series
     daily_prices: dict[int, dict[date, tuple[int, str]]] = defaultdict(dict)
     for row in price_rows:
         daily_prices[row.security_id][row.date] = (row.close_cents, row.currency)
 
-    # Collect all dates
     all_dates = sorted({row.date for row in price_rows})
     if not all_dates:
         return {"data": []}
+
+    # Build cash balance for each date by working backwards from today
+    # Start with current cash and subtract deltas going back in time
+    cash_by_date: dict[date, int] = {}
+    running_cash = total_cash_now
+    for d in reversed(all_dates):
+        cash_by_date[d] = running_cash
+        # Apply reverse delta for this date (already computed as reverse)
+        running_cash += daily_cash_delta.get(d, 0)
 
     # Forward-fill prices and FX rates
     last_price: dict[int, tuple[int, str]] = {}
@@ -472,9 +547,12 @@ async def get_value_history(
             has_data = True
 
         if has_data:
+            cash_eur = cash_by_date.get(d, total_cash_now)
             series.append({
                 "date": d.isoformat(),
-                "valueCents": int(total_eur_cents),
+                "valueCents": int(total_eur_cents) + cash_eur,
+                "holdingsCents": int(total_eur_cents),
+                "cashCents": cash_eur,
             })
 
     return {"data": series}
@@ -530,5 +608,228 @@ async def take_snapshot():
     logger.info("holdings_snapshot_taken", date=today.isoformat(), rows=rows_created)
     return {
         "data": {"date": today.isoformat(), "rows": rows_created},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+class SellRequest(BaseModel):
+    account_id: int
+    security_id: int
+    quantity: str
+    price_cents: int
+    total_cents: int  # gross proceeds
+    fee_cents: int = 0
+    currency: str = "EUR"
+    trade_date: date
+    notes: Optional[str] = None
+
+
+@router.post("/sell")
+async def sell_holding(body: SellRequest):
+    """Sell a holding: create sell transaction and add net proceeds to cash balance."""
+    qty = Decimal(body.quantity)
+    if qty <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive")
+
+    # Verify the holding exists with enough quantity
+    async with async_session() as session:
+        # Check account exists
+        account = await session.get(Account, body.account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        # Check security exists
+        security = await session.get(Security, body.security_id)
+        if not security:
+            raise HTTPException(status_code=404, detail="Security not found")
+
+        # Check current position quantity
+        qty_case = case(
+            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
+            (Transaction.type.in_(["sell", "transfer_out"]), -Transaction.quantity),
+            else_=literal_column("0"),
+        )
+        result = await session.execute(
+            select(func.sum(qty_case).label("net_qty"))
+            .where(
+                Transaction.account_id == body.account_id,
+                Transaction.security_id == body.security_id,
+                Transaction.type.in_(["buy", "sell", "transfer_in", "transfer_out"]),
+            )
+        )
+        current_qty = result.scalar_one() or Decimal("0")
+
+        if qty > current_qty:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot sell {qty} — only {current_qty} held",
+            )
+
+        # Create sell transaction
+        tx = Transaction(
+            account_id=body.account_id,
+            security_id=body.security_id,
+            type="sell",
+            trade_date=body.trade_date,
+            quantity=qty,
+            price_cents=body.price_cents,
+            price_currency=body.currency,
+            total_cents=body.total_cents,
+            fee_cents=body.fee_cents,
+            fee_currency=body.currency,
+            currency=body.currency,
+            notes=body.notes,
+        )
+        session.add(tx)
+
+        # Add net proceeds (total - fees) to account cash balance
+        net_proceeds = body.total_cents - body.fee_cents
+        account.cash_balance_cents += net_proceeds
+
+        await session.commit()
+        await session.refresh(tx)
+
+    logger.info(
+        "holding_sold",
+        account_id=body.account_id,
+        security=security.ticker,
+        quantity=str(qty),
+        proceeds=body.total_cents,
+        fee=body.fee_cents,
+        net_proceeds=net_proceeds,
+    )
+
+    return {
+        "data": {
+            "transactionId": tx.id,
+            "ticker": security.ticker,
+            "name": security.name,
+            "quantity": str(qty),
+            "proceedsCents": body.total_cents,
+            "feeCents": body.fee_cents,
+            "netProceedsCents": net_proceeds,
+            "newCashBalanceCents": account.cash_balance_cents,
+            "currency": body.currency,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.get("/sold-holdings")
+async def get_sold_holdings():
+    """Return securities that were fully sold (net quantity = 0 or less).
+
+    Includes historical cost basis, total proceeds, realized P&L, and dates.
+    """
+    async with async_session() as session:
+        qty_case = case(
+            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
+            (Transaction.type.in_(["sell", "transfer_out"]), -Transaction.quantity),
+            else_=literal_column("0"),
+        )
+        bought_qty = case(
+            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
+            else_=literal_column("0"),
+        )
+        sold_qty = case(
+            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.quantity),
+            else_=literal_column("0"),
+        )
+        cost_case = case(
+            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.total_cents),
+            else_=literal_column("0"),
+        )
+        proceeds_case = case(
+            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.total_cents),
+            else_=literal_column("0"),
+        )
+        fees_case = case(
+            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.fee_cents),
+            else_=literal_column("0"),
+        )
+        first_buy = case(
+            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.trade_date),
+            else_=None,
+        )
+        last_sell = case(
+            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.trade_date),
+            else_=None,
+        )
+
+        result = await session.execute(
+            select(
+                Transaction.account_id,
+                Transaction.security_id,
+                func.sum(qty_case).label("net_qty"),
+                func.sum(bought_qty).label("total_bought"),
+                func.sum(sold_qty).label("total_sold"),
+                func.sum(cost_case).label("total_cost_cents"),
+                func.sum(proceeds_case).label("total_proceeds_cents"),
+                func.sum(fees_case).label("total_sell_fees_cents"),
+                func.min(first_buy).label("first_buy_date"),
+                func.max(last_sell).label("last_sell_date"),
+            )
+            .where(
+                Transaction.security_id.isnot(None),
+                Transaction.type.in_(["buy", "sell", "transfer_in", "transfer_out"]),
+            )
+            .group_by(Transaction.account_id, Transaction.security_id)
+            .having(func.sum(qty_case) <= 0)
+        )
+        rows = result.all()
+
+    if not rows:
+        return {
+            "data": [],
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    # Load securities and accounts
+    security_ids = {r.security_id for r in rows}
+    account_ids = {r.account_id for r in rows}
+
+    async with async_session() as session:
+        sec_result = await session.execute(
+            select(Security).where(Security.id.in_(security_ids))
+        )
+        securities = {s.id: s for s in sec_result.scalars().all()}
+
+        acct_result = await session.execute(
+            select(Account).where(Account.id.in_(account_ids))
+        )
+        accounts = {a.id: a for a in acct_result.scalars().all()}
+
+    data = []
+    for r in rows:
+        sec = securities.get(r.security_id)
+        acct = accounts.get(r.account_id)
+        if not sec:
+            continue
+
+        cost = int(r.total_cost_cents or 0)
+        proceeds = int(r.total_proceeds_cents or 0)
+        fees = int(r.total_sell_fees_cents or 0)
+        realized_pnl = proceeds - cost - fees
+
+        data.append({
+            "accountId": r.account_id,
+            "accountName": acct.name if acct else None,
+            "securityId": r.security_id,
+            "ticker": sec.ticker,
+            "name": sec.name,
+            "assetClass": sec.asset_class,
+            "totalBought": str(r.total_bought or 0),
+            "totalSold": str(r.total_sold or 0),
+            "totalCostCents": cost,
+            "totalProceedsCents": proceeds,
+            "totalFeesCents": fees,
+            "realizedPnlCents": realized_pnl,
+            "currency": sec.currency,
+            "firstBuyDate": r.first_buy_date.isoformat() if r.first_buy_date else None,
+            "lastSellDate": r.last_sell_date.isoformat() if r.last_sell_date else None,
+        })
+
+    return {
+        "data": data,
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

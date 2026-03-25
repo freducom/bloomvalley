@@ -6,6 +6,7 @@ Supports Claude API and Ollama as LLM backends.
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -395,6 +396,129 @@ async def store_report(backend_url: str, agent_name: str, report: str):
             print(f"  [!] Failed to store report for {agent_name}: {e}", flush=True)
 
 
+# ── Research Analyst: Per-Security Extraction ──
+
+# Matches "## 1. TICKER — Name" and "## W-1. TICKER — Name"
+_SECTION_RE = re.compile(
+    r"^## (?:W-)?(\d+)\. ([A-Z][A-Z0-9._-]+) — (.+?)$",
+    re.MULTILINE,
+)
+
+
+def _parse_research_sections(report: str) -> list[dict]:
+    """Split a research analyst report into per-security sections."""
+    matches = list(_SECTION_RE.finditer(report))
+    if not matches:
+        return []
+
+    sections = []
+    seen_tickers: set[str] = set()
+    for i, m in enumerate(matches):
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(report)
+        body = report[start:end].strip()
+        ticker = m.group(2)
+        name = m.group(3).strip()
+        is_watchlist = body.startswith("## W-")
+
+        # Deduplicate — if same ticker appears twice (held + watchlist), keep held
+        if ticker in seen_tickers:
+            continue
+        seen_tickers.add(ticker)
+
+        # Extract structured fields from the section text
+        # Watchlist briefs use **Bull case** inline; held positions use ### Bull Case headings
+        bull = (_extract_field(body, r"### Bull [Cc]ase[^#\n]*\n(.+?)(?=\n###|\n## |\Z)")
+                or _extract_field(body, r"\*\*Bull [Cc]ase[^*]*\*\*[:\s—–-]*(.+?)(?:\n\n|\n\*\*|\Z)"))
+        bear = (_extract_field(body, r"### Bear [Cc]ase[^#\n]*\n(.+?)(?=\n###|\n## |\Z)")
+                or _extract_field(body, r"\*\*Bear [Cc]ase[^*]*\*\*[:\s—–-]*(.+?)(?:\n\n|\n\*\*|\Z)"))
+        base = (_extract_field(body, r"### Base [Cc]ase[^#\n]*\n(.+?)(?=\n###|\n## |\Z)")
+                or _extract_field(body, r"\*\*Base [Cc]ase[^*]*\*\*[:\s—–-]*(.+?)(?:\n\n|\n\*\*|\Z)"))
+        moat = _extract_moat(body)
+        verdict = _extract_field(body, r"\*\*Verdict[:\s]*([A-Z]+)\*\*")
+
+        sections.append({
+            "ticker": ticker,
+            "name": name,
+            "is_watchlist": is_watchlist,
+            "body": body,
+            "bull_case": bull,
+            "bear_case": bear,
+            "base_case": base,
+            "moat_rating": moat,
+            "verdict": verdict,
+        })
+
+    return sections
+
+
+def _extract_field(text: str, pattern: str) -> str | None:
+    """Extract a single field from section text using regex."""
+    m = re.search(pattern, text, re.DOTALL)
+    if m:
+        val = m.group(1).strip()
+        # Clean up — remove trailing --- separators
+        val = re.sub(r"\n---\s*$", "", val).strip()
+        return val if val else None
+    return None
+
+
+def _extract_moat(text: str) -> str | None:
+    """Extract moat rating (none/narrow/wide) from section text."""
+    m = re.search(r"[Mm]oat.*?:\s*\*?\*?(none|narrow|wide)\*?\*?", text, re.IGNORECASE)
+    return m.group(1).lower() if m else None
+
+
+async def extract_per_security_notes(report: str, backend_url: str, date_str: str):
+    """Parse research analyst report into per-security research notes and POST them."""
+    sections = _parse_research_sections(report)
+    if not sections:
+        print("  [research] No per-security sections found to extract", flush=True)
+        return
+
+    # Resolve tickers to security IDs
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+        try:
+            sec_resp = await client.get("/securities?limit=500")
+            securities = {s["ticker"]: s["id"] for s in sec_resp.json().get("data", [])}
+        except Exception as e:
+            print(f"  [research] Failed to fetch securities: {e}", flush=True)
+            return
+
+        posted = 0
+        skipped = 0
+        for sec in sections:
+            ticker = sec["ticker"]
+            sec_id = securities.get(ticker)
+            if not sec_id:
+                skipped += 1
+                continue
+
+            title_prefix = "Watchlist Brief" if sec["is_watchlist"] else "Research Analyst Report"
+            payload = {
+                "securityId": sec_id,
+                "title": f"{title_prefix}: {sec['name']} ({ticker}) - {date_str}",
+                "thesis": sec["body"][:60000],
+                "bullCase": sec["bull_case"],
+                "bearCase": sec["bear_case"],
+                "baseCase": sec["base_case"],
+                "moatRating": sec["moat_rating"],
+                "tags": ["research-analyst", "swarm",
+                         "watchlist" if sec["is_watchlist"] else "held"],
+            }
+
+            try:
+                resp = await client.post("/research/notes", json=payload)
+                if resp.status_code in (200, 201):
+                    posted += 1
+                else:
+                    print(f"  [research] Failed to post {ticker}: {resp.status_code}", flush=True)
+            except Exception as e:
+                print(f"  [research] Failed to post {ticker}: {e}", flush=True)
+
+        print(f"  [research] Extracted {posted} per-security notes ({skipped} skipped)", flush=True)
+
+
 # ── Run Single Agent ──
 
 async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
@@ -583,11 +707,17 @@ async def run_swarm(cfg: dict):
     failed = len(results) - completed
     print(f"\n[swarm] Analysts: {completed} completed, {failed} failed", flush=True)
 
-    # Step 3: Close old recommendations
+    # Step 3: Extract per-security research notes
+    for agent_name, result in zip(analysts, results):
+        if agent_name == "research-analyst" and result and not isinstance(result, Exception):
+            await extract_per_security_notes(result, backend_url, date_str)
+            break
+
+    # Step 4: Close old recommendations
     if "portfolio-manager" in agents:
         await close_old_recommendations(backend_url)
 
-    # Step 4: Run portfolio manager last (needs analyst outputs)
+    # Step 5: Run portfolio manager last (needs analyst outputs)
     if "portfolio-manager" in agents:
         print("\n[swarm] Running portfolio manager (final synthesis)...", flush=True)
         await report_status(backend_url, "running", agent="portfolio-manager",
@@ -595,7 +725,7 @@ async def run_swarm(cfg: dict):
         pm_report = await run_agent("portfolio-manager", cfg, date_str)
         completed_count += 1
 
-        # Step 5: Extract and post structured recommendations from PM report
+        # Step 6: Extract and post structured recommendations from PM report
         if pm_report:
             await report_status(backend_url, "running", message="Posting recommendations...")
             await extract_and_post_recommendations(pm_report, cfg, date_str)
@@ -620,7 +750,9 @@ async def run_research_only(cfg: dict):
     await report_status(backend_url, "running", agent="research-analyst",
                         completed=0, total=1, message="Watchlist rotation")
     start = time.time()
-    await run_agent("research-analyst", cfg, date_str)
+    report = await run_agent("research-analyst", cfg, date_str)
+    if report:
+        await extract_per_security_notes(report, backend_url, date_str)
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle", completed=1, total=1,
                         message=f"Research complete in {elapsed}s")
