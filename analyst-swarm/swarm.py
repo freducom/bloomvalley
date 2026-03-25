@@ -17,6 +17,10 @@ import yaml
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+# API key for backend authentication
+_API_KEY = os.environ.get("API_KEY", "")
+_AUTH_HEADERS = {"X-API-Key": _API_KEY} if _API_KEY else {}
+
 # ── Config ──
 
 def load_config() -> dict:
@@ -168,7 +172,7 @@ async def report_status(backend_url: str, status: str, agent: str | None = None,
                         completed: int = 0, total: int = 0, message: str | None = None):
     """Report swarm status to the backend (stored in Redis)."""
     try:
-        async with httpx.AsyncClient(timeout=5, base_url=backend_url) as client:
+        async with httpx.AsyncClient(timeout=5, base_url=backend_url, headers=_AUTH_HEADERS) as client:
             await client.post("/swarm/status", json={
                 "status": status,
                 "agent": agent,
@@ -202,7 +206,7 @@ def _set_watchlist_offset(backend_url: str, offset: int):
 async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
     """Fetch data from multiple API endpoints."""
     results = {}
-    async with httpx.AsyncClient(timeout=60, base_url=backend_url) as client:
+    async with httpx.AsyncClient(timeout=60, base_url=backend_url, headers=_AUTH_HEADERS) as client:
         for ep in endpoints:
             try:
                 resp = await client.get(ep)
@@ -351,7 +355,7 @@ async def refresh_pipelines(cfg: dict):
 
     print(f"[swarm] Refreshing {len(pipelines)} data pipelines...", flush=True)
 
-    async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
         for p in pipelines:
             try:
                 resp = await client.post(f"/pipelines/{p}/run")
@@ -366,7 +370,7 @@ async def refresh_pipelines(cfg: dict):
     while time.time() - start < timeout:
         await asyncio.sleep(10)
         try:
-            async with httpx.AsyncClient(timeout=10, base_url=backend_url) as client:
+            async with httpx.AsyncClient(timeout=10, base_url=backend_url, headers=_AUTH_HEADERS) as client:
                 resp = await client.get("/pipelines")
                 if resp.status_code == 200:
                     data = resp.json().get("data", [])
@@ -385,7 +389,7 @@ async def refresh_pipelines(cfg: dict):
 
 async def store_report(backend_url: str, agent_name: str, report: str):
     """Store the agent report as a research note."""
-    async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
         try:
             await client.post("/research/notes", json={
                 "title": f"{agent_name.replace('-', ' ').title()} — {datetime.now().strftime('%Y-%m-%d')}",
@@ -477,7 +481,7 @@ async def extract_per_security_notes(report: str, backend_url: str, date_str: st
         return
 
     # Resolve tickers to security IDs
-    async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
         try:
             sec_resp = await client.get("/securities?limit=500")
             securities = {s["ticker"]: s["id"] for s in sec_resp.json().get("data", [])}
@@ -574,7 +578,7 @@ async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
 
 async def close_old_recommendations(backend_url: str):
     """Close all active recommendations before posting new ones."""
-    async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
         try:
             resp = await client.get("/recommendations?status=active&limit=200")
             if resp.status_code == 200:
@@ -626,7 +630,7 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
             return
 
         # Resolve tickers to security IDs
-        async with httpx.AsyncClient(timeout=30, base_url=backend_url) as client:
+        async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
             sec_resp = await client.get("/securities?limit=500")
             securities = {s["ticker"]: s["id"] for s in sec_resp.json().get("data", [])}
 

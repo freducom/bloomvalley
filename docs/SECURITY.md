@@ -1,6 +1,6 @@
 # Security Audit — Bloomvalley Terminal
 
-Last updated: 2026-03-24
+Last updated: 2026-03-26
 
 This document describes known security issues in the current deployment,
 why each matters, and how to fix it. Intended audience: anyone deploying
@@ -22,14 +22,13 @@ no multi-tenancy, and no public exposure by design. The threat model is:
 
 ### CRITICAL
 
-#### 1. No authentication on the API
+#### 1. ~~No authentication on the API~~ — REMEDIATED
 
 | | |
 |---|---|
-| **Where** | `backend/app/main.py:45-64` — no auth middleware; all routes in `backend/app/api/v1/` have no `Depends()` guards |
-| **Risk** | Anyone who can reach the host has full read/write access to portfolio data, transactions, recommendations, and can trigger pipeline runs |
-| **Why it matters** | Even on a home LAN, other devices (IoT, guests, compromised machines) share the network. The API also accepts destructive operations (delete transactions, close recommendations) |
-| **Fix** | Add a static API key checked via FastAPI middleware on all `/api/v1/*` routes. Store the key in `.env`, inject it server-side via the Next.js rewrite so it never reaches the browser. See [Remediation](#r1-api-authentication) |
+| **Where** | `backend/app/main.py` — API key middleware on all `/api/*` routes |
+| **Status** | **Fixed (2026-03-26).** Static API key (`API_KEY` in `.env`) checked via `X-API-Key` header. Next.js middleware (`frontend/src/middleware.ts`) injects the header server-side on rewrite — the key never reaches the browser. Cron and analyst-swarm pass the key via env var. Health endpoint exempt for Docker healthchecks. Auth is optional — empty `API_KEY` disables it for local dev. |
+| **Traefik change** | All traffic now routes through the frontend (single router) so the middleware always injects the key. The separate `bloomvalley-api` Traefik router pointing directly to port 8000 was removed. |
 
 #### 2. Database exposed on host with weak default credentials
 
@@ -158,6 +157,7 @@ Becomes relevant if session-based auth is added (#1).
 ### Things that are already done right
 
 - **SQL injection**: All database queries use SQLAlchemy parameterized queries or `text()` with named bindings — no string interpolation
+- **API authentication**: Static API key (`X-API-Key` header) on all `/api/*` routes, injected server-side by Next.js middleware
 - **`.env` excluded from git**: `.gitignore` correctly excludes `.env`, `backend/.env`, `frontend/.env.local`
 - **Debug mode off**: SQLAlchemy `echo=False`, no debug endpoints
 - **Input validation**: All API endpoints use Pydantic models
@@ -168,45 +168,17 @@ Becomes relevant if session-based auth is added (#1).
 
 ## Remediation Plans
 
-### R1: API authentication
+### R1: API authentication — DONE
 
-Add a static API key validated by FastAPI middleware.
+Implemented 2026-03-26. See finding #1 for details.
 
-**Backend** (`backend/app/main.py`):
-```python
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
-API_KEY = settings.API_KEY  # new field in .env
-
-@app.middleware("http")
-async def check_api_key(request: Request, call_next):
-    # Allow health check without auth
-    if request.url.path in ("/", "/docs", "/openapi.json"):
-        return await call_next(request)
-    if not request.url.path.startswith("/api/"):
-        return await call_next(request)
-
-    key = request.headers.get("X-API-Key")
-    if key != API_KEY:
-        return JSONResponse(status_code=401, content={"detail": "Invalid API key"})
-    return await call_next(request)
-```
-
-**Frontend** — the Next.js rewrite injects the key server-side so it
-never reaches the browser:
-
-```javascript
-// next.config.mjs — rewrites section
-{
-  source: '/api/:path*',
-  destination: 'http://backend:8000/api/:path*',
-  headers: [{ key: 'X-API-Key', value: process.env.API_KEY }],
-}
-```
-
-**Other clients** (analyst-swarm, cron) pass `API_KEY` as an env var
-and include the header in requests.
+- `backend/app/config.py` — `API_KEY` setting
+- `backend/app/main.py` — `check_api_key` middleware
+- `frontend/src/middleware.ts` — injects `X-API-Key` on `/api/*` rewrites
+- `backend/cron_scheduler.py` — reads `API_KEY` from env, sends header
+- `analyst-swarm/swarm.py` — reads `API_KEY` from env, sends header on all backend calls
+- `docker-compose.yml` — passes `API_KEY` to frontend and analyst-swarm
+- Traefik config — single router through frontend (removed direct backend route)
 
 ### R2: Close database ports
 
@@ -288,14 +260,14 @@ http:
 
 ## Implementation priority
 
-| Priority | Item | Effort |
-|----------|------|--------|
-| 1 | Close DB + Redis ports (#2, #3) | 10 min |
-| 2 | Remove backend/frontend host ports (#5, #6) | 5 min |
-| 3 | Strong DB + Redis passwords (#2, #3) | 10 min |
-| 4 | API key middleware (#1) | 1-2 hrs |
-| 5 | Traefik IP allowlist (#R5) | 10 min |
-| 6 | Rate limiting on pipelines (#7) | 30 min |
-| 7 | CORS tightening (#9) | 5 min |
-| 8 | HTTPS for OpenInsider (#12) | 5 min |
-| 9 | Container hardening (#11) | 30 min |
+| Priority | Item | Effort | Status |
+|----------|------|--------|--------|
+| ~~1~~ | ~~API key middleware (#1)~~ | ~~1-2 hrs~~ | **Done** |
+| 2 | Close DB + Redis ports (#2, #3) | 10 min | |
+| 3 | Remove backend/frontend host ports (#5, #6) | 5 min | |
+| 4 | Strong DB + Redis passwords (#2, #3) | 10 min | |
+| 5 | Traefik IP allowlist (#R5) | 10 min | |
+| 6 | Rate limiting on pipelines (#7) | 30 min | |
+| 7 | CORS tightening (#9) | 5 min | |
+| 8 | HTTPS for OpenInsider (#12) | 5 min | |
+| 9 | Container hardening (#11) | 30 min | |

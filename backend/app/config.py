@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     ALPHA_VANTAGE_API_KEY: str = ""
     FRED_API_KEY: str = ""
     FINNHUB_API_KEY: str = ""
+    API_KEY: str = ""
     LOG_LEVEL: str = "INFO"
     FRONTEND_URL: str = "http://localhost:3000"
 

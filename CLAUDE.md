@@ -53,7 +53,8 @@ See `AGENTS.md` for full team definitions, workflows, data sources, glidepath sc
 - Test all financial calculations thoroughly (tax scenarios, edge cases)
 - Every data source must be replaceable (adapter pattern)
 - Show stale/missing data visibly in UI — never show wrong data silently
-- No auth/multi-tenancy — single-user personal tool
+- **Never commit personal data** — no real portfolio holdings, monetary values, account balances, ticker positions, API keys, passwords, or any personally identifiable financial information in committed code, tests, seed data, or documentation. Use placeholder/example values only.
+- No multi-tenancy — single-user personal tool. API protected by static `API_KEY` (see `.env`).
 - Respect all API rate limits, implement backoff and caching
 - **Always update `README.md`** when adding/changing: new features, new pipelines, new API keys or config, new services in docker-compose, changed project structure, new dependencies, or setup/deployment steps. The README is the single source of truth for installation and usage.
 - **Keep `.claude/agents/` in sync with `AGENTS.md`** — when investment team roles, responsibilities, data sources, or workflows change in AGENTS.md, update the corresponding agent files in `.claude/agents/`. When agent files are modified, reflect changes back to AGENTS.md. The two must always be consistent.

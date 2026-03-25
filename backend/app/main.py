@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.config import settings
 from app.db.engine import engine
@@ -57,6 +57,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API key authentication middleware
+@app.middleware("http")
+async def check_api_key(request: Request, call_next):
+    # Skip auth if no API_KEY configured (backwards compatible)
+    if not settings.API_KEY:
+        return await call_next(request)
+
+    # Allow health, root, docs without auth
+    if request.url.path in ("/", "/docs", "/openapi.json", "/api/v1/health"):
+        return await call_next(request)
+
+    # Only protect /api/* routes
+    if request.url.path.startswith("/api/"):
+        key = request.headers.get("X-API-Key")
+        if key != settings.API_KEY:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+
+    return await call_next(request)
+
 
 # Include v1 router
 from app.api.v1.router import router as v1_router  # noqa: E402

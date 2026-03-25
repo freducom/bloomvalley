@@ -3,17 +3,21 @@ Pipeline scheduler using APScheduler.
 Runs inside Docker, triggers pipelines via HTTP calls to the backend.
 """
 
+import os
+
 import httpx
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 
 BACKEND_URL = "http://backend:8000/api/v1/pipelines"
 BACKEND_BASE_URL = "http://backend:8000/api/v1"
+_API_KEY = os.environ.get("API_KEY", "")
+_HEADERS = {"X-API-Key": _API_KEY} if _API_KEY else {}
 
 
 def trigger(name: str) -> None:
     try:
-        r = httpx.post(f"{BACKEND_URL}/{name}/run", timeout=300)
+        r = httpx.post(f"{BACKEND_URL}/{name}/run", timeout=300, headers=_HEADERS)
         print(f"[cron] {name} -> {r.status_code}", flush=True)
     except Exception as e:
         print(f"[cron] {name} FAILED: {e}", flush=True)
@@ -22,7 +26,7 @@ def trigger(name: str) -> None:
 def trigger_endpoint(path: str, label: str) -> None:
     """Trigger an arbitrary backend endpoint (non-pipeline)."""
     try:
-        r = httpx.post(f"{BACKEND_BASE_URL}/{path}", timeout=300)
+        r = httpx.post(f"{BACKEND_BASE_URL}/{path}", timeout=300, headers=_HEADERS)
         print(f"[cron] {label} -> {r.status_code}", flush=True)
     except Exception as e:
         print(f"[cron] {label} FAILED: {e}", flush=True)

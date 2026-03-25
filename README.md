@@ -189,17 +189,21 @@ cd bloomvalley
 cp .env.example .env        # Add your FRED_API_KEY
 cp analyst-swarm/config.yaml analyst-swarm/config.local.yaml
 
+# Generate an API key for internal service authentication
+echo "API_KEY=$(openssl rand -base64 32)" >> .env
+
 docker compose up -d --build
 docker compose exec backend alembic upgrade head
 ```
 
-Open http://localhost:3000. Trigger initial data fetch:
+Open http://localhost:3000. Trigger initial data fetch (include the API key from `.env`):
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/pipelines/yahoo_daily_prices/run
-curl -X POST http://localhost:8000/api/v1/pipelines/ecb_fx_rates/run
-curl -X POST http://localhost:8000/api/v1/pipelines/fred_macro_indicators/run
-curl -X POST http://localhost:8000/api/v1/pipelines/coingecko_prices/run
+API_KEY=$(grep API_KEY .env | cut -d= -f2-)
+curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/yahoo_daily_prices/run
+curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/ecb_fx_rates/run
+curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/fred_macro_indicators/run
+curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coingecko_prices/run
 ```
 
 ### Services
@@ -217,6 +221,7 @@ curl -X POST http://localhost:8000/api/v1/pipelines/coingecko_prices/run
 
 | Key | Required | Free? | Source |
 |-----|----------|-------|--------|
+| `API_KEY` | Recommended | — | `openssl rand -base64 32` — protects `/api/*` routes |
 | `FRED_API_KEY` | Yes | Yes | [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html) |
 | `ALPHA_VANTAGE_API_KEY` | Optional | Yes (limited) | [alphavantage.co](https://www.alphavantage.co/support/#api-key) |
 | `FINNHUB_API_KEY` | Optional | Yes (limited) | [finnhub.io](https://finnhub.io/) |
@@ -254,7 +259,7 @@ curl -X POST http://localhost:8000/api/v1/pipelines/coingecko_prices/run
 
 Trigger any pipeline manually:
 ```bash
-curl -X POST http://localhost:8000/api/v1/pipelines/{pipeline_name}/run
+curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/{pipeline_name}/run
 ```
 
 ---
@@ -333,23 +338,18 @@ environment:
 
 ### Traefik example
 
+Route all traffic through the frontend — Next.js middleware injects the
+`API_KEY` header before forwarding `/api/*` requests to the backend.
+Do **not** route `/api` directly to the backend or the key won't be injected.
+
 ```yaml
 http:
   routers:
-    bloomvalley-api:
-      rule: "Host(`bloomvalley.example.com`) && PathPrefix(`/api`)"
-      entryPoints: [web]
-      service: bloomvalley-api
-      priority: 100
-    bloomvalley-frontend:
+    bloomvalley:
       rule: "Host(`bloomvalley.example.com`)"
       entryPoints: [web]
       service: bloomvalley-frontend
   services:
-    bloomvalley-api:
-      loadBalancer:
-        servers:
-          - url: "http://172.17.0.1:8000"
     bloomvalley-frontend:
       loadBalancer:
         servers:
@@ -358,16 +358,12 @@ http:
 
 ### nginx example
 
+Route everything through the frontend — the Next.js middleware handles API key injection.
+
 ```nginx
 server {
     listen 80;
     server_name bloomvalley.example.com;
-
-    location /api/ {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
 
     location / {
         proxy_pass http://localhost:3000;
