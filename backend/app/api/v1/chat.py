@@ -44,6 +44,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+    page_url: str = ""
 
 
 def _get_llm_config() -> dict:
@@ -67,15 +68,61 @@ def _get_llm_config() -> dict:
     }
 
 
-async def _call_claude_cli(messages: list[ChatMessage]) -> str:
+def _build_page_context(page_url: str) -> str:
+    """Build a context string describing which page the user is currently viewing."""
+    if not page_url or page_url == "/":
+        return "The user is on the Dashboard (home page)."
+
+    parts = page_url.strip("/").split("/")
+    page_map = {
+        "portfolio": "Portfolio overview",
+        "holdings": "Holdings",
+        "watchlist": "Watchlist",
+        "security": "Security detail",
+        "fundamentals": "Fundamentals screener",
+        "research": "Research",
+        "recommendations": "Recommendations",
+        "risk": "Risk analysis",
+        "macro": "Macro indicators",
+        "fixed-income": "Fixed income",
+        "dividends": "Dividends",
+        "tax": "Tax analysis",
+        "charts": "Charts",
+        "heatmap": "Heatmap",
+        "market": "Market overview",
+        "news": "News",
+        "insider": "Insider transactions",
+        "earnings": "Earnings",
+        "esg": "ESG scores",
+        "alerts": "Alerts",
+        "global-events": "Global events",
+        "transactions": "Transactions",
+        "import": "Data import",
+    }
+
+    section = parts[0]
+    label = page_map.get(section, section.replace("-", " ").title())
+
+    # e.g. /security/TEAM → ticker is TEAM
+    if len(parts) >= 2 and section == "security":
+        ticker = parts[1].upper()
+        return f"The user is viewing the Security detail page for ticker **{ticker}**. If they ask for analysis, research, or data, assume it's about {ticker} unless stated otherwise."
+
+    return f"The user is on the {label} page ({page_url})."
+
+
+async def _call_claude_cli(messages: list[ChatMessage], page_url: str = "") -> str:
     """Get full response from Claude CLI."""
     cfg = _get_llm_config()
     cli_cfg = cfg["claude_cli"]
     claude_bin = cli_cfg.get("binary", "claude")
     model = cli_cfg.get("model", "")
 
-    # Build conversation: system + messages
-    parts = [SYSTEM_PROMPT, "\n---\n"]
+    # Build conversation: system + page context + messages
+    parts = [SYSTEM_PROMPT]
+    if page_url:
+        parts.append(f"\n\nCurrent page context: {_build_page_context(page_url)}")
+    parts.append("\n---\n")
     for msg in messages:
         prefix = "User" if msg.role == "user" else "Assistant"
         parts.append(f"\n{prefix}: {msg.content}")
@@ -86,7 +133,11 @@ async def _call_claude_cli(messages: list[ChatMessage]) -> str:
         tmp_path = f.name
 
     try:
-        cmd = [claude_bin, "-p", "--output-format", "text"]
+        cmd = [
+            claude_bin, "-p",
+            "--output-format", "text",
+            "--allowedTools", "WebSearch", "WebFetch",
+        ]
         if model:
             cmd.extend(["--model", model])
 
@@ -115,9 +166,9 @@ async def _call_claude_cli(messages: list[ChatMessage]) -> str:
         os.unlink(tmp_path)
 
 
-async def _stream_claude_cli(messages: list[ChatMessage]):
+async def _stream_claude_cli(messages: list[ChatMessage], page_url: str = ""):
     """Get response from Claude CLI and simulate streaming with chunked output."""
-    text = await _call_claude_cli(messages)
+    text = await _call_claude_cli(messages, page_url)
     if not text:
         return
 
@@ -212,13 +263,13 @@ async def _stream_ollama(messages: list[ChatMessage]):
                     pass
 
 
-async def _stream_response(messages: list[ChatMessage]):
+async def _stream_response(messages: list[ChatMessage], page_url: str = ""):
     """Route to the configured LLM provider's streaming function."""
     cfg = _get_llm_config()
     provider = cfg["llm_provider"]
 
     if provider == "claude_cli":
-        async for chunk in _stream_claude_cli(messages):
+        async for chunk in _stream_claude_cli(messages, page_url):
             yield chunk
     elif provider == "claude":
         async for chunk in _stream_claude_api(messages):
@@ -230,10 +281,10 @@ async def _stream_response(messages: list[ChatMessage]):
         yield f"Error: Unknown LLM provider: {provider}"
 
 
-async def _sse_generator(messages: list[ChatMessage]):
+async def _sse_generator(messages: list[ChatMessage], page_url: str = ""):
     """Generate SSE events from the LLM stream."""
     try:
-        async for chunk in _stream_response(messages):
+        async for chunk in _stream_response(messages, page_url):
             if chunk:
                 data = json.dumps({"type": "content", "text": chunk})
                 yield f"data: {data}\n\n"
@@ -247,7 +298,7 @@ async def _sse_generator(messages: list[ChatMessage]):
 async def chat_stream(request: Request, body: ChatRequest):
     """Stream a chat response via Server-Sent Events."""
     return StreamingResponse(
-        _sse_generator(body.messages),
+        _sse_generator(body.messages, body.page_url),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

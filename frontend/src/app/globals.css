@@ -39,3 +39,10 @@ body {
 *:focus:not(:focus-visible) {
   outline: none;
 }
+
+/* PWA safe area: offset main content top for notch/status bar on mobile only */
+@media (max-width: 767px) {
+  .pwa-safe-top {
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px)) !important;
+  }
+}

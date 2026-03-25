@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#8B5CF6",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -40,7 +41,7 @@ export default function RootLayout({
           <div className="flex h-full">
             <Sidebar />
             <div className="flex flex-col flex-1 min-w-0">
-              <main className="flex-1 overflow-y-auto p-3 pt-14 md:p-6 md:pt-6">{children}</main>
+              <main className="flex-1 overflow-y-auto p-3 pt-14 md:p-6 md:pt-6 pwa-safe-top">{children}</main>
               <StatusBar />
             </div>
           </div>

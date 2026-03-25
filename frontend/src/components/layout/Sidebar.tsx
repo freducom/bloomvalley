@@ -332,10 +332,14 @@ export function Sidebar() {
   if (isMobile) {
     return (
       <>
-        {/* Hamburger button — fixed top-left */}
+        {/* Hamburger button — fixed top-left, offset for PWA safe area */}
         <button
           onClick={() => setMobileOpen(true)}
-          className="fixed top-3 left-3 z-40 p-2 rounded bg-terminal-bg-secondary border border-terminal-border text-terminal-text-primary"
+          className="fixed z-40 p-2 rounded bg-terminal-bg-secondary border border-terminal-border text-terminal-text-primary"
+          style={{
+            top: "calc(0.75rem + env(safe-area-inset-top, 0px))",
+            left: "calc(0.75rem + env(safe-area-inset-left, 0px))",
+          }}
           aria-label="Open menu"
         >
           <Menu size={20} />
@@ -343,7 +347,14 @@ export function Sidebar() {
 
         {/* Fullscreen overlay menu */}
         {mobileOpen && (
-          <div className="fixed inset-0 z-50 bg-terminal-bg-primary flex flex-col">
+          <div
+            className="fixed inset-0 z-50 bg-terminal-bg-primary flex flex-col"
+            style={{
+              paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingLeft: "env(safe-area-inset-left, 0px)",
+              paddingRight: "env(safe-area-inset-right, 0px)",
+            }}
+          >
             {/* Header */}
             <div className="flex items-center justify-between h-14 px-4 border-b border-terminal-border shrink-0">
               <span className="font-mono font-bold text-lg text-terminal-accent">

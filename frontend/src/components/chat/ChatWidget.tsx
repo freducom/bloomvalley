@@ -28,12 +28,24 @@ export function ChatWidget() {
   const [streaming, setStreaming] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const isMobile = useIsMobile();
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // On mobile, always use fullscreen
   const isExpanded = fullscreen || isMobile;
+
+  // Track visual viewport height for iOS keyboard handling
+  useEffect(() => {
+    if (!isMobile) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => setViewportHeight(vv.height);
+    onResize();
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, [isMobile, open]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -69,7 +81,10 @@ export function ChatWidget() {
       const res = await fetch("/api/v1/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({
+          messages: newMessages,
+          page_url: window.location.pathname,
+        }),
         signal: controller.signal,
       });
 
@@ -185,10 +200,26 @@ export function ChatWidget() {
       {open && (
         <div className={`fixed z-50 flex flex-col border border-terminal-border bg-terminal-bg-secondary shadow-md transition-all duration-200 ${
           isExpanded
-            ? "inset-0 m-auto w-full h-full md:w-[90vw] md:h-[90vh] md:rounded-lg"
+            ? isMobile
+              ? "inset-0 w-full"
+              : "inset-0 m-auto w-[90vw] h-[90vh] rounded-lg"
             : "bottom-14 right-4 w-96 rounded-lg"
         }`}
-          style={isExpanded ? undefined : { height: "min(600px, calc(100vh - 120px))" }}
+          style={
+            isExpanded && isMobile
+              ? {
+                  height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  paddingTop: "env(safe-area-inset-top)",
+                  paddingLeft: "env(safe-area-inset-left)",
+                  paddingRight: "env(safe-area-inset-right)",
+                }
+              : isExpanded
+                ? undefined
+                : { height: "min(600px, calc(100vh - 120px))" }
+          }
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-terminal-border px-4 py-3 shrink-0">
