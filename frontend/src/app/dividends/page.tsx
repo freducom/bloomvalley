@@ -19,6 +19,7 @@ interface UpcomingDividend {
   totalCents: number;
   totalEurCents: number;
   currentYield: number | null;
+  projected?: boolean;
 }
 
 interface HoldingYield {

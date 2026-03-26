@@ -102,6 +102,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Recommendation Accuracy** — mark-to-market tracking of PM recommendations at 30/90/180 day checkpoints with win rates, avg returns, and best/worst calls
 - **Fundamentals** — P/B, FCF, DCF valuation, ROIC, margins, short interest
 - **Earnings** — calendar with estimates, actual EPS, revenue surprises
+- **Retirement Projections** — Monte Carlo simulation (10,000 paths) with fan chart, survival probabilities, safe withdrawal rate, and sensitivity analysis
 
 ### Income & Tax
 - **Tax Analysis** — Finnish tax law (30/34%), tax lot tracking, deemed cost comparison, loss harvesting

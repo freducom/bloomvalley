@@ -2,7 +2,7 @@
 
 Monte Carlo simulation for retirement income projections. This spec defines how to model the probabilistic evolution of the portfolio from the current state to retirement (age 60) and through the withdrawal phase (age 60-95), incorporating the glidepath, tax drag, inflation, and asset class correlations. The simulation answers the fundamental question: "Am I on track for retirement?"
 
-**Status: DRAFT**
+**Status: IMPLEMENTED**
 
 ## Dependencies
 

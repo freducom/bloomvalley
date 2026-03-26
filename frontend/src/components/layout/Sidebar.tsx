@@ -35,6 +35,7 @@ import {
   ScanSearch,
   Users,
   Target,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { usePrivacy } from "@/lib/privacy";
@@ -80,6 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Accuracy", href: "/accuracy", icon: Target },
       { label: "Fundamentals", href: "/fundamentals", icon: BarChart3 },
       { label: "Earnings", href: "/earnings", icon: CalendarClock },
+      { label: "Projections", href: "/projections", icon: TrendingUp },
     ],
   },
   {
