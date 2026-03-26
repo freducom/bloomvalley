@@ -36,6 +36,9 @@ import {
   Users,
   Target,
   TrendingUp,
+  Sliders,
+  Banknote,
+  FlaskConical,
   type LucideIcon,
 } from "lucide-react";
 import { usePrivacy } from "@/lib/privacy";
@@ -82,6 +85,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Fundamentals", href: "/fundamentals", icon: BarChart3 },
       { label: "Earnings", href: "/earnings", icon: CalendarClock },
       { label: "Projections", href: "/projections", icon: TrendingUp },
+      { label: "Optimization", href: "/optimization", icon: Sliders },
+      { label: "What-If", href: "/what-if", icon: FlaskConical },
+      { label: "Hedging", href: "/hedging", icon: Banknote },
     ],
   },
   {

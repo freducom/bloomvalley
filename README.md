@@ -103,6 +103,9 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Fundamentals** — P/B, FCF, DCF valuation, ROIC, margins, short interest
 - **Earnings** — calendar with estimates, actual EPS, revenue surprises
 - **Retirement Projections** — Monte Carlo simulation (10,000 paths) with fan chart, survival probabilities, safe withdrawal rate, and sensitivity analysis
+- **Portfolio Optimization** — efficient frontier, optimal portfolio for risk tolerance, risk parity, tax-aware rebalancing with trade suggestions
+- **What-If Simulator** — preview how a hypothetical trade affects risk, allocation, and glidepath before executing
+- **Currency Hedging** — FX exposure analysis by currency, rate changes, FX impact on portfolio returns
 
 ### Income & Tax
 - **Tax Analysis** — Finnish tax law (30/34%), tax lot tracking, deemed cost comparison, loss harvesting
@@ -126,7 +129,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Privacy Mode** (`Cmd+Shift+P`) — blur all monetary amounts
 - **PWA** — installable on mobile, offline access to dashboard, recommendations, holdings
 - **Status Bar** — live pipeline indicators, market hours for Nordic/EU/London/US/Crypto
-- **Telegram Alerts** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities
+- **Telegram Alerts** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities, weekly Monday digest
 
 ## Architecture
 

@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.services import telegram
 from app.services.insider_alerts import check_and_notify as check_insider_alerts
+from app.services.weekly_digest import compose_and_send_digest
 
 router = APIRouter()
 
@@ -50,6 +51,9 @@ async def send_notification(body: dict):
     elif event == "insider_alerts":
         await check_insider_alerts()
 
+    elif event == "weekly_digest":
+        await compose_and_send_digest()
+
     return {
         "data": {"event": event, "handled": True},
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
@@ -68,5 +72,21 @@ async def trigger_insider_alert_check():
     await check_insider_alerts()
     return {
         "data": {"checked": True},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.post("/weekly-digest")
+async def trigger_weekly_digest():
+    """Manually trigger weekly digest Telegram notification."""
+    if not telegram.is_configured():
+        return {
+            "data": {"sent": False, "reason": "Telegram not configured"},
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    ok = await compose_and_send_digest()
+    return {
+        "data": {"sent": ok},
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

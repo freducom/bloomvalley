@@ -1,9 +1,10 @@
-"""Portfolio endpoints — holdings, summary, performance."""
+"""Portfolio endpoints — holdings, summary, performance, what-if, currency exposure."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
+import numpy as np
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -831,5 +832,326 @@ async def get_sold_holdings():
 
     return {
         "data": data,
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /portfolio/what-if
+# ---------------------------------------------------------------------------
+
+
+@router.get("/what-if")
+async def what_if_simulation(
+    security_id: int = Query(..., alias="securityId"),
+    action: str = Query(..., description="buy or sell"),
+    quantity: str | None = Query(None),
+    amount_eur_cents: int | None = Query(None, alias="amountEurCents"),
+):
+    """Simulate adding/removing a position and compare risk/allocation metrics."""
+    from app.api.v1.risk import (
+        _get_holdings_with_values,
+        _get_price_returns,
+        GLIDEPATH,
+        ASSET_CLASS_MAP,
+    )
+
+    if action not in ("buy", "sell"):
+        raise HTTPException(400, "action must be 'buy' or 'sell'")
+    if not quantity and not amount_eur_cents:
+        raise HTTPException(400, "Provide either quantity or amountEurCents")
+
+    # Fetch target security
+    async with async_session() as session:
+        sec = await session.get(Security, security_id)
+    if not sec:
+        raise HTTPException(404, "Security not found")
+
+    # Get current holdings
+    holdings = await _get_holdings_with_values()
+    fx_rates = await _get_fx_rates()
+    prices = await _get_latest_prices()
+
+    # Get price for target security
+    price_info = prices.get(security_id)
+    price_cents = price_info["close_cents"] if price_info else None
+    price_currency = price_info["currency"] if price_info else sec.currency
+
+    if not price_cents:
+        raise HTTPException(400, f"No price data for {sec.ticker}")
+
+    # Convert price to EUR
+    fx = float(fx_rates.get(price_currency, Decimal("1.0")))
+    price_eur_cents = int(price_cents / fx) if price_currency != "EUR" else price_cents
+
+    # Determine quantity
+    if quantity:
+        qty = Decimal(quantity)
+    else:
+        qty = Decimal(str(amount_eur_cents)) / Decimal(str(price_eur_cents))
+
+    trade_value_eur = int(float(qty) * price_eur_cents)
+
+    # Current portfolio metrics
+    total_current = sum(h.get("marketValueEurCents") or 0 for h in holdings)
+
+    # Build proposed holdings by cloning and modifying
+    proposed_holdings = [dict(h) for h in holdings]
+    found = False
+    for h in proposed_holdings:
+        if h["securityId"] == security_id:
+            old_val = h.get("marketValueEurCents") or 0
+            if action == "buy":
+                h["marketValueEurCents"] = old_val + trade_value_eur
+            else:
+                h["marketValueEurCents"] = max(0, old_val - trade_value_eur)
+            found = True
+            break
+
+    if not found and action == "buy":
+        proposed_holdings.append({
+            "securityId": security_id,
+            "ticker": sec.ticker,
+            "name": sec.name,
+            "assetClass": sec.asset_class,
+            "marketValueEurCents": trade_value_eur,
+            "priceCurrency": sec.currency,
+        })
+    elif not found and action == "sell":
+        raise HTTPException(400, f"Cannot sell {sec.ticker} — not in portfolio")
+
+    total_proposed = sum(h.get("marketValueEurCents") or 0 for h in proposed_holdings)
+
+    # Compute allocations
+    def _allocation(hlist, total):
+        alloc = {"equity": 0.0, "fixed_income": 0.0, "crypto": 0.0, "cash": 0.0}
+        for h in hlist:
+            cat = ASSET_CLASS_MAP.get(h.get("assetClass", "stock"), "equity")
+            val = h.get("marketValueEurCents") or 0
+            if total > 0:
+                alloc[cat] += val / total
+        return {k: round(v * 100, 2) for k, v in alloc.items()}
+
+    current_alloc = _allocation(holdings, total_current)
+    proposed_alloc = _allocation(proposed_holdings, total_proposed)
+
+    # Glidepath target
+    target = GLIDEPATH.get(45, GLIDEPATH[45])
+    target_pct = {k: round(v * 100, 2) for k, v in target.items()}
+
+    # Compute risk metrics for current and proposed
+    async def _compute_risk(hlist, total_val):
+        if total_val == 0:
+            return {"volatility": 0, "sharpe": 0, "var95": 0}
+
+        sids = list({h["securityId"] for h in hlist if (h.get("marketValueEurCents") or 0) > 0})
+        if len(sids) < 2:
+            return {"volatility": 0, "sharpe": 0, "var95": 0}
+
+        returns_dict = await _get_price_returns(sids, 252)
+        # Build weighted returns
+        weights = {}
+        for h in hlist:
+            sid = h["securityId"]
+            val = h.get("marketValueEurCents") or 0
+            if sid in returns_dict and val > 0:
+                weights[sid] = val / total_val
+
+        if len(weights) < 2:
+            return {"volatility": 0, "sharpe": 0, "var95": 0}
+
+        # Align to common length
+        common_sids = list(weights.keys())
+        min_len = min(len(returns_dict[s]) for s in common_sids)
+        if min_len < 20:
+            return {"volatility": 0, "sharpe": 0, "var95": 0}
+
+        w_arr = np.array([weights[s] for s in common_sids])
+        w_arr = w_arr / w_arr.sum()  # normalize
+        ret_matrix = np.column_stack([returns_dict[s][-min_len:] for s in common_sids])
+        port_returns = ret_matrix @ w_arr
+
+        annual_vol = float(np.std(port_returns) * np.sqrt(252))
+        annual_ret = float(np.mean(port_returns) * 252)
+        sharpe = (annual_ret - 0.035) / annual_vol if annual_vol > 0 else 0
+        var_95 = float(np.percentile(port_returns, 5)) * np.sqrt(1)  # 1-day
+
+        return {
+            "volatility": round(annual_vol * 100, 2),
+            "sharpe": round(sharpe, 3),
+            "var95": round(abs(var_95) * 100, 2),
+        }
+
+    current_risk = await _compute_risk(holdings, total_current)
+    proposed_risk = await _compute_risk(proposed_holdings, total_proposed)
+
+    return {
+        "data": {
+            "trade": {
+                "ticker": sec.ticker,
+                "name": sec.name,
+                "action": action,
+                "quantity": str(qty.quantize(Decimal("0.01"))),
+                "priceCents": price_cents,
+                "priceCurrency": price_currency,
+                "totalEurCents": trade_value_eur,
+            },
+            "current": {
+                "totalValueCents": total_current,
+                "allocation": current_alloc,
+                "risk": current_risk,
+            },
+            "proposed": {
+                "totalValueCents": total_proposed,
+                "allocation": proposed_alloc,
+                "risk": proposed_risk,
+            },
+            "glidepathTarget": target_pct,
+            "delta": {
+                "valueCents": total_proposed - total_current,
+                "volatility": round(proposed_risk["volatility"] - current_risk["volatility"], 2),
+                "sharpe": round(proposed_risk["sharpe"] - current_risk["sharpe"], 3),
+                "var95": round(proposed_risk["var95"] - current_risk["var95"], 2),
+            },
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /portfolio/currency-exposure
+# ---------------------------------------------------------------------------
+
+
+@router.get("/currency-exposure")
+async def get_currency_exposure():
+    """Currency exposure breakdown with FX rate changes and impact analysis."""
+    from datetime import timedelta
+
+    holdings_resp = await get_holdings(account_id=None)
+    holdings = holdings_resp["data"]
+    if not holdings:
+        return {
+            "data": {"exposures": [], "fxRates": [], "fxImpact": {}, "holdings": []},
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    fx_rates = await _get_fx_rates()
+    total_eur = sum(h.get("marketValueEurCents") or 0 for h in holdings)
+    if total_eur == 0:
+        total_eur = 1  # avoid division by zero
+
+    # Group holdings by currency
+    by_currency: dict[str, dict] = {}
+    for h in holdings:
+        curr = h.get("priceCurrency") or h.get("currency") or "EUR"
+        if curr not in by_currency:
+            by_currency[curr] = {"valueCents": 0, "count": 0}
+        by_currency[curr]["valueCents"] += h.get("marketValueEurCents") or 0
+        by_currency[curr]["count"] += 1
+
+    exposures = []
+    for curr, info in sorted(by_currency.items(), key=lambda x: -x[1]["valueCents"]):
+        exposures.append({
+            "currency": curr,
+            "valueCents": info["valueCents"],
+            "weightPct": round(info["valueCents"] / total_eur * 100, 2),
+            "holdingsCount": info["count"],
+        })
+
+    # Historical FX rates for non-EUR currencies
+    today = date.today()
+    periods = {
+        "1D": today - timedelta(days=1),
+        "1W": today - timedelta(days=7),
+        "1M": today - timedelta(days=30),
+        "3M": today - timedelta(days=90),
+    }
+
+    fx_rate_data = []
+    fx_impact_by_currency = []
+
+    non_eur = [c for c in by_currency.keys() if c != "EUR"]
+
+    async with async_session() as session:
+        for curr in non_eur:
+            current_rate = float(fx_rates.get(curr, Decimal("1.0")))
+            rate_changes = {}
+            impact_data = {}
+
+            for period_name, period_date in periods.items():
+                hist_result = await session.execute(
+                    select(FxRate.rate)
+                    .where(
+                        FxRate.base_currency == "EUR",
+                        FxRate.quote_currency == curr,
+                        FxRate.date <= period_date,
+                    )
+                    .order_by(FxRate.date.desc())
+                    .limit(1)
+                )
+                hist_rate = hist_result.scalar_one_or_none()
+
+                if hist_rate:
+                    old_rate = float(hist_rate)
+                    # Rate is EUR/X. If rate goes up, EUR buys more X, meaning X weakened vs EUR.
+                    # For a holder of X-denominated assets, a higher EUR/X rate means loss.
+                    # FX change from holder's perspective: (old_rate / current_rate - 1)
+                    fx_change_pct = round((old_rate / current_rate - 1) * 100, 2)
+                    rate_changes[f"change{period_name}"] = fx_change_pct
+
+                    # Impact on portfolio: exposure_value * fx_change
+                    exposure = by_currency[curr]["valueCents"]
+                    impact_cents = int(exposure * (old_rate / current_rate - 1))
+                    impact_data[f"impact{period_name}Cents"] = impact_cents
+                else:
+                    rate_changes[f"change{period_name}"] = None
+                    impact_data[f"impact{period_name}Cents"] = None
+
+            fx_rate_data.append({
+                "currency": curr,
+                "rate": current_rate,
+                **rate_changes,
+            })
+
+            fx_impact_by_currency.append({
+                "currency": curr,
+                "exposureCents": by_currency[curr]["valueCents"],
+                **impact_data,
+            })
+
+    # Totals
+    fx_impact_totals = {}
+    for period_name in periods:
+        key = f"total{period_name}Cents"
+        vals = [c.get(f"impact{period_name}Cents") for c in fx_impact_by_currency]
+        fx_impact_totals[key] = sum(v for v in vals if v is not None) if any(v is not None for v in vals) else None
+        pct_key = f"total{period_name}Pct"
+        total_val = fx_impact_totals[key]
+        fx_impact_totals[pct_key] = round(total_val / total_eur * 100, 2) if total_val is not None else None
+
+    # Per-holding detail
+    holdings_detail = []
+    for h in holdings:
+        curr = h.get("priceCurrency") or h.get("currency") or "EUR"
+        rate = float(fx_rates.get(curr, Decimal("1.0"))) if curr != "EUR" else 1.0
+        holdings_detail.append({
+            "ticker": h.get("ticker"),
+            "name": h.get("name"),
+            "currency": curr,
+            "marketValueEurCents": h.get("marketValueEurCents"),
+            "fxRate": rate,
+        })
+
+    return {
+        "data": {
+            "exposures": exposures,
+            "fxRates": fx_rate_data,
+            "fxImpact": {
+                **fx_impact_totals,
+                "byCurrency": fx_impact_by_currency,
+            },
+            "holdings": holdings_detail,
+        },
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

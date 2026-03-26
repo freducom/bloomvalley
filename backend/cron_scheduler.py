@@ -169,6 +169,12 @@ def main() -> None:
                       hour="7,11,15,19", minute=30,
                       id="macro_regime_check")
 
+    # Weekly digest — Monday at 08:00 Helsinki time
+    scheduler.add_job(trigger_endpoint, "cron",
+                      args=["notifications/weekly-digest", "weekly_digest"],
+                      day_of_week="mon", hour=8, minute=0,
+                      id="weekly_digest")
+
     # Insider alert check — weekdays at 22:30 Helsinki time
     # Runs after all insider pipelines (FI/SE 19:30, Congress 20:00, SEC 21:00, OpenInsider 22:00)
     scheduler.add_job(trigger_endpoint, "cron",
