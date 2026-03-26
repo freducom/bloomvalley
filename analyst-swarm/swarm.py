@@ -296,6 +296,7 @@ AGENT_DATA = {
         "/watchlists/", "/screener/munger", "/insiders/signals",
         "/news?limit=20", "/macro/summary", "/macro/regime",
         "/fundamentals?limit=200", "/recommendations?status=active&limit=50",
+        "/research/notes?tag=research-analyst&limit=100",
     ],
 }
 

@@ -38,6 +38,11 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /watchlists/` — all watchlists
 - `GET /screener/munger` — Munger quality screen results
 - `GET /news` — recent news with sentiment
+- `GET /research/notes?tag=research-analyst&limit=100` — latest per-security research analyst notes with bull/bear cases, moat ratings, and buy/wait/avoid verdicts for held positions and watchlist securities
+
+## Using Research Analyst Notes
+
+The research notes data contains the Research Analyst's detailed analysis of individual securities — both held positions (full reports) and watchlist candidates (briefs with verdicts). **Use these verdicts and analysis when making recommendations.** If the Research Analyst rates a watchlist security as BUY, factor that into your recommendation. If rated AVOID, explain why you agree or disagree. The Research Analyst's moat ratings (none/narrow/wide) and bull/bear cases should inform your conviction level and position sizing.
 
 ## Strategy Rules
 

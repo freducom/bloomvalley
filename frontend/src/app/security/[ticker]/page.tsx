@@ -9,6 +9,82 @@ import { Private } from "@/lib/privacy";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+/* ── AI Analysis markdown components ── */
+
+function textOf(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (!node) return "";
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  if (typeof node === "object" && "props" in node) {
+    const el = node as React.ReactElement<{ children?: React.ReactNode }>;
+    return textOf(el.props?.children);
+  }
+  return "";
+}
+
+function detectVerdict(text: string): string | null {
+  const m = text.match(/\b(buy|sell|hold|wait|avoid|accumulate|trim|strong buy|strong sell)\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+const VERDICT_COLORS: Record<string, string> = {
+  BUY: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+  "STRONG BUY": "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+  ACCUMULATE: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+  HOLD: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
+  WAIT: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
+  SELL: "bg-red-500/20 text-red-400 border-red-500/40",
+  "STRONG SELL": "bg-red-500/20 text-red-400 border-red-500/40",
+  TRIM: "bg-red-500/20 text-red-400 border-red-500/40",
+  AVOID: "bg-red-500/20 text-red-400 border-red-500/40",
+};
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const analysisComponents: Record<string, React.ComponentType<any>> = {
+  strong({ children, node, ...rest }: any) {
+    void node;
+    const text = textOf(children).trim().toLowerCase();
+    if (/^bull\s*case/.test(text))
+      return <strong className="text-emerald-400" {...rest}>{children}</strong>;
+    if (/^bear\s*case/.test(text))
+      return <strong className="text-red-400" {...rest}>{children}</strong>;
+    if (/^verdict/.test(text)) {
+      const verdict = detectVerdict(textOf(children));
+      const cls = VERDICT_COLORS[verdict || ""] || "text-terminal-accent";
+      return <strong className={cls} {...rest}>{children}</strong>;
+    }
+    return <strong {...rest}>{children}</strong>;
+  },
+
+  h3({ children, node, ...rest }: any) {
+    void node;
+    const text = textOf(children).trim().toLowerCase();
+    if (/^bull\s*case/.test(text))
+      return <h3 className="text-emerald-400 font-semibold mt-3 mb-1" {...rest}>{children}</h3>;
+    if (/^bear\s*case/.test(text))
+      return <h3 className="text-red-400 font-semibold mt-3 mb-1" {...rest}>{children}</h3>;
+    if (/^verdict/.test(text)) {
+      const verdict = detectVerdict(textOf(children));
+      const cls = VERDICT_COLORS[verdict || ""] || "bg-terminal-accent/20 text-terminal-accent border-terminal-accent/40";
+      return <div className={`mt-3 mb-1 inline-block px-3 py-1.5 rounded border text-sm font-bold ${cls}`} {...rest}>{children}</div>;
+    }
+    return <h3 className="font-semibold mt-3 mb-1" {...rest}>{children}</h3>;
+  },
+
+  p({ children, node, ...rest }: any) {
+    void node;
+    const text = textOf(children).trim();
+    if (/^verdict/i.test(text.replace(/^\*\*/, ""))) {
+      const verdict = detectVerdict(text);
+      const cls = VERDICT_COLORS[verdict || ""] || "bg-terminal-accent/20 text-terminal-accent border-terminal-accent/40";
+      return <div className={`mt-3 mb-2 px-3 py-2 rounded border text-sm font-medium ${cls}`} {...rest}>{children}</div>;
+    }
+    return <p {...rest}>{children}</p>;
+  },
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 /* ── Types ── */
 
 interface Security {
@@ -101,12 +177,14 @@ interface ResearchNote {
   id: number;
   securityId: number;
   ticker: string;
+  title: string | null;
   thesis: string | null;
   summary: string | null;
   bullCase: string | null;
   bearCase: string | null;
   tags?: string[];
   createdAt: string;
+  updatedAt: string;
 }
 
 interface InsiderTrade {
@@ -505,35 +583,40 @@ export default function SecurityDetailPage() {
       </div>
 
       {/* ── AI Analysis ── */}
-      {(analystExcerpt || latestResearch?.thesis || latestRec?.rationale) && (
+      {(latestResearch?.thesis || analystExcerpt || latestRec?.rationale) && (
         <div className="border border-terminal-accent/30 bg-terminal-accent/5 rounded-md p-4 mb-6">
-          <h2 className="text-sm font-semibold text-terminal-accent mb-2">AI Analysis</h2>
-          {analystExcerpt ? (
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-sm font-semibold text-terminal-accent">AI Analysis</h2>
+            {latestResearch?.createdAt && (
+              <span className="text-xs text-terminal-text-muted">
+                {new Date(latestResearch.createdAt).toLocaleDateString("fi-FI")}
+              </span>
+            )}
+          </div>
+          {(latestResearch?.thesis || analystExcerpt) ? (
             <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{analystExcerpt}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={analysisComponents}>
+                {(latestResearch?.thesis || analystExcerpt || "")
+                  .replace(/^## (?:W-)?\d+\.\s+\S+\s*—[^\n]*\n*/m, "")
+                  .replace(/\n---\s*$/g, "")
+                  .trim()}
+              </ReactMarkdown>
             </div>
           ) : (
             <>
-              {latestResearch?.thesis && (
-                <p className="text-sm text-terminal-text-primary mb-2">{latestResearch.thesis}</p>
-              )}
-              {!latestResearch?.thesis && latestRec?.rationale && (
+              {latestRec?.rationale && (
                 <p className="text-sm text-terminal-text-primary mb-2">{latestRec.rationale}</p>
               )}
-              {(latestResearch?.bullCase || latestRec?.bullCase) && (
+              {latestRec?.bullCase && (
                 <div className="mt-2">
                   <span className="text-xs font-semibold text-terminal-positive">Bull Case</span>
-                  <p className="text-sm text-terminal-text-secondary mt-0.5">
-                    {latestResearch?.bullCase || latestRec?.bullCase}
-                  </p>
+                  <p className="text-sm text-terminal-text-secondary mt-0.5">{latestRec.bullCase}</p>
                 </div>
               )}
-              {(latestResearch?.bearCase || latestRec?.bearCase) && (
+              {latestRec?.bearCase && (
                 <div className="mt-2">
                   <span className="text-xs font-semibold text-terminal-negative">Bear Case</span>
-                  <p className="text-sm text-terminal-text-secondary mt-0.5">
-                    {latestResearch?.bearCase || latestRec?.bearCase}
-                  </p>
+                  <p className="text-sm text-terminal-text-secondary mt-0.5">{latestRec.bearCase}</p>
                 </div>
               )}
             </>
