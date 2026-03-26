@@ -16,7 +16,9 @@ For each tracked security (holdings + watchlists):
 - Extracts the Research Analyst's verdict from thesis text (`**BUY**`, `**AVOID**`, `**WAIT**`, `**HOLD**`)
 - Detects conflicts (e.g., PM says BUY but Research Analyst says AVOID)
 
-Returns per-security: pmAction, pmConfidence, researchVerdict, moatRating, agentCoverage (N/9), hasConflict, conflictDetails, per-agent breakdown.
+Returns per-security: pmAction, pmConfidence, researchVerdict, moatRating, agentCoverage (N/3), hasConflict, conflictDetails, per-agent breakdown.
+
+Coverage denominator is 3 — only agents that produce per-security analysis count: Research Analyst, Technical Analyst, Portfolio Manager. The other 6 agents (Risk, Quant, Macro, Fixed Income, Tax, Compliance) write portfolio-level reports only.
 
 Sorted by: conflicts first, then lowest coverage.
 

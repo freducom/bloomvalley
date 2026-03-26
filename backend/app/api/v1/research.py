@@ -258,6 +258,7 @@ async def cleanup_research():
     return {"data": result, "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
 
 
+# All 9 analyst agents
 KNOWN_AGENTS = [
     "research-analyst",
     "technical-analyst",
@@ -269,6 +270,9 @@ KNOWN_AGENTS = [
     "compliance-officer",
     "portfolio-manager",
 ]
+
+# Agents that produce per-security analysis (used for consensus coverage denominator)
+PER_SECURITY_AGENTS = ["research-analyst", "technical-analyst", "portfolio-manager"]
 
 
 @router.get("/coverage")
@@ -486,7 +490,11 @@ async def research_consensus():
         pm_confidence = rec.confidence if rec else None
 
         agent_notes = notes_by_sec.get(sid, {})
-        agent_coverage = len(agent_notes)
+        # Count only per-security agents for coverage denominator
+        agent_coverage = sum(1 for a in PER_SECURITY_AGENTS if a in agent_notes)
+        # PM recommendation counts as coverage even though it's in a different table
+        if rec and "portfolio-manager" not in agent_notes:
+            agent_coverage += 1
 
         # Extract research-analyst verdict from thesis
         research_verdict = None
@@ -540,7 +548,7 @@ async def research_consensus():
             "researchVerdict": research_verdict,
             "moatRating": moat_rating,
             "agentCoverage": agent_coverage,
-            "totalAgents": len(KNOWN_AGENTS),
+            "totalAgents": len(PER_SECURITY_AGENTS),
             "hasConflict": has_conflict,
             "conflictDetails": conflict_details,
             "agents": agents_dict,

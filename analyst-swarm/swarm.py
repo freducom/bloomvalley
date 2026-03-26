@@ -227,7 +227,7 @@ async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
                                             item["watchlistName"] = wl["name"]
                                             all_items.append(item)
                             # Rotate: send ~20 items per run, advance offset each time
-                            batch_size = 20
+                            batch_size = 35
                             offset = _get_watchlist_offset(backend_url)
                             if len(all_items) > batch_size:
                                 start = offset % len(all_items)
@@ -284,6 +284,7 @@ AGENT_DATA = {
     "technical-analyst": [
         "/portfolio/holdings", "/screener/munger",
         "/charts/heatmap?source=holdings&period=1W",
+        "/watchlists/",
     ],
     "compliance-officer": [
         "/portfolio/holdings", "/portfolio/summary", "/insiders/signals",
@@ -524,6 +525,86 @@ async def extract_per_security_notes(report: str, backend_url: str, date_str: st
         print(f"  [research] Extracted {posted} per-security notes ({skipped} skipped)", flush=True)
 
 
+# ── Technical Analyst: Per-Security Extraction ──
+
+# Matches "### 1. TICKER — Name" (h3 headings used by technical analyst)
+_TECH_SECTION_RE = re.compile(
+    r"^### (\d+)\. ([A-Z][A-Z0-9._-]+) — (.+?)$",
+    re.MULTILINE,
+)
+
+
+def _parse_technical_sections(report: str) -> list[dict]:
+    """Split a technical analyst report into per-security sections."""
+    matches = list(_TECH_SECTION_RE.finditer(report))
+    if not matches:
+        return []
+
+    sections = []
+    seen_tickers: set[str] = set()
+    for i, m in enumerate(matches):
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(report)
+        body = report[start:end].strip()
+        ticker = m.group(2)
+        name = m.group(3).strip()
+
+        if ticker in seen_tickers:
+            continue
+        seen_tickers.add(ticker)
+
+        sections.append({
+            "ticker": ticker,
+            "name": name,
+            "body": body,
+        })
+
+    return sections
+
+
+async def extract_technical_notes(report: str, backend_url: str, date_str: str):
+    """Parse technical analyst report into per-security notes and POST them."""
+    sections = _parse_technical_sections(report)
+    if not sections:
+        print("  [technical] No per-security sections found to extract", flush=True)
+        return
+
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+        try:
+            sec_resp = await client.get("/securities?limit=500")
+            securities = {s["ticker"]: s["id"] for s in sec_resp.json().get("data", [])}
+        except Exception as e:
+            print(f"  [technical] Failed to fetch securities: {e}", flush=True)
+            return
+
+        posted = 0
+        skipped = 0
+        for sec in sections:
+            ticker = sec["ticker"]
+            sec_id = securities.get(ticker)
+            if not sec_id:
+                skipped += 1
+                continue
+
+            payload = {
+                "securityId": sec_id,
+                "title": f"Technical Analysis: {sec['name']} ({ticker}) - {date_str}",
+                "thesis": sec["body"][:60000],
+                "tags": ["technical-analyst", "technical", "swarm"],
+            }
+
+            try:
+                resp = await client.post("/research/notes", json=payload)
+                if resp.status_code in (200, 201):
+                    posted += 1
+                else:
+                    print(f"  [technical] Failed to post {ticker}: {resp.status_code}", flush=True)
+            except Exception as e:
+                print(f"  [technical] Failed to post {ticker}: {e}", flush=True)
+
+        print(f"  [technical] Extracted {posted} per-security notes ({skipped} skipped)", flush=True)
+
+
 # ── Run Single Agent ──
 
 async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
@@ -540,19 +621,31 @@ async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
         endpoints = AGENT_DATA.get(agent_name, [])
         data = await fetch_data(backend_url, endpoints)
 
-        # For technical analyst, also fetch OHLC for top holdings
+        # For technical analyst, also fetch OHLC for holdings + watchlist securities
         if agent_name == "technical-analyst":
-            # Get security IDs from holdings
             try:
+                sec_ids: set[int] = set()
+                # Holdings
                 holdings_raw = data.get("/portfolio/holdings", "[]")
                 holdings = json.loads(holdings_raw) if not holdings_raw.startswith("ERROR") else []
                 if isinstance(holdings, dict):
                     holdings = holdings.get("data", [])
-                for h in holdings[:10]:
+                for h in holdings:
                     sid = h.get("securityId")
                     if sid:
-                        extra = await fetch_data(backend_url, [f"/charts/{sid}/ohlc?period=6M&indicators=sma,ema,rsi,macd,bb"])
-                        data.update(extra)
+                        sec_ids.add(sid)
+                # Watchlist items
+                wl_raw = data.get("/watchlists/items", "")
+                if wl_raw and not wl_raw.startswith("ERROR"):
+                    wl_items = json.loads(wl_raw).get("data", [])
+                    for item in wl_items:
+                        sid = item.get("securityId")
+                        if sid:
+                            sec_ids.add(sid)
+                # Fetch OHLC for all (limit to first 40 to avoid timeout)
+                for sid in list(sec_ids)[:40]:
+                    extra = await fetch_data(backend_url, [f"/charts/{sid}/ohlc?period=6M&indicators=sma,ema,rsi,macd,bb"])
+                    data.update(extra)
             except Exception:
                 pass
 
@@ -712,11 +805,14 @@ async def run_swarm(cfg: dict):
     failed = len(results) - completed
     print(f"\n[swarm] Analysts: {completed} completed, {failed} failed", flush=True)
 
-    # Step 3: Extract per-security research notes
+    # Step 3: Extract per-security notes from research and technical analysts
     for agent_name, result in zip(analysts, results):
-        if agent_name == "research-analyst" and result and not isinstance(result, Exception):
+        if not result or isinstance(result, Exception):
+            continue
+        if agent_name == "research-analyst":
             await extract_per_security_notes(result, backend_url, date_str)
-            break
+        elif agent_name == "technical-analyst":
+            await extract_technical_notes(result, backend_url, date_str)
 
     # Step 4: Close old recommendations
     if "portfolio-manager" in agents:
@@ -816,7 +912,7 @@ def main():
     for s in research_schedules:
         print(f"  - {s} (Helsinki) [research only]", flush=True)
     print(f"[swarm] LLM: {cfg['llm_provider']} / {cfg.get(cfg['llm_provider'], {}).get('model', '?')}", flush=True)
-    print(f"[swarm] Watchlist rotation: {20} items per run", flush=True)
+    print(f"[swarm] Watchlist rotation: {35} items per run", flush=True)
     print("[swarm] Waiting for next scheduled run...\n", flush=True)
 
     scheduler.start()

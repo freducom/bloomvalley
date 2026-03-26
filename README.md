@@ -218,7 +218,7 @@ curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coi
 | `db` | 5432 | TimescaleDB (PostgreSQL 16) |
 | `redis` | 6379 | Redis 7 with AOF persistence |
 | `cron` | — | 20 scheduled data pipeline jobs |
-| `analyst-swarm` | — | 9 AI analyst agents (3 daily + 2 nighttime runs) |
+| `analyst-swarm` | — | 9 AI analyst agents (4 daily + 3 nighttime runs) |
 
 ### API Keys
 
