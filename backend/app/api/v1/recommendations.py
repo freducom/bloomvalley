@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.db.engine import async_session
+from app.db.models.recommendation_checkpoints import RecommendationCheckpoint
 from app.db.models.recommendations import Recommendation
 from app.db.models.securities import Security
 from app.db.models.prices import Price
@@ -319,6 +320,182 @@ async def get_retrospective():
                 for r in worst
             ],
         },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+async def _compute_checkpoints(session) -> int:
+    """Compute missing checkpoints for all eligible recommendations.
+
+    Returns count of newly created checkpoints.
+    """
+    today = date.today()
+    checkpoint_days = [30, 90, 180]
+
+    # Get all recommendations with entry price and recommended date
+    result = await session.execute(
+        select(Recommendation).where(
+            Recommendation.entry_price_cents.isnot(None),
+            Recommendation.recommended_date.isnot(None),
+        )
+    )
+    recs = result.scalars().all()
+
+    # Load existing checkpoints in bulk
+    existing_result = await session.execute(
+        select(
+            RecommendationCheckpoint.recommendation_id,
+            RecommendationCheckpoint.days_elapsed,
+        )
+    )
+    existing_set = set(existing_result.all())
+
+    new_count = 0
+    for rec in recs:
+        for days in checkpoint_days:
+            if (rec.id, days) in existing_set:
+                continue
+
+            check_date = rec.recommended_date + timedelta(days=days)
+            if today < check_date:
+                continue
+
+            # Find closest price on or before check_date
+            price_result = await session.execute(
+                select(Price.close_cents)
+                .where(
+                    Price.security_id == rec.security_id,
+                    Price.date <= check_date,
+                )
+                .order_by(Price.date.desc())
+                .limit(1)
+            )
+            check_price = price_result.scalar_one_or_none()
+
+            return_pct = None
+            was_correct = None
+            if check_price and rec.entry_price_cents and rec.entry_price_cents != 0:
+                if rec.action == "buy":
+                    return_pct = Decimal(
+                        str(round((check_price - rec.entry_price_cents) / rec.entry_price_cents * 100, 4))
+                    )
+                elif rec.action == "sell":
+                    return_pct = Decimal(
+                        str(round((rec.entry_price_cents - check_price) / rec.entry_price_cents * 100, 4))
+                    )
+                if return_pct is not None:
+                    was_correct = return_pct > 0
+
+            checkpoint = RecommendationCheckpoint(
+                recommendation_id=rec.id,
+                days_elapsed=days,
+                check_date=check_date,
+                price_at_check_cents=check_price,
+                return_pct=return_pct,
+                was_correct=was_correct,
+            )
+            session.add(checkpoint)
+            new_count += 1
+
+    if new_count > 0:
+        await session.commit()
+
+    return new_count
+
+
+def _build_period_stats(checkpoints: list[RecommendationCheckpoint]) -> dict:
+    """Build win/loss stats for a list of checkpoints."""
+    with_returns = [c for c in checkpoints if c.return_pct is not None]
+    if not with_returns:
+        return {"total": 0, "wins": 0, "winRate": None, "avgReturn": None}
+    wins = [c for c in with_returns if c.was_correct]
+    avg_ret = round(float(sum(c.return_pct for c in with_returns)) / len(with_returns), 2)
+    return {
+        "total": len(with_returns),
+        "wins": len(wins),
+        "winRate": round(len(wins) / len(with_returns) * 100, 1),
+        "avgReturn": avg_ret,
+    }
+
+
+@router.get("/accuracy")
+async def get_accuracy():
+    """Mark-to-market accuracy for all recommendations at 30/90/180 day checkpoints."""
+    async with async_session() as session:
+        # Compute any missing checkpoints first
+        await _compute_checkpoints(session)
+
+        # Fetch all checkpoints with their recommendations
+        result = await session.execute(
+            select(RecommendationCheckpoint, Recommendation, Security)
+            .join(Recommendation, RecommendationCheckpoint.recommendation_id == Recommendation.id)
+            .join(Security, Recommendation.security_id == Security.id)
+        )
+        rows = result.all()
+
+    # Group by period
+    by_period: dict[str, list] = {"30d": [], "90d": [], "180d": []}
+    by_action_period: dict[str, dict[str, list]] = {}
+    all_checkpoints_flat = []
+
+    for cp, rec, sec in rows:
+        period_key = f"{cp.days_elapsed}d"
+        if period_key in by_period:
+            by_period[period_key].append(cp)
+
+        action = rec.action
+        if action not in by_action_period:
+            by_action_period[action] = {"30d": [], "90d": [], "180d": []}
+        if period_key in by_action_period[action]:
+            by_action_period[action][period_key].append(cp)
+
+        if cp.return_pct is not None:
+            all_checkpoints_flat.append({
+                "checkpoint": cp,
+                "ticker": sec.ticker,
+                "action": rec.action,
+            })
+
+    # Build aggregate stats
+    checkpoints_stats = {k: _build_period_stats(v) for k, v in by_period.items()}
+
+    by_action_stats = {}
+    for action, periods in by_action_period.items():
+        by_action_stats[action] = {k: _build_period_stats(v) for k, v in periods.items()}
+
+    # Best/worst calls
+    sorted_calls = sorted(all_checkpoints_flat, key=lambda x: float(x["checkpoint"].return_pct), reverse=True)
+    best = sorted_calls[:5]
+    worst = sorted_calls[-5:] if len(sorted_calls) >= 5 else sorted_calls
+
+    def _call_to_dict(item):
+        cp = item["checkpoint"]
+        return {
+            "ticker": item["ticker"],
+            "action": item["action"],
+            "days": cp.days_elapsed,
+            "returnPct": float(cp.return_pct),
+        }
+
+    return {
+        "data": {
+            "checkpoints": checkpoints_stats,
+            "byAction": by_action_stats,
+            "bestCalls": [_call_to_dict(c) for c in best],
+            "worstCalls": [_call_to_dict(c) for c in worst],
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.post("/compute-checkpoints")
+async def compute_checkpoints():
+    """Trigger batch computation of recommendation checkpoints."""
+    async with async_session() as session:
+        new_count = await _compute_checkpoints(session)
+
+    return {
+        "data": {"newCheckpoints": new_count},
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
 

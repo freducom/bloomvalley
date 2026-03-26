@@ -11,6 +11,7 @@ from app.db.models.pipeline_runs import PipelineRun  # noqa: F401
 from app.db.models.prices import FxRate, MacroIndicator, Price  # noqa: F401
 from app.db.models.insider import InsiderTrade, CongressTrade, BuybackProgram  # noqa: F401
 from app.db.models.news import NewsItem, NewsItemSecurity  # noqa: F401
+from app.db.models.recommendation_checkpoints import RecommendationCheckpoint  # noqa: F401
 from app.db.models.recommendations import Recommendation  # noqa: F401
 from app.db.models.research_notes import ResearchNote  # noqa: F401
 from app.db.models.securities import Security  # noqa: F401

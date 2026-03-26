@@ -97,6 +97,9 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 ### Analysis
 - **Risk Analysis** — Sharpe/Sortino ratios, max drawdown, VaR, beta, correlation heatmap, stress tests, glidepath tracking
 - **Research Notes** — per-security notes with bull/bear/base cases, intrinsic value, margin of safety, moat ratings
+- **Research Coverage** — dashboard showing which securities have stale or missing analyst coverage, with staleness badges and filters
+- **Analyst Consensus** — view how the 9 AI agents agree or disagree per security, with conflict detection between Research Analyst and Portfolio Manager
+- **Recommendation Accuracy** — mark-to-market tracking of PM recommendations at 30/90/180 day checkpoints with win rates, avg returns, and best/worst calls
 - **Fundamentals** — P/B, FCF, DCF valuation, ROIC, margins, short interest
 - **Earnings** — calendar with estimates, actual EPS, revenue surprises
 

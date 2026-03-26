@@ -32,6 +32,9 @@ import {
   EyeOff,
   Menu,
   X,
+  ScanSearch,
+  Users,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 import { usePrivacy } from "@/lib/privacy";
@@ -72,6 +75,9 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Risk", href: "/risk", icon: ShieldAlert },
       { label: "Research", href: "/research", icon: BookOpen },
+      { label: "Coverage", href: "/coverage", icon: ScanSearch },
+      { label: "Consensus", href: "/consensus", icon: Users },
+      { label: "Accuracy", href: "/accuracy", icon: Target },
       { label: "Fundamentals", href: "/fundamentals", icon: BarChart3 },
       { label: "Earnings", href: "/earnings", icon: CalendarClock },
     ],
