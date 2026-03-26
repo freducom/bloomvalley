@@ -689,14 +689,21 @@ async def close_old_recommendations(backend_url: str):
 EXTRACT_RECS_PROMPT = """Extract ALL actionable recommendations from this portfolio manager report.
 Return a JSON array of objects. Each object must have these fields:
 - "ticker": string (e.g. "VWCE", "ALYK", "MSFT", "INVE-B.ST", "KESKOB.HE")
-- "action": "buy" | "sell" | "hold"
+- "action": "buy" | "sell" | "hold" | "wait"
 - "confidence": "high" | "medium" | "low"
 - "rationale": string (1-3 sentence summary of the recommendation)
 - "bull_case": string or null
 - "bear_case": string or null
 - "time_horizon": "short" | "medium" | "long" (short=<3m, medium=3-12m, long=>12m)
 
-Include ALL recommendations from the report, including hold recommendations.
+IMPORTANT action rules:
+- Use "hold" ONLY for securities the investor currently owns (held positions).
+- Use "wait" for watchlist securities the investor does NOT own but should keep watching.
+- Use "buy" for securities the investor should purchase (whether held or watchlist).
+- Use "sell" for securities the investor should sell (must be held).
+- Never use "hold" for a security the investor doesn't own.
+
+Include ALL recommendations from the report, including hold and wait recommendations.
 For "sell" actions on funds being redeemed, use "sell".
 Return ONLY the JSON array, no markdown fences, no explanation."""
 
