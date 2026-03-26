@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 
 from app.services import telegram
+from app.services.insider_alerts import check_and_notify as check_insider_alerts
 
 router = APIRouter()
 
@@ -46,7 +47,26 @@ async def send_notification(body: dict):
             d.get("confidence", "unknown"),
         )
 
+    elif event == "insider_alerts":
+        await check_insider_alerts()
+
     return {
         "data": {"event": event, "handled": True},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.post("/check-insider-alerts")
+async def trigger_insider_alert_check():
+    """Manually trigger insider alert detection and Telegram notifications."""
+    if not telegram.is_configured():
+        return {
+            "data": {"sent": False, "reason": "Telegram not configured"},
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    await check_insider_alerts()
+    return {
+        "data": {"checked": True},
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

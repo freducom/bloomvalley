@@ -1,6 +1,6 @@
 # F22: Telegram Notification System
 
-**Status: Implemented (Phase 1) — 2026-03-26**
+**Status: Implemented (Phase 1 + Insider Alerts) — 2026-03-26**
 **Created: 2026-03-26**
 
 Personal Telegram bot for push notifications from the Bloomvalley investment terminal.

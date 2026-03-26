@@ -98,6 +98,107 @@ async def notify_recommendations(recs: list[dict], date_str: str):
     await send("\n".join(lines))
 
 
+def _fmt_eur(cents: int | None) -> str:
+    """Format cents as EUR string (e.g. 12345600 -> '€123,456')."""
+    if not cents:
+        return "n/a"
+    eur = abs(cents) / 100
+    if eur >= 1_000_000:
+        return f"€{eur / 1_000_000:.2f}M"
+    if eur >= 1_000:
+        return f"€{eur / 1_000:.0f}k"
+    return f"€{eur:.0f}"
+
+
+async def notify_insider_cluster_buying(clusters: list[dict]):
+    """Send notification about cluster insider buying signals.
+
+    Each cluster dict: {ticker, securityName, insiderCount, insiders, jurisdiction,
+                        totalValueCents, currency, pctOfMarketCap}
+    """
+    if not is_configured() or not clusters:
+        return
+
+    lines = ["<b>Insider Cluster Buying Detected</b>", ""]
+
+    for c in clusters:
+        ticker = _escape(c.get("ticker", "?"))
+        name = _escape(c.get("securityName", ""))
+        count = c.get("insiderCount", 0)
+        insiders = c.get("insiders", [])
+        jurisdiction = c.get("jurisdiction", "").upper()
+        total_value = c.get("totalValueCents")
+        pct = c.get("pctOfMarketCap")
+
+        lines.append(f"<b>{ticker}</b> ({name})")
+
+        # Summary line with value and market cap %
+        summary_parts = [f"{count} insiders bought within 30 days"]
+        if jurisdiction:
+            summary_parts[0] += f" [{jurisdiction}]"
+        lines.append(f"  {summary_parts[0]}")
+
+        value_line = f"  Total: {_fmt_eur(total_value)}"
+        if pct is not None:
+            value_line += f" ({pct:.3f}% of market cap)"
+        lines.append(value_line)
+
+        if insiders:
+            for ins in insiders[:5]:
+                role = _escape(ins.get("role", "").upper())
+                name_ins = _escape(ins.get("name", ""))
+                ins_val = ins.get("valueCents")
+                detail = f"  • {role} {name_ins}"
+                if ins_val:
+                    detail += f" — {_fmt_eur(ins_val)}"
+                lines.append(detail)
+        lines.append("")
+
+    lines.append(f"<i>{len(clusters)} cluster signal{'s' if len(clusters) != 1 else ''}</i>")
+
+    await send("\n".join(lines))
+
+
+async def notify_insider_held_trades(trades: list[dict]):
+    """Send notification about new insider/congress trades on held securities.
+
+    Each trade dict: {ticker, securityName, insiderName, role, tradeType,
+                      shares, valueCents, currency, source}
+    """
+    if not is_configured() or not trades:
+        return
+
+    buys = [t for t in trades if t.get("tradeType") == "buy"]
+    sells = [t for t in trades if t.get("tradeType") != "buy"]
+
+    lines = ["<b>Insider Trades on Your Holdings</b>", ""]
+
+    for group, label in [(buys, "BUYS"), (sells, "SELLS")]:
+        if not group:
+            continue
+        lines.append(f"<b>{label}</b>")
+        for t in group[:10]:
+            ticker = _escape(t.get("ticker", "?"))
+            role = _escape(t.get("role", "").upper())
+            name = _escape(t.get("insiderName", t.get("memberName", "?")))
+            shares = t.get("shares", "")
+            source = t.get("source", "")
+
+            detail = f"  {ticker}: {role} {name}"
+            if shares:
+                detail += f" — {shares} shares"
+            if source == "congress":
+                detail += " [CONGRESS]"
+            lines.append(detail)
+        if len(group) > 10:
+            lines.append(f"  ... and {len(group) - 10} more")
+        lines.append("")
+
+    lines.append(f"<i>{len(trades)} trade{'s' if len(trades) != 1 else ''} on held securities</i>")
+
+    await send("\n".join(lines))
+
+
 async def notify_macro_regime_change(previous: str, current: str, confidence: str):
     """Send notification about macro regime change."""
     if not is_configured():

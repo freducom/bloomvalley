@@ -126,6 +126,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Privacy Mode** (`Cmd+Shift+P`) — blur all monetary amounts
 - **PWA** — installable on mobile, offline access to dashboard, recommendations, holdings
 - **Status Bar** — live pipeline indicators, market hours for Nordic/EU/London/US/Crypto
+- **Telegram Alerts** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities
 
 ## Architecture
 
