@@ -763,6 +763,19 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
 
             print(f"  [pm] Posted {posted} recommendations", flush=True)
 
+            # Notify via Telegram
+            if posted > 0:
+                try:
+                    await client.post("/notifications/send", json={
+                        "event": "recommendations",
+                        "data": {
+                            "recommendations": recs,
+                            "date": date_str,
+                        },
+                    })
+                except Exception:
+                    pass  # Non-critical
+
     except Exception as e:
         print(f"  [pm] Failed to extract recommendations: {e}", flush=True)
 

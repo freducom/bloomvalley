@@ -32,6 +32,45 @@ def trigger_endpoint(path: str, label: str) -> None:
         print(f"[cron] {label} FAILED: {e}", flush=True)
 
 
+_last_regime: str | None = None
+
+
+def check_macro_regime() -> None:
+    """Fetch current macro regime and notify if it changed."""
+    global _last_regime
+    try:
+        r = httpx.get(f"{BACKEND_BASE_URL}/macro/regime", timeout=30, headers=_HEADERS)
+        if r.status_code != 200:
+            return
+        data = r.json().get("data", {})
+        current = data.get("regime")
+        confidence = data.get("confidence", "unknown")
+        if not current:
+            return
+
+        if _last_regime is None:
+            # First check — just cache, don't notify
+            _last_regime = current
+            print(f"[cron] macro_regime initial: {current}", flush=True)
+            return
+
+        if current != _last_regime:
+            previous = _last_regime
+            _last_regime = current
+            print(f"[cron] macro_regime CHANGED: {previous} -> {current}", flush=True)
+            try:
+                httpx.post(f"{BACKEND_BASE_URL}/notifications/send", timeout=10, headers=_HEADERS, json={
+                    "event": "macro_regime_change",
+                    "data": {"previous": previous, "current": current, "confidence": confidence},
+                })
+            except Exception as e:
+                print(f"[cron] macro_regime notification FAILED: {e}", flush=True)
+        else:
+            _last_regime = current
+    except Exception as e:
+        print(f"[cron] macro_regime check FAILED: {e}", flush=True)
+
+
 def main() -> None:
     scheduler = BlockingScheduler(timezone="Europe/Helsinki")
 
@@ -124,6 +163,11 @@ def main() -> None:
     scheduler.add_job(trigger, "cron", args=["yahoo_fundamentals"],
                       day_of_week="mon-fri", hour=23, minute=45,
                       id="yahoo_fundamentals")
+
+    # Macro regime change detection — every 4 hours during daytime
+    scheduler.add_job(check_macro_regime, "cron",
+                      hour="7,11,15,19", minute=30,
+                      id="macro_regime_check")
 
     # News retention cleanup — daily at 04:00 Helsinki time
     scheduler.add_job(trigger_endpoint, "cron",

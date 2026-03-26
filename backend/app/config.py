@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     FRED_API_KEY: str = ""
     FINNHUB_API_KEY: str = ""
     API_KEY: str = ""
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
     LOG_LEVEL: str = "INFO"
     FRONTEND_URL: str = "http://localhost:3000"
 
