@@ -503,12 +503,23 @@ async def research_consensus():
         if ra_notes:
             latest_ra = ra_notes[0]  # already sorted by updated_at desc
             thesis = latest_ra.thesis or ""
-            for verdict_str in ["BUY", "AVOID", "WAIT", "HOLD"]:
-                if f"**{verdict_str}**" in thesis:
-                    research_verdict = verdict_str
-                    break
+            # Match verdict in multiple formats:
+            # "**Verdict: BUY**", "**Verdict**: **BUY**", "**BUY**", "Verdict: **AVOID**"
+            import re
+            verdict_match = re.search(
+                r"\*\*(?:Verdict[:\s]*)?(?:\*\*)?\s*(BUY|SELL|HOLD|WAIT|AVOID|ACCUMULATE|TRIM)\b",
+                thesis,
+                re.IGNORECASE,
+            )
+            if verdict_match:
+                research_verdict = verdict_match.group(1).upper()
             if latest_ra.moat_rating:
                 moat_rating = latest_ra.moat_rating
+            else:
+                # Try extracting moat from thesis text if not in structured field
+                moat_match = re.search(r"[Mm]oat.*?:\s*\*?\*?(none|narrow|wide)\*?\*?", thesis, re.IGNORECASE)
+                if moat_match:
+                    moat_rating = moat_match.group(1).lower()
 
         # Detect conflicts
         has_conflict = False
