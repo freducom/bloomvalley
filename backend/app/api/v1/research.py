@@ -521,18 +521,30 @@ async def research_consensus():
                 if moat_match:
                     moat_rating = moat_match.group(1).lower()
 
-        # Detect conflicts
+        # Detect conflicts — flag when PM and Research disagree on direction
         has_conflict = False
         conflict_details = None
         if pm_action and research_verdict:
+            bullish = {"buy", "accumulate"}
+            bearish = {"sell", "avoid", "trim"}
+            neutral = {"hold", "wait"}
             pm_norm = pm_action.lower()
             rv_norm = research_verdict.lower()
-            if (pm_norm == "buy" and rv_norm == "avoid") or (
-                pm_norm == "sell" and rv_norm == "buy"
-            ):
+
+            def _sentiment(action: str) -> str:
+                if action in bullish:
+                    return "bullish"
+                if action in bearish:
+                    return "bearish"
+                return "neutral"
+
+            pm_sent = _sentiment(pm_norm)
+            rv_sent = _sentiment(rv_norm)
+            if pm_sent != rv_sent:
                 has_conflict = True
                 conflict_details = (
-                    f"PM recommends {pm_action.upper()} but research-analyst says {research_verdict}"
+                    f"PM recommends {pm_action.upper()} ({pm_sent}) but "
+                    f"research-analyst says {research_verdict} ({rv_sent})"
                 )
 
         # Build agents dict
