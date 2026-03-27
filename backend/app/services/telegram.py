@@ -43,25 +43,45 @@ async def send(text: str, force: bool = False) -> bool:
         return False
 
     try:
+        # Split into chunks of 4096 chars (Telegram limit) at line boundaries
+        chunks = _split_message(text, 4096)
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                API_URL.format(token=settings.TELEGRAM_BOT_TOKEN),
-                json={
-                    "chat_id": settings.TELEGRAM_CHAT_ID,
-                    "text": text[:4096],
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": True,
-                },
-            )
-            if resp.status_code == 200:
-                logger.info("telegram_sent", chars=len(text))
-                return True
-            else:
-                logger.warning("telegram_send_failed", status=resp.status_code, body=resp.text[:200])
-                return False
+            for chunk in chunks:
+                resp = await client.post(
+                    API_URL.format(token=settings.TELEGRAM_BOT_TOKEN),
+                    json={
+                        "chat_id": settings.TELEGRAM_CHAT_ID,
+                        "text": chunk,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": True,
+                    },
+                )
+                if resp.status_code != 200:
+                    logger.warning("telegram_send_failed", status=resp.status_code, body=resp.text[:200])
+                    return False
+            logger.info("telegram_sent", chars=len(text), chunks=len(chunks))
+            return True
     except Exception as e:
         logger.error("telegram_send_error", error=str(e))
         return False
+
+
+def _split_message(text: str, limit: int = 4096) -> list[str]:
+    """Split a message into chunks at line boundaries."""
+    if len(text) <= limit:
+        return [text]
+    chunks = []
+    while text:
+        if len(text) <= limit:
+            chunks.append(text)
+            break
+        # Find last newline within limit
+        cut = text.rfind("\n", 0, limit)
+        if cut <= 0:
+            cut = limit
+        chunks.append(text[:cut])
+        text = text[cut:].lstrip("\n")
+    return chunks
 
 
 def _escape(text: str) -> str:

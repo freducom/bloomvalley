@@ -687,11 +687,15 @@ async def close_old_recommendations(backend_url: str):
             print(f"  [pm] Failed to close old recommendations: {e}", flush=True)
 
 
-SUMMARIZE_PM_PROMPT = """Summarize this portfolio manager report for a Telegram notification in under 1000 characters.
+SUMMARIZE_PM_PROMPT = """Summarize this portfolio manager report for a Telegram notification in 3000-4500 characters.
 Structure:
-1. Macro outlook (1 line — regime, key risks/tailwinds)
-2. Key news/catalysts (1-2 lines — most impactful headlines or events)
-3. Action items — list BUY and SELL tickers with brief reason, then count of HOLDs/WAITs
+1. Macro outlook (2-3 lines — regime, key risks, tailwinds, rate environment)
+2. Key news & catalysts (3-5 lines — most impactful headlines, events, earnings, policy changes)
+3. BUY recommendations — each ticker with 1-2 sentence rationale
+4. SELL recommendations — each ticker with reason
+5. Notable HOLDs — highlight any with significant news, upcoming dividends, or changed thesis (skip routine holds)
+6. WAIT/watchlist — tickers worth monitoring with trigger conditions
+7. Portfolio risk summary (1-2 lines — concentration, sector exposure, key risks to monitor)
 Keep it dense and actionable. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
 
 
@@ -783,7 +787,7 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
                     await client.post("/notifications/send", json={
                         "event": "recommendations",
                         "data": {
-                            "summary": summary[:1200],
+                            "summary": summary[:4800],
                             "date": date_str,
                         },
                     })
