@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+const gfmOptions = { singleTilde: false };
 import { apiGet, apiGetRaw, apiPost, apiPut } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
 import { Private, usePrivacy } from "@/lib/privacy";
@@ -209,7 +211,7 @@ function PortfolioManagerBrief() {
       </div>
 
       <div className={proseClasses}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={privacyMode ? PRIVACY_MD_COMPONENTS : undefined}>
+        <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={privacyMode ? PRIVACY_MD_COMPONENTS : undefined}>
           {expanded ? fullReport : summary}
         </ReactMarkdown>
       </div>
@@ -305,7 +307,7 @@ function AnalystSummaries() {
               )}
               {isExpanded && (
                 <div className="text-sm text-terminal-text-secondary mt-2 leading-relaxed prose prose-invert prose-sm max-w-none prose-table:border-collapse prose-th:border prose-th:border-terminal-border prose-th:px-2 prose-th:py-1 prose-th:text-left prose-th:text-xs prose-th:font-medium prose-th:text-terminal-text-primary prose-th:bg-terminal-bg-secondary prose-td:border prose-td:border-terminal-border prose-td:px-2 prose-td:py-1 prose-td:text-xs prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary prose-code:text-terminal-accent">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={privacyMode ? PRIVACY_MD_COMPONENTS : undefined}>{note.thesis}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={privacyMode ? PRIVACY_MD_COMPONENTS : undefined}>{note.thesis}</ReactMarkdown>
                 </div>
               )}
             </div>

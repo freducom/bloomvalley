@@ -7,6 +7,8 @@ import { Private } from "@/lib/privacy";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const gfmOptions = { singleTilde: false };
+
 interface ResearchNote {
   id: number;
   securityId: number;
@@ -566,7 +568,7 @@ function NoteDetail({
             Investment Thesis
           </h3>
           <div className={PROSE_CLASSES}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{note.thesis}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]}>{note.thesis}</ReactMarkdown>
           </div>
         </div>
       )}
@@ -913,7 +915,7 @@ function CaseCard({
         {label}
       </div>
       <div className={PROSE_CLASSES}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]}>{text}</ReactMarkdown>
       </div>
     </div>
   );

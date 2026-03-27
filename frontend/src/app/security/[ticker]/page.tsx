@@ -9,6 +9,8 @@ import { Private } from "@/lib/privacy";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const gfmOptions = { singleTilde: false };
+
 /* ── AI Analysis markdown components ── */
 
 function textOf(node: React.ReactNode): string {
@@ -595,7 +597,7 @@ export default function SecurityDetailPage() {
           </div>
           {(latestResearch?.thesis || analystExcerpt) ? (
             <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={analysisComponents}>
+              <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={analysisComponents}>
                 {(latestResearch?.thesis || analystExcerpt || "")
                   .replace(/^## (?:W-)?\d+\.\s+\S+\s*—[^\n]*\n*/m, "")
                   .replace(/\n---\s*$/g, "")

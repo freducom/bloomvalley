@@ -5,6 +5,8 @@ import { MessageSquare, X, Send, Trash2, Loader2, Maximize2, Minimize2 } from "l
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const gfmOptions = { singleTilde: false };
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -282,7 +284,7 @@ export function ChatWidget() {
                     <Loader2 className="h-4 w-4 animate-spin text-terminal-text-tertiary" />
                   ) : msg.role === "assistant" ? (
                     <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:bg-terminal-bg-primary prose-pre:text-terminal-text-primary prose-code:text-terminal-accent prose-strong:text-terminal-text-primary prose-a:text-terminal-info">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]}>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
                     <div className="whitespace-pre-wrap break-words">{msg.content}</div>
