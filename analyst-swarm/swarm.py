@@ -107,7 +107,7 @@ async def call_ollama(prompt: str, system: str, cfg: dict) -> str:
         return data["message"]["content"]
 
 
-async def call_claude_cli(prompt: str, system: str, cfg: dict) -> str:
+async def call_claude_cli(prompt: str, system: str, cfg: dict, timeout: int = 600) -> str:
     """Call Claude via the claude CLI (uses company subscription, not API credits)."""
     import subprocess
     import tempfile
@@ -141,7 +141,7 @@ async def call_claude_cli(prompt: str, system: str, cfg: dict) -> str:
 
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(input=stdin_data),
-            timeout=600,
+            timeout=timeout,
         )
 
         if proc.returncode != 0:
@@ -153,13 +153,13 @@ async def call_claude_cli(prompt: str, system: str, cfg: dict) -> str:
         os.unlink(tmp_path)
 
 
-async def call_llm(prompt: str, system: str, cfg: dict) -> str:
+async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> str:
     """Route to the configured LLM backend."""
     provider = cfg.get("llm_provider", "claude")
     if provider == "claude":
         return await call_claude(prompt, system, cfg)
     elif provider == "claude_cli":
-        return await call_claude_cli(prompt, system, cfg)
+        return await call_claude_cli(prompt, system, cfg, timeout=timeout)
     elif provider == "ollama":
         return await call_ollama(prompt, system, cfg)
     else:
@@ -652,8 +652,9 @@ async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
         # Build prompt
         system, user_prompt = build_prompt(agent_name, agent_def, data, date_str)
 
-        # Call LLM
-        report = await call_llm(user_prompt, system, cfg)
+        # Call LLM — research-analyst gets extra time (typically 450-570s)
+        agent_timeout = 900 if agent_name == "research-analyst" else 600
+        report = await call_llm(user_prompt, system, cfg, timeout=agent_timeout)
 
         # Store report
         await store_report(backend_url, agent_name, report)
