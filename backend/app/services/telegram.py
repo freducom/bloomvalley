@@ -69,33 +69,13 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-async def notify_recommendations(recs: list[dict], date_str: str):
-    """Send notification about new PM recommendations (privacy-safe)."""
-    if not is_configured() or not recs:
+async def notify_recommendations(summary: str, date_str: str):
+    """Send PM recommendations summary via Telegram."""
+    if not is_configured() or not summary:
         return
 
-    buys = [r for r in recs if r.get("action") == "buy"]
-    sells = [r for r in recs if r.get("action") == "sell"]
-    holds = [r for r in recs if r.get("action") == "hold"]
-    waits = [r for r in recs if r.get("action") == "wait"]
-
-    lines = [f"<b>PM Recommendations — {_escape(date_str)}</b>", ""]
-
-    if buys:
-        tickers = ", ".join(_escape(r.get("ticker", "?")) for r in buys)
-        lines.append(f"BUY ({len(buys)}): {tickers}")
-    if sells:
-        tickers = ", ".join(_escape(r.get("ticker", "?")) for r in sells)
-        lines.append(f"SELL ({len(sells)}): {tickers}")
-    if holds:
-        lines.append(f"HOLD: {len(holds)} positions")
-    if waits:
-        lines.append(f"WAIT: {len(waits)} watchlist items")
-
-    lines.append("")
-    lines.append(f"<i>{len(recs)} total recommendations</i>")
-
-    await send("\n".join(lines))
+    text = f"<b>PM Report — {_escape(date_str)}</b>\n\n{_escape(summary)}"
+    await send(text)
 
 
 def _fmt_eur(cents: int | None) -> str:

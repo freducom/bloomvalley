@@ -36,9 +36,9 @@ async def send_notification(body: dict):
     event = body.get("event")
 
     if event == "recommendations":
-        recs = body.get("data", {}).get("recommendations", [])
+        summary = body.get("data", {}).get("summary", "")
         date_str = body.get("data", {}).get("date", "")
-        await telegram.notify_recommendations(recs, date_str)
+        await telegram.notify_recommendations(summary, date_str)
 
     elif event == "macro_regime_change":
         d = body.get("data", {})

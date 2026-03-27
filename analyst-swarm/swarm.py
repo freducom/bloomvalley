@@ -687,6 +687,14 @@ async def close_old_recommendations(backend_url: str):
             print(f"  [pm] Failed to close old recommendations: {e}", flush=True)
 
 
+SUMMARIZE_PM_PROMPT = """Summarize this portfolio manager report for a Telegram notification in under 1000 characters.
+Structure:
+1. Macro outlook (1 line — regime, key risks/tailwinds)
+2. Key news/catalysts (1-2 lines — most impactful headlines or events)
+3. Action items — list BUY and SELL tickers with brief reason, then count of HOLDs/WAITs
+Keep it dense and actionable. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
+
+
 EXTRACT_RECS_PROMPT = """Extract ALL actionable recommendations from this portfolio manager report.
 Return a JSON array of objects. Each object must have these fields:
 - "ticker": string (e.g. "VWCE", "ALYK", "MSFT", "INVE-B.ST", "KESKOB.HE")
@@ -764,13 +772,18 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
 
             print(f"  [pm] Posted {posted} recommendations", flush=True)
 
-            # Notify via Telegram
+            # Notify via Telegram — send a ~1000 char summary of the PM report
             if posted > 0:
                 try:
+                    summary = await call_llm(
+                        f"Portfolio manager report:\n\n{report}",
+                        SUMMARIZE_PM_PROMPT,
+                        cfg,
+                    )
                     await client.post("/notifications/send", json={
                         "event": "recommendations",
                         "data": {
-                            "recommendations": recs,
+                            "summary": summary[:1200],
                             "date": date_str,
                         },
                     })
