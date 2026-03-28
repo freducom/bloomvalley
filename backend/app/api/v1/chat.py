@@ -61,8 +61,8 @@ def _get_llm_config() -> dict:
             "model": os.environ.get("CLAUDE_CLI_MODEL", ""),
         },
         "ollama": {
-            "base_url": os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434"),
-            "model": os.environ.get("OLLAMA_MODEL", "llama3.1:70b"),
+            "base_url": os.environ.get("OLLAMA_BASE_URL", "http://192.168.1.160:11435"),
+            "model": os.environ.get("OLLAMA_MODEL", "qwen3:32b"),
             "max_tokens": 4096,
         },
     }
@@ -250,6 +250,7 @@ async def _stream_ollama(messages: list[ChatMessage]):
                 "model": cfg["ollama"]["model"],
                 "messages": api_messages,
                 "stream": True,
+                "think": False,
             },
         ) as resp:
             async for line in resp.aiter_lines():

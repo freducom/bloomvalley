@@ -21,8 +21,8 @@ claude_cli:
 
 # Ollama settings (used when llm_provider: "ollama")
 ollama:
-  base_url: "http://host.docker.internal:11434"  # Ollama server URL
-  model: "llama3.1:70b"  # or mistral-large, qwen2.5:72b, etc.
+  base_url: "http://192.168.1.160:11434"  # Ollama server URL
+  model: "qwen3:32b"  # Best balance of quality and speed for financial analysis
   max_tokens: 8192
 
 # Backend API

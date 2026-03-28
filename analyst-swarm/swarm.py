@@ -21,6 +21,33 @@ from apscheduler.triggers.cron import CronTrigger
 _API_KEY = os.environ.get("API_KEY", "")
 _AUTH_HEADERS = {"X-API-Key": _API_KEY} if _API_KEY else {}
 
+# Telegram notifications (for fallback alerts)
+_TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+_TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# Track whether we've already notified about CLI auth failure (avoid spam)
+_cli_fallback_notified = False
+
+
+async def send_telegram(text: str) -> bool:
+    """Send a Telegram message (force-sends, ignores quiet hours)."""
+    if not _TG_TOKEN or not _TG_CHAT_ID:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
+                json={
+                    "chat_id": _TG_CHAT_ID,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                },
+            )
+            return resp.status_code == 200
+    except Exception:
+        return False
+
 # ── Config ──
 
 def load_config() -> dict:
@@ -87,7 +114,7 @@ async def call_ollama(prompt: str, system: str, cfg: dict) -> str:
     """Call Ollama API."""
     base_url = cfg["ollama"]["base_url"].rstrip("/")
 
-    async with httpx.AsyncClient(timeout=600) as client:
+    async with httpx.AsyncClient(timeout=1800) as client:
         resp = await client.post(
             f"{base_url}/api/chat",
             json={
@@ -97,6 +124,7 @@ async def call_ollama(prompt: str, system: str, cfg: dict) -> str:
                     {"role": "user", "content": prompt},
                 ],
                 "stream": False,
+                "think": False,
                 "options": {
                     "num_predict": cfg["ollama"].get("max_tokens", 8192),
                 },
@@ -154,12 +182,37 @@ async def call_claude_cli(prompt: str, system: str, cfg: dict, timeout: int = 60
 
 
 async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> str:
-    """Route to the configured LLM backend."""
+    """Route to the configured LLM backend. Falls back to Ollama if claude_cli fails."""
+    global _cli_fallback_notified
     provider = cfg.get("llm_provider", "claude")
+
     if provider == "claude":
         return await call_claude(prompt, system, cfg)
     elif provider == "claude_cli":
-        return await call_claude_cli(prompt, system, cfg, timeout=timeout)
+        try:
+            return await call_claude_cli(prompt, system, cfg, timeout=timeout)
+        except Exception as e:
+            err_msg = str(e)
+            print(f"  [llm] claude_cli failed: {err_msg[:200]}", flush=True)
+
+            # Check if Ollama is configured as fallback
+            ollama_cfg = cfg.get("ollama", {})
+            if not ollama_cfg.get("base_url") or not ollama_cfg.get("model"):
+                raise  # No fallback available
+
+            print(f"  [llm] Falling back to Ollama ({ollama_cfg['model']})...", flush=True)
+
+            # Send Telegram alert (once per session to avoid spam)
+            if not _cli_fallback_notified:
+                _cli_fallback_notified = True
+                await send_telegram(
+                    "<b>⚠ Claude CLI Auth Failed</b>\n\n"
+                    f"Error: <code>{err_msg[:300]}</code>\n\n"
+                    f"Falling back to Ollama ({ollama_cfg['model']}). "
+                    "Run <code>claude /login</code> on the host to re-authenticate."
+                )
+
+            return await call_ollama(prompt, system, cfg)
     elif provider == "ollama":
         return await call_ollama(prompt, system, cfg)
     else:
@@ -404,9 +457,9 @@ async def store_report(backend_url: str, agent_name: str, report: str):
 
 # ── Research Analyst: Per-Security Extraction ──
 
-# Matches "## 1. TICKER — Name" and "## W-1. TICKER — Name"
+# Matches "## 1. TICKER — Name", "### 1. TICKER — Name", and "## W-1. TICKER — Name"
 _SECTION_RE = re.compile(
-    r"^## (?:W-)?(\d+)\. ([A-Z][A-Z0-9._-]+) — (.+?)$",
+    r"^#{2,3} (?:W-)?(\d+)\. ([A-Z][A-Z0-9._-]+) — (.+?)$",
     re.MULTILINE,
 )
 

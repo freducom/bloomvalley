@@ -327,7 +327,7 @@ export default function SecurityDetailPage() {
   const [insiders, setInsiders] = useState<InsiderTrade[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [dividends, setDividends] = useState<DividendEvent[]>([]);
-  const [analystExcerpt, setAnalystExcerpt] = useState<string | null>(null);
+  const analystExcerpt: string | null = null; // kept for template compat
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -385,24 +385,8 @@ export default function SecurityDetailPage() {
         if (newsRes?.data) setNews(newsRes.data);
         if (divRes?.data) setDividends(divRes.data);
 
-        // Extract ticker section from latest analyst swarm report
-        try {
-          const analystRes = await apiGetRaw<{ data: { thesis: string }[] }>(
-            "/research/notes?tag=research-analyst&limit=1"
-          );
-          if (analystRes?.data?.[0]?.thesis) {
-            const report = analystRes.data[0].thesis;
-            // Split on section headings and find the one for this ticker
-            const parts = report.split(/\n(?=## (?:W-)?\d+\.\s)/);
-            for (const part of parts) {
-              const esc = ticker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-              if (new RegExp(`^## (?:W-)?\\d+\\.\\s+${esc}\\b`).test(part)) {
-                setAnalystExcerpt(part.trim());
-                break;
-              }
-            }
-          }
-        } catch { /* */ }
+        // analystExcerpt extraction removed — per-security notes are now
+        // extracted by the swarm and stored individually
       } catch (e) {
         console.error("Failed to load security detail:", e);
         setError("Failed to load security data");
@@ -455,7 +439,12 @@ export default function SecurityDetailPage() {
 
   /* ── Derived data ── */
   const isHeld = holdings.length > 0;
-  const latestResearch = research.length > 0 ? research[0] : null;
+  // Most recent research-analyst and technical notes (API returns newest first)
+  const latestResearchAnalyst = research
+    .find((n) => n.tags?.includes("research-analyst")) || null;
+  const latestTechnical = research
+    .find((n) => n.tags?.includes("technical-analyst")) || null;
+  const latestResearch = latestResearchAnalyst || latestTechnical || (research.length > 0 ? research[0] : null);
   const latestRec = recommendations.length > 0 ? recommendations[0] : null;
 
   const currentPrice = fundamentals?.currentPriceCents ?? null;
@@ -599,7 +588,7 @@ export default function SecurityDetailPage() {
             <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
               <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={analysisComponents}>
                 {(latestResearch?.thesis || analystExcerpt || "")
-                  .replace(/^## (?:W-)?\d+\.\s+\S+\s*—[^\n]*\n*/m, "")
+                  .replace(/^#{2,3} (?:W-)?\d+\.\s+\S+\s*—[^\n]*\n*/m, "")
                   .replace(/\n---\s*$/g, "")
                   .trim()}
               </ReactMarkdown>
@@ -623,6 +612,28 @@ export default function SecurityDetailPage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Technical Analysis (separate from research) ── */}
+      {latestTechnical && latestTechnical !== latestResearch && latestTechnical.thesis && (
+        <div className="border border-terminal-border bg-terminal-bg-secondary rounded-md p-4 mb-6">
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-sm font-semibold text-terminal-text-secondary">Technical Analysis</h2>
+            {latestTechnical.createdAt && (
+              <span className="text-xs text-terminal-text-muted">
+                {new Date(latestTechnical.createdAt).toLocaleDateString("fi-FI")}
+              </span>
+            )}
+          </div>
+          <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
+            <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={analysisComponents}>
+              {latestTechnical.thesis
+                .replace(/^#{2,3} \d+\.\s+\S+\s*—[^\n]*\n*/m, "")
+                .replace(/\n---\s*$/g, "")
+                .trim()}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
 

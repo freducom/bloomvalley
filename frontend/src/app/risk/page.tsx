@@ -195,37 +195,54 @@ export default function RiskPage() {
   );
 }
 
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="relative group ml-1 inline-flex items-center">
+      <span className="text-[10px] text-terminal-text-tertiary cursor-help">(i)</span>
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-52 px-2.5 py-1.5 text-xs text-terminal-text-primary bg-terminal-bg-tertiary border border-terminal-border rounded shadow-lg z-10 leading-relaxed pointer-events-none">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function MetricsCards({ metrics }: { metrics: RiskMetrics }) {
   const cards = [
     {
       label: "Ann. Return",
       value: formatPercent(metrics.annualizedReturn, true),
       color: metrics.annualizedReturn >= 0 ? "text-green-400" : "text-red-400",
+      info: "Compound annual growth rate of the portfolio over the selected period.",
     },
     {
       label: "Ann. Volatility",
       value: formatPercent(metrics.annualizedVolatility),
       color: metrics.annualizedVolatility > 25 ? "text-yellow-400" : "text-terminal-text-primary",
+      info: "Standard deviation of returns annualized. Higher means more price swings. Under 15% is low, over 25% is high.",
     },
     {
       label: "Sharpe Ratio",
       value: metrics.sharpeRatio.toFixed(2),
       color: metrics.sharpeRatio >= 1 ? "text-green-400" : metrics.sharpeRatio >= 0.5 ? "text-yellow-400" : "text-red-400",
+      info: "Return per unit of total risk (volatility). Above 1.0 is good, above 2.0 is excellent. Uses risk-free rate as baseline.",
     },
     {
       label: "Sortino Ratio",
       value: metrics.sortinoRatio.toFixed(2),
       color: metrics.sortinoRatio >= 1.5 ? "text-green-400" : metrics.sortinoRatio >= 0.7 ? "text-yellow-400" : "text-red-400",
+      info: "Like Sharpe but only penalizes downside volatility. Above 1.5 is good. Better for portfolios with asymmetric returns.",
     },
     {
       label: "Max Drawdown",
       value: formatPercent(metrics.maxDrawdown),
       color: metrics.maxDrawdown < -20 ? "text-red-400" : metrics.maxDrawdown < -10 ? "text-yellow-400" : "text-green-400",
+      info: "Largest peak-to-trough decline in portfolio value. Shows worst-case loss you would have experienced.",
     },
     {
       label: "VaR 95% (1-day)",
       value: <>{formatPercent(metrics.var95Daily)} / <Private>{formatCurrency(Math.abs(metrics.var95DailyCents))}</Private></>,
       color: "text-terminal-text-primary",
+      info: "Value at Risk: the maximum expected single-day loss with 95% confidence. On 1 in 20 trading days, losses may exceed this.",
     },
   ];
 
@@ -233,7 +250,10 @@ function MetricsCards({ metrics }: { metrics: RiskMetrics }) {
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {cards.map((c) => (
         <div key={c.label} className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-3">
-          <div className="text-xs text-terminal-text-secondary mb-1">{c.label}</div>
+          <div className="text-xs text-terminal-text-secondary mb-1">
+            {c.label}
+            <InfoTooltip text={c.info} />
+          </div>
           <div className={`text-lg font-mono font-bold ${c.color}`}>{c.value}</div>
         </div>
       ))}

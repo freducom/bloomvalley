@@ -45,15 +45,15 @@ services:
       - .env
     volumes:
       - ./backend:/app
-      - ${HOME}/.claude:/root/.claude:ro
-      - ${HOME}/.claude.json:/root/.claude.json:ro
+      - ${HOME}/.claude:/root/.claude
+      - ${HOME}/.claude.json:/root/.claude.json
     environment:
       - TZ=Europe/Helsinki
       - LLM_PROVIDER=${LLM_PROVIDER:-claude_cli}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-}
       - CLAUDE_CLI_MODEL=${CLAUDE_CLI_MODEL:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.1.160:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
     restart: unless-stopped
 
@@ -99,16 +99,18 @@ services:
       - TZ=Europe/Helsinki
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-claude_cli}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.1.160:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:32b}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-}
       - BACKEND_URL=http://backend:8000/api/v1
       - API_KEY=${API_KEY:-}
-      - MAX_PARALLEL=${MAX_PARALLEL:-4}
+      - MAX_PARALLEL=${MAX_PARALLEL:-1}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./.claude/agents:/app/agents:ro
       - ./analyst-swarm/config.local.yaml:/app/config.local.yaml:ro
       # Mount Claude auth for claude_cli provider (company subscription)
-      - ${HOME}/.claude:/root/.claude:ro
-      - ${HOME}/.claude.json:/root/.claude.json:ro
+      - ${HOME}/.claude:/root/.claude
+      - ${HOME}/.claude.json:/root/.claude.json
     restart: unless-stopped
