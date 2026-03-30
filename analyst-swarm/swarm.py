@@ -740,7 +740,7 @@ async def close_old_recommendations(backend_url: str):
             print(f"  [pm] Failed to close old recommendations: {e}", flush=True)
 
 
-SUMMARIZE_PM_PROMPT = """Summarize this portfolio manager report for a Telegram notification in 3000-4500 characters.
+MORNING_BRIEF_PROMPT = """Summarize this portfolio manager report for a Telegram morning brief in 3000-4500 characters.
 Structure:
 1. Macro outlook (2-3 lines — regime, key risks, tailwinds, rate environment)
 2. Key news & catalysts (3-5 lines — most impactful headlines, events, earnings, policy changes)
@@ -750,6 +750,51 @@ Structure:
 6. WAIT/watchlist — tickers worth monitoring with trigger conditions
 7. Portfolio risk summary (1-2 lines — concentration, sector exposure, key risks to monitor)
 Keep it dense and actionable. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
+
+MIDDAY_UPDATE_PROMPT = """You are comparing the MORNING portfolio manager brief with the latest NOON analysis.
+
+MORNING BRIEF:
+{morning_summary}
+
+CURRENT (NOON) REPORT:
+{current_report}
+
+Write a mid-day changes update for Telegram in 2000-3500 characters. Focus ONLY on what changed since the morning:
+1. New or changed recommendations (upgrades, downgrades, new BUY/SELL actions not in morning)
+2. Recommendation changes (any ticker whose action or confidence changed since morning)
+3. Significant market moves or news that emerged since the morning brief
+4. Removed recommendations (tickers in morning brief no longer recommended)
+5. Changed macro outlook (only if it shifted since morning)
+If nothing material changed, say so briefly — "No material changes since morning brief" with a 1-2 line market color.
+Keep it dense and actionable. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
+
+EVENING_BRIEF_PROMPT = """Summarize this portfolio manager report as an evening wrap-up for Telegram in 3000-4500 characters.
+This is the final brief of the day. Structure it as:
+1. Day in review (3-5 lines — what happened in markets today, major moves, news impact)
+2. Recommendation changes today (what changed across all runs — new positions, closed positions, upgrades/downgrades)
+3. Key earnings/events ahead (upcoming catalysts in next 1-2 days)
+4. Overnight/tomorrow watch (what to monitor — Asian markets, futures, data releases)
+5. Forward outlook (2-3 lines — positioning thoughts for tomorrow and the week ahead)
+Keep it dense and forward-looking. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
+
+WEEKEND_MACRO_PROMPT = """Summarize this portfolio manager report as a weekend macro overview for Telegram in 3000-4500 characters.
+Markets are closed — focus on the bigger picture, not intraday moves. Structure it as:
+1. Weekly macro recap (3-5 lines — key economic data, central bank moves, geopolitical shifts from the past week)
+2. Sector & industry impact (5-8 lines — which industries are most affected by this week's macro developments, why, and the direction of impact)
+3. Shares to watch (list tickers with 1-2 sentence rationale — securities in the portfolio or watchlist most exposed to the macro trends above, both positively and negatively)
+4. Week ahead preview (3-5 lines — upcoming data releases, earnings, central bank meetings, events that could move markets Monday)
+5. Positioning thoughts (2-3 lines — any rebalancing or readiness ideas heading into the new week)
+Keep it analytical and forward-looking. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
+
+# Map brief types to prompts (morning is the default/fallback)
+_BRIEF_PROMPTS = {
+    "morning": MORNING_BRIEF_PROMPT,
+    "evening": EVENING_BRIEF_PROMPT,
+    "weekend": WEEKEND_MACRO_PROMPT,
+}
+
+# Legacy alias
+SUMMARIZE_PM_PROMPT = MORNING_BRIEF_PROMPT
 
 
 EXTRACT_RECS_PROMPT = """Extract ALL actionable recommendations from this portfolio manager report.
@@ -774,10 +819,11 @@ For "sell" actions on funds being redeemed, use "sell".
 Return ONLY the JSON array, no markdown fences, no explanation."""
 
 
-async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str):
+async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str,
+                                            brief_type: str = "morning"):
     """Parse the PM report into structured recommendations and POST them."""
     backend_url = cfg["backend_url"]
-    print("  [pm] Extracting recommendations from report...", flush=True)
+    print(f"  [pm] Extracting recommendations from report (brief={brief_type})...", flush=True)
 
     try:
         result = await call_llm(
@@ -829,23 +875,85 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
 
             print(f"  [pm] Posted {posted} recommendations", flush=True)
 
-            # Notify via Telegram — send a ~1000 char summary of the PM report
+            # Notify via Telegram — brief type determines the summary style
+            # Weekend: only morning run sends Telegram (macro overview), skip midday/evening
             if posted > 0:
-                try:
-                    summary = await call_llm(
-                        f"Portfolio manager report:\n\n{report}",
-                        SUMMARIZE_PM_PROMPT,
-                        cfg,
-                    )
-                    await client.post("/notifications/send", json={
-                        "event": "recommendations",
-                        "data": {
-                            "summary": summary[:4800],
-                            "date": date_str,
-                        },
-                    })
-                except Exception:
-                    pass  # Non-critical
+                from zoneinfo import ZoneInfo
+                is_weekend = datetime.now(ZoneInfo("Europe/Helsinki")).weekday() >= 5
+
+                if is_weekend and brief_type != "morning":
+                    print(f"  [pm] Weekend — skipping {brief_type} Telegram notification", flush=True)
+                elif is_weekend:
+                    # Weekend morning — send macro overview instead of regular brief
+                    try:
+                        summary = await call_llm(
+                            f"Portfolio manager report:\n\n{report}",
+                            WEEKEND_MACRO_PROMPT,
+                            cfg,
+                        )
+                        await client.post("/notifications/send", json={
+                            "event": "recommendations",
+                            "data": {
+                                "summary": summary[:4800],
+                                "date": date_str,
+                                "brief_type": "weekend",
+                            },
+                        })
+                    except Exception:
+                        pass  # Non-critical
+                else:
+                    # Weekday — normal brief flow
+                    try:
+                        if brief_type == "midday":
+                            # Fetch morning brief from backend for diffing
+                            morning_summary = ""
+                            try:
+                                ms_resp = await client.get(
+                                    f"/notifications/brief-summary/{date_str}/morning"
+                                )
+                                if ms_resp.status_code == 200:
+                                    morning_summary = ms_resp.json().get("data", {}).get("summary", "")
+                            except Exception:
+                                pass
+
+                            if morning_summary:
+                                prompt = MIDDAY_UPDATE_PROMPT.format(
+                                    morning_summary=morning_summary,
+                                    current_report=report,
+                                )
+                                summary = await call_llm(
+                                    "Generate the mid-day changes update.",
+                                    prompt,
+                                    cfg,
+                                )
+                            else:
+                                # No morning brief available — fall back to full summary
+                                print("  [pm] No morning brief found, using full summary", flush=True)
+                                summary = await call_llm(
+                                    f"Portfolio manager report:\n\n{report}",
+                                    MORNING_BRIEF_PROMPT,
+                                    cfg,
+                                )
+                                brief_type = "morning"  # label it correctly
+                        else:
+                            # Morning or evening — use the appropriate prompt
+                            prompt = _BRIEF_PROMPTS.get(brief_type, MORNING_BRIEF_PROMPT)
+                            summary = await call_llm(
+                                f"Portfolio manager report:\n\n{report}",
+                                prompt,
+                                cfg,
+                            )
+
+                        await client.post("/notifications/send", json={
+                            "event": "recommendations",
+                            "data": {
+                                "summary": summary[:4800],
+                                "date": date_str,
+                                "brief_type": brief_type,
+                            },
+                        })
+                    except Exception:
+                        pass  # Non-critical
 
     except Exception as e:
         print(f"  [pm] Failed to extract recommendations: {e}", flush=True)
@@ -853,11 +961,25 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
 
 # ── Main Swarm Run ──
 
-async def run_swarm(cfg: dict):
+def _detect_brief_type() -> str:
+    """Determine brief type based on current Helsinki time."""
+    from zoneinfo import ZoneInfo
+    hour = datetime.now(ZoneInfo("Europe/Helsinki")).hour
+    if hour < 10:
+        return "morning"
+    elif hour < 16:
+        return "midday"
+    else:
+        return "evening"
+
+
+async def run_swarm(cfg: dict, brief_type: str | None = None):
     """Execute a full analyst swarm run."""
+    if brief_type is None:
+        brief_type = _detect_brief_type()
     date_str = datetime.now().strftime("%Y-%m-%d")
     print(f"\n{'='*60}", flush=True)
-    print(f"[swarm] Starting analyst swarm run — {datetime.now().isoformat()}", flush=True)
+    print(f"[swarm] Starting analyst swarm run — {datetime.now().isoformat()} [{brief_type} brief]", flush=True)
     print(f"[swarm] LLM: {cfg['llm_provider']} / {cfg.get(cfg['llm_provider'], {}).get('model', '?')}", flush=True)
     print(f"{'='*60}", flush=True)
 
@@ -920,7 +1042,7 @@ async def run_swarm(cfg: dict):
         # Step 6: Extract and post structured recommendations from PM report
         if pm_report:
             await report_status(backend_url, "running", message="Posting recommendations...")
-            await extract_and_post_recommendations(pm_report, cfg, date_str)
+            await extract_and_post_recommendations(pm_report, cfg, date_str, brief_type)
 
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle",
@@ -953,9 +1075,9 @@ async def run_research_only(cfg: dict):
 
 # ── Scheduler ──
 
-def run_swarm_sync(cfg: dict):
+def run_swarm_sync(cfg: dict, brief_type: str | None = None):
     """Synchronous wrapper for the scheduler."""
-    asyncio.run(run_swarm(cfg))
+    asyncio.run(run_swarm(cfg, brief_type))
 
 
 def run_research_sync(cfg: dict):
@@ -972,9 +1094,10 @@ def main():
         asyncio.run(run_swarm(cfg))
         return
 
-    # Schedule runs
+    # Schedule runs — map each slot to a brief type
     scheduler = BlockingScheduler(timezone="Europe/Helsinki")
     schedules = cfg.get("schedule", ["0 7 * * *", "0 12 * * *", "0 19 * * *"])
+    brief_types = cfg.get("brief_types", ["morning", "midday", "evening"])
 
     for i, cron_expr in enumerate(schedules):
         parts = cron_expr.split()
@@ -983,7 +1106,8 @@ def main():
             day=parts[2], month=parts[3], day_of_week=parts[4],
             timezone="Europe/Helsinki",
         )
-        scheduler.add_job(run_swarm_sync, trigger, args=[cfg], id=f"swarm_run_{i}")
+        bt = brief_types[i] if i < len(brief_types) else None
+        scheduler.add_job(run_swarm_sync, trigger, args=[cfg, bt], id=f"swarm_run_{i}")
 
     # Nighttime research-only runs (watchlist rotation)
     research_schedules = cfg.get("research_schedule", ["0 1 * * *", "0 3 * * *"])
@@ -998,8 +1122,9 @@ def main():
 
     total_jobs = len(schedules) + len(research_schedules)
     print(f"[swarm] Scheduled {total_jobs} jobs:", flush=True)
-    for s in schedules:
-        print(f"  - {s} (Helsinki) [full swarm]", flush=True)
+    for i, s in enumerate(schedules):
+        bt = brief_types[i] if i < len(brief_types) else "auto"
+        print(f"  - {s} (Helsinki) [{bt} brief]", flush=True)
     for s in research_schedules:
         print(f"  - {s} (Helsinki) [research only]", flush=True)
     print(f"[swarm] LLM: {cfg['llm_provider']} / {cfg.get(cfg['llm_provider'], {}).get('model', '?')}", flush=True)

@@ -89,12 +89,29 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-async def notify_recommendations(summary: str, date_str: str):
+_BRIEF_HEADERS = {
+    "morning": "Morning Brief",
+    "midday": "Mid-Day Update",
+    "evening": "Evening Brief",
+    "weekend": "Weekend Macro Overview",
+}
+
+_BRIEF_EMOJIS = {
+    "morning": "\u2600\ufe0f",    # ☀️
+    "midday": "\U0001f504",       # 🔄
+    "evening": "\U0001f303",      # 🌃
+    "weekend": "\U0001f30d",      # 🌍
+}
+
+
+async def notify_recommendations(summary: str, date_str: str, brief_type: str = "morning"):
     """Send PM recommendations summary via Telegram."""
     if not is_configured() or not summary:
         return
 
-    text = f"<b>PM Report — {_escape(date_str)}</b>\n\n{_escape(summary)}"
+    header = _BRIEF_HEADERS.get(brief_type, "PM Report")
+    emoji = _BRIEF_EMOJIS.get(brief_type, "\U0001f4ca")
+    text = f"{emoji} <b>{header} — {_escape(date_str)}</b>\n\n{_escape(summary)}"
     await send(text)
 
 

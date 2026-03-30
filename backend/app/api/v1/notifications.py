@@ -2,13 +2,17 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.services import telegram
 from app.services.insider_alerts import check_and_notify as check_insider_alerts
 from app.services.weekly_digest import compose_and_send_digest
 
 router = APIRouter()
+
+# Redis key for storing brief summaries: bloomvalley:brief:{date}:{brief_type}
+_BRIEF_KEY = "bloomvalley:brief:{date}:{brief_type}"
+_BRIEF_TTL = 86400  # 24 hours
 
 
 @router.post("/test")
@@ -27,8 +31,36 @@ async def test_notification():
     }
 
 
+@router.get("/brief-summary/{date_str}/{brief_type}")
+async def get_brief_summary(date_str: str, brief_type: str, request: Request):
+    """Retrieve a stored brief summary (used by midday run to fetch morning brief)."""
+    redis = request.app.state.redis
+    key = _BRIEF_KEY.format(date=date_str, brief_type=brief_type)
+    summary = await redis.get(key)
+    return {
+        "data": {"summary": summary or "", "date": date_str, "brief_type": brief_type},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+@router.post("/brief-summary")
+async def store_brief_summary(body: dict, request: Request):
+    """Store a brief summary in Redis for later retrieval by subsequent runs."""
+    redis = request.app.state.redis
+    date_str = body.get("date", "")
+    brief_type = body.get("brief_type", "")
+    summary = body.get("summary", "")
+    if date_str and brief_type and summary:
+        key = _BRIEF_KEY.format(date=date_str, brief_type=brief_type)
+        await redis.set(key, summary, ex=_BRIEF_TTL)
+    return {
+        "data": {"stored": True, "date": date_str, "brief_type": brief_type},
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
 @router.post("/send")
-async def send_notification(body: dict):
+async def send_notification(body: dict, request: Request):
     """Internal endpoint for swarm/cron to trigger notifications.
 
     Body: {"event": "recommendations", "data": {...}}
@@ -38,7 +70,14 @@ async def send_notification(body: dict):
     if event == "recommendations":
         summary = body.get("data", {}).get("summary", "")
         date_str = body.get("data", {}).get("date", "")
-        await telegram.notify_recommendations(summary, date_str)
+        brief_type = body.get("data", {}).get("brief_type", "morning")
+        await telegram.notify_recommendations(summary, date_str, brief_type)
+
+        # Store the summary in Redis for subsequent briefs to reference
+        if summary and date_str:
+            redis = request.app.state.redis
+            key = _BRIEF_KEY.format(date=date_str, brief_type=brief_type)
+            await redis.set(key, summary, ex=_BRIEF_TTL)
 
     elif event == "macro_regime_change":
         d = body.get("data", {})

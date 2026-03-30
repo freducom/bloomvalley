@@ -34,6 +34,15 @@ schedule:
   - "0 12 * * *"   # 12:00 PM
   - "0 19 * * *"   # 7:00 PM
 
+# Telegram brief type per schedule slot (must match schedule array length)
+#   morning = full analysis brief
+#   midday  = diff vs morning brief (what changed)
+#   evening = day wrap-up with forward outlook
+brief_types:
+  - "morning"
+  - "midday"
+  - "evening"
+
 # Which agents to run (order matters — portfolio-manager runs last)
 agents:
   - research-analyst
