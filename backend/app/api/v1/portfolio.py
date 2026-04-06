@@ -391,39 +391,85 @@ async def get_value_history(
 ):
     """Compute daily total portfolio value (holdings + cash) over time.
 
-    Holdings are replayed against historical prices. Cash balance is
-    reconstructed from deposit/withdrawal/buy/sell/dividend/fee transactions.
+    Reconstructs historical positions by replaying transactions day-by-day,
+    then values them using historical prices and FX rates.
     """
     from collections import defaultdict
     from datetime import timedelta
 
     from_date = date.today() - timedelta(days=days)
 
-    # 1. Get current holdings (quantities)
-    holdings_resp = await get_holdings(account_id=None)
-    holdings_data = holdings_resp["data"]
+    # 1. Get ALL position-affecting transactions (not just from from_date)
+    #    to reconstruct what was held on each date
+    async with async_session() as session:
+        tx_result = await session.execute(
+            select(
+                Transaction.trade_date,
+                Transaction.type,
+                Transaction.security_id,
+                Transaction.quantity,
+                Transaction.total_cents,
+                Transaction.fee_cents,
+                Transaction.currency,
+            )
+            .where(Transaction.security_id.isnot(None))
+            .where(Transaction.type.in_([
+                "buy", "sell", "transfer_in", "transfer_out",
+            ]))
+            .order_by(Transaction.trade_date)
+        )
+        position_txns = tx_result.all()
 
-    # Build {security_id: quantity} and track currencies
-    positions: dict[int, float] = {}
+    # Build historical positions: for each date, what was the net qty per security?
+    # Process all transactions chronologically to get cumulative positions
+    position_deltas: dict[date, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    all_security_ids: set[int] = set()
+
+    for tx in position_txns:
+        sid = tx.security_id
+        all_security_ids.add(sid)
+        qty = float(tx.quantity or 0)
+        if tx.type in ("buy", "transfer_in"):
+            position_deltas[tx.trade_date][sid] += qty
+        elif tx.type in ("sell", "transfer_out"):
+            position_deltas[tx.trade_date][sid] -= qty
+
+    # Build cumulative positions for each date from the start
+    sorted_delta_dates = sorted(position_deltas.keys())
+    cumulative: dict[int, float] = defaultdict(float)  # security_id → qty
+    # Positions as of each date (only store dates where something changed)
+    positions_on_date: dict[date, dict[int, float]] = {}
+
+    for d in sorted_delta_dates:
+        for sid, delta in position_deltas[d].items():
+            cumulative[sid] += delta
+        # Store a snapshot (copy) of current positions
+        positions_on_date[d] = {sid: qty for sid, qty in cumulative.items() if qty > 0.001}
+
+    # Get security currencies
     sec_currencies: dict[int, str] = {}
-    for h in holdings_data:
-        sid = h["securityId"]
-        positions[sid] = float(h["quantity"])
-        sec_currencies[sid] = h["priceCurrency"] or h["currency"]
+    if all_security_ids:
+        async with async_session() as session:
+            sec_result = await session.execute(
+                select(Security.id, Security.currency)
+                .where(Security.id.in_(list(all_security_ids)))
+            )
+            for row in sec_result.all():
+                sec_currencies[row.id] = row.currency or "EUR"
 
-    # 2. Fetch historical prices
+    # 2. Fetch historical prices for all securities that were ever held
     price_rows = []
-    if positions:
+    if all_security_ids:
         async with async_session() as session:
             result = await session.execute(
                 select(Price.security_id, Price.date, Price.close_cents, Price.currency)
-                .where(Price.security_id.in_(list(positions.keys())))
+                .where(Price.security_id.in_(list(all_security_ids)))
                 .where(Price.date >= from_date)
                 .order_by(Price.date)
             )
             price_rows = result.all()
 
-    # 3. Fetch FX rate history for non-EUR currencies
+    # 3. Fetch FX rate history
     needed_currencies = {c for c in sec_currencies.values() if c != "EUR"}
     fx_history: dict[str, dict[date, float]] = {}
     if needed_currencies:
@@ -438,8 +484,7 @@ async def get_value_history(
             for row in fx_result.all():
                 fx_history.setdefault(row.quote_currency, {})[row.date] = float(row.rate)
 
-    # 4. Reconstruct daily cash balance from transactions
-    # Get current total cash across all accounts (in EUR)
+    # 4. Reconstruct daily cash balance
     fx_rates = await _get_fx_rates()
     total_cash_now = 0
     async with async_session() as session:
@@ -453,9 +498,6 @@ async def get_value_history(
                 fx = fx_rates.get(acct.cash_currency, Decimal("1"))
                 total_cash_now += int(acct.cash_balance_cents / float(fx))
 
-    # Get all cash-affecting transactions to build historical cash deltas
-    # Positive to cash: sell proceeds, dividends, deposits, interest
-    # Negative from cash: buy cost, withdrawals, fees
     async with async_session() as session:
         tx_result = await session.execute(
             select(
@@ -474,7 +516,6 @@ async def get_value_history(
         )
         cash_txns = tx_result.all()
 
-    # Build daily cash deltas (in EUR) from today backwards
     daily_cash_delta: dict[date, int] = defaultdict(int)
     for tx in cash_txns:
         amount = tx.total_cents or 0
@@ -482,23 +523,16 @@ async def get_value_history(
         fx = float(fx_rates.get(tx.currency, Decimal("1"))) if tx.currency != "EUR" else 1.0
 
         if tx.type in ("sell", "dividend", "deposit", "interest"):
-            # These added cash — so going backwards, subtract them
             delta = int((amount - fee) / fx)
             daily_cash_delta[tx.trade_date] -= delta
         elif tx.type == "buy":
-            # Buys removed cash — going backwards, add them back
             delta = int((amount + fee) / fx)
             daily_cash_delta[tx.trade_date] += delta
-        elif tx.type == "withdrawal":
-            # Withdrawals removed cash — going backwards, add them back
-            delta = int(amount / fx)
-            daily_cash_delta[tx.trade_date] += delta
-        elif tx.type == "fee":
-            # Fees removed cash — going backwards, add them back
+        elif tx.type in ("withdrawal", "fee"):
             delta = int(amount / fx)
             daily_cash_delta[tx.trade_date] += delta
 
-    # 5. Build daily value series
+    # 5. Build daily value series with historical positions
     daily_prices: dict[int, dict[date, tuple[int, str]]] = defaultdict(dict)
     for row in price_rows:
         daily_prices[row.security_id][row.date] = (row.close_cents, row.currency)
@@ -507,25 +541,48 @@ async def get_value_history(
     if not all_dates:
         return {"data": []}
 
-    # Build cash balance for each date by working backwards from today
-    # Start with current cash and subtract deltas going back in time
+    # Cash balance by date (backwards from today)
     cash_by_date: dict[date, int] = {}
     running_cash = total_cash_now
     for d in reversed(all_dates):
         cash_by_date[d] = running_cash
-        # Apply reverse delta for this date (already computed as reverse)
         running_cash += daily_cash_delta.get(d, 0)
 
-    # Forward-fill prices and FX rates
+    # Determine the active positions for each date
+    # Find the most recent position snapshot on or before each date
     last_price: dict[int, tuple[int, str]] = {}
     last_fx: dict[str, float] = {}
     series = []
 
+    # Pre-compute: for each chart date, what were the positions?
+    # Use the most recent positions_on_date entry on or before that date
+    position_change_dates = sorted(positions_on_date.keys())
+    current_positions: dict[int, float] = {}
+
+    # Start with positions as of the day before from_date
+    for pd in position_change_dates:
+        if pd <= from_date:
+            current_positions = positions_on_date[pd].copy()
+        else:
+            break
+
+    change_idx = 0
+    # Advance change_idx to first date > from_date
+    while change_idx < len(position_change_dates) and position_change_dates[change_idx] <= from_date:
+        change_idx += 1
+
     for d in all_dates:
+        # Apply any position changes up to and including this date
+        while change_idx < len(position_change_dates) and position_change_dates[change_idx] <= d:
+            current_positions = positions_on_date[position_change_dates[change_idx]].copy()
+            change_idx += 1
+
         total_eur_cents = 0
         has_data = False
 
-        for sid, qty in positions.items():
+        for sid, qty in current_positions.items():
+            if qty < 0.001:
+                continue
             if d in daily_prices[sid]:
                 last_price[sid] = daily_prices[sid][d]
             if sid not in last_price:
@@ -543,7 +600,7 @@ async def get_value_history(
                 if fx:
                     total_eur_cents += value_cents / fx
                 else:
-                    total_eur_cents += value_cents  # fallback
+                    total_eur_cents += value_cents
 
             has_data = True
 
