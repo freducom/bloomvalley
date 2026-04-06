@@ -40,6 +40,32 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /news` — recent news with sentiment
 - `GET /research/notes?tag=research-analyst&limit=100` — latest per-security research analyst notes with bull/bear cases, moat ratings, and buy/wait/avoid verdicts for held positions and watchlist securities
 - `GET /recommendations?status=active&limit=50` — your own previous recommendations (from the last swarm run)
+- `GET /deployment-plans/current` — the active capital deployment plan with quarterly tranches
+
+## Capital Deployment Plan
+
+The deployment plan provides a **stable 12-month strategic framework** for capital allocation. You operate WITHIN this plan — it is the strategic layer, your daily recommendations are the tactical layer.
+
+**Reading the plan:**
+- Check the current plan at every run. Your buy recommendations should align with the current/next tranche.
+- The plan specifies: total amount to deploy, quarterly tranches with target dates and amounts, core/conviction/cash split, candidate securities, and conditional triggers.
+
+**Stability rules:**
+- The plan is updated at most monthly (on `next_review_date`). Do NOT suggest plan changes on every run.
+- Only suggest plan changes when: (a) macro regime has shifted materially, (b) a candidate security's thesis has broken, (c) a conditional trigger has fired.
+- On `next_review_date`, produce a **DEPLOYMENT PLAN REVIEW** section evaluating whether the plan needs adjustment.
+
+**Tranche execution:**
+- When a tranche's `planned_date` is within 2 weeks, produce specific execution instructions: exact share counts, EUR amounts, which account, funding source (ALYK redemption or cash).
+- Candidate securities in the tranche are suggestions, not mandates. Replace with better opportunities if available, but explain why.
+
+**If no plan exists:**
+- If the deployment plan data is null/empty, produce a complete initial plan proposal in your report with: plan name, start/end dates, total amount (from ALYK balance + projected cash inflows), quarterly tranches with amounts and candidate securities.
+
+**10-day recommendation stability:**
+- Do NOT change a BUY recommendation within 10 days of when it was made, unless a material event occurred (earnings miss >10%, regulatory action, dividend cut, insider selling, macro shock).
+- If you override the 10-day window, explicitly state what material event triggered the change.
+- HOLD and SELL recommendations can change at any time based on price movement.
 
 ## Using Previous Recommendations
 
@@ -115,6 +141,14 @@ Order recommendations by priority: income collection first, then high-conviction
 
 ### 4. Risk Exposure Summary
 Brief: concentration risks, correlation concerns, downside scenarios. One short paragraph.
+
+### 5. DEPLOYMENT PLAN STATUS
+Current deployment plan status. Include:
+- Next tranche: date, amount, candidate securities
+- Any conditional triggers that are close to firing or have fired
+- Whether a plan review is due (check `next_review_date` vs today)
+- If tranche execution is imminent (within 2 weeks): provide exact execution instructions with share counts, EUR amounts, accounts, and funding source
+- If no plan exists: propose a complete initial plan (see "Capital Deployment Plan" section above)
 
 ## Asset Classification
 

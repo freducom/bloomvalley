@@ -39,6 +39,7 @@ import {
   Sliders,
   Banknote,
   FlaskConical,
+  Milestone,
   type LucideIcon,
 } from "lucide-react";
 import { usePrivacy } from "@/lib/privacy";
@@ -60,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/portfolio", icon: LayoutDashboard },
       { label: "Recommendations", href: "/recommendations", icon: ThumbsUp },
+      { label: "Timeline", href: "/timeline", icon: Milestone },
       { label: "Holdings", href: "/holdings", icon: Briefcase },
       { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
       { label: "Import", href: "/import", icon: Upload },

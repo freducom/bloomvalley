@@ -574,6 +574,64 @@ def digest_analyst_summaries(json_str: str) -> str:
     return "\n".join(lines)
 
 
+# ── Deployment Plans ──
+
+
+def digest_deployment_plan(json_str: str) -> str:
+    """Summarize the current capital deployment plan."""
+    d = _safe_parse(json_str)
+    if not d or not isinstance(d, dict):
+        return "No active deployment plan."
+
+    lines = [f"CAPITAL DEPLOYMENT PLAN: {d.get('name', '?')}"]
+    lines.append(f"Status: {d.get('status', '?')} | "
+                 f"Period: {d.get('startDate', '?')} to {d.get('endDate', '?')}")
+    total = d.get("totalAmountCents", 0)
+    deployed = d.get("deployedAmountCents", 0)
+    lines.append(f"Total: {_cents_to_eur(total)} | Deployed: {_cents_to_eur(deployed)} | "
+                 f"Remaining: {_cents_to_eur(total - deployed)}")
+
+    review = d.get("nextReviewDate")
+    if review:
+        lines.append(f"Next review date: {review}")
+
+    notes = d.get("strategyNotes")
+    if notes:
+        lines.append(f"Strategy: {notes[:500]}")
+
+    tranches = d.get("tranches", [])
+    if tranches:
+        lines.append(f"\nTRANCHES ({len(tranches)}):")
+        for t in tranches:
+            status = t.get("status", "?").upper()
+            label = t.get("quarterLabel", "?")
+            date = t.get("plannedDate", "?")
+            amount = _cents_to_eur(t.get("amountCents", 0))
+            core = t.get("coreAllocationPct", 0)
+            conv = t.get("convictionAllocationPct", 0)
+            cash = t.get("cashBufferPct", 0)
+
+            lines.append(f"  [{status}] {label} — {date} — {amount}")
+            lines.append(f"    Allocation: {core}% core / {conv}% conviction / {cash}% cash buffer")
+
+            candidates = t.get("candidateTickers") or []
+            if candidates:
+                tickers = ", ".join(c.get("ticker", "?") for c in candidates[:8])
+                lines.append(f"    Candidates: {tickers}")
+
+            triggers = t.get("conditionalTriggers") or []
+            if triggers:
+                for tr in triggers:
+                    lines.append(f"    Trigger: {tr.get('condition', '?')} "
+                                 f"→ {tr.get('action', '?')}")
+
+            if t.get("executedDate"):
+                lines.append(f"    Executed: {t['executedDate']} — "
+                             f"{_cents_to_eur(t.get('executedAmountCents', 0))}")
+
+    return "\n".join(lines)
+
+
 # ── Auto-digest dispatcher ──
 
 # Maps endpoint patterns to digest functions
@@ -595,6 +653,7 @@ _DIGEST_MAP: dict[str, callable] = {
     "/dividends/upcoming": digest_dividends,
     "/dividends/income": digest_dividends,
     "/research/notes?tag=analyst_report": digest_analyst_summaries,
+    "/deployment-plans/current": digest_deployment_plan,
 }
 
 

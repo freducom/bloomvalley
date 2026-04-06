@@ -34,6 +34,7 @@ from app.api.v1.chat import router as chat_router
 from app.api.v1.swarm import router as swarm_router
 from app.api.v1.quotes import router as quotes_router
 from app.api.v1.markets import router as markets_router
+from app.api.v1.deployment_plans import router as deployment_plans_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.watchlists import router as watchlists_router
 
@@ -95,5 +96,6 @@ router.include_router(earnings_router, prefix="/earnings", tags=["Earnings"])
 router.include_router(attribution_router, prefix="/attribution", tags=["Attribution"])
 router.include_router(chat_router, prefix="/chat", tags=["Chat"])
 router.include_router(swarm_router, prefix="/swarm", tags=["Swarm"])
+router.include_router(deployment_plans_router, prefix="/deployment-plans", tags=["Deployment Plans"])
 router.include_router(markets_router, prefix="/markets", tags=["Markets"])
 router.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])

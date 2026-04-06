@@ -355,6 +355,7 @@ AGENT_DATA = {
         "/risk/glidepath", "/macro/regime", "/pipelines",
     ],
     "portfolio-manager": [
+        "/deployment-plans/current",
         "/portfolio/holdings", "/portfolio/summary", "/transactions?limit=50",
         "/dividends/upcoming", "/risk/metrics", "/risk/stress-tests",
         "/watchlists/", "/screener/munger", "/insiders/signals",

@@ -4,6 +4,7 @@ from app.db.models.accounts import Account  # noqa: F401
 from app.db.models.alerts import Alert, AlertHistory  # noqa: F401
 from app.db.models.bonds import Bond  # noqa: F401
 from app.db.models.corporate_actions import CorporateAction  # noqa: F401
+from app.db.models.deployment_plans import DeploymentPlan, DeploymentTranche  # noqa: F401
 from app.db.models.fundamentals import SecurityFundamentals, EarningsReport  # noqa: F401
 from app.db.models.dividends import Dividend  # noqa: F401
 from app.db.models.holdings_snapshot import HoldingsSnapshot  # noqa: F401
