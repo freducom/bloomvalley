@@ -85,23 +85,11 @@ interface HeatmapItem {
   weight: number;
 }
 
-interface ExchangeGroup {
+interface MarketStatusEntry {
   label: string;
-  tz: string;
-  openHour: number;
-  openMinute: number;
-  closeHour: number;
-  closeMinute: number;
-  tradingDays: number[];
-  mics: string[];
+  status: "open" | "closed" | "pre-market" | "after-hours";
+  tooltip?: string;
 }
-
-const MARKET_GROUPS: ExchangeGroup[] = [
-  { label: "Nordic", mics: ["XHEL", "XSTO", "XCSE"], tz: "Europe/Helsinki", tradingDays: [1,2,3,4,5], openHour: 10, openMinute: 0, closeHour: 18, closeMinute: 30 },
-  { label: "EU", mics: ["XAMS", "XETR", "XPAR", "XSWX"], tz: "Europe/Paris", tradingDays: [1,2,3,4,5], openHour: 9, openMinute: 0, closeHour: 17, closeMinute: 30 },
-  { label: "London", mics: ["XLON"], tz: "Europe/London", tradingDays: [1,2,3,4,5], openHour: 8, openMinute: 0, closeHour: 16, closeMinute: 30 },
-  { label: "US", mics: ["XNYS", "XNAS", "NMS"], tz: "America/New_York", tradingDays: [1,2,3,4,5], openHour: 9, openMinute: 30, closeHour: 16, closeMinute: 0 },
-];
 
 function getHeatmapColor(pct: number): string {
   if (pct >= 5) return "#16a34a";
@@ -115,44 +103,6 @@ function getHeatmapColor(pct: number): string {
   return "#dc2626";
 }
 
-function getExchangeInfo(g: ExchangeGroup): { status: string; detail: string; color: string } {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: g.tz, hour: "2-digit", minute: "2-digit", hour12: false, weekday: "short",
-  }).formatToParts(now);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
-  const dayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
-  const day = dayMap[get("weekday")] ?? 0;
-  const minutes = parseInt(get("hour"), 10) * 60 + parseInt(get("minute"), 10);
-  const openMin = g.openHour * 60 + g.openMinute;
-  const closeMin = g.closeHour * 60 + g.closeMinute;
-
-  if (!g.tradingDays.includes(day)) {
-    let daysAhead = 1;
-    for (let i = 1; i <= 7; i++) { if (g.tradingDays.includes((day + i) % 7)) { daysAhead = i; break; } }
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return { status: "Closed", detail: `Opens ${dayNames[(day + daysAhead) % 7]} ${String(g.openHour).padStart(2, "0")}:${String(g.openMinute).padStart(2, "0")}`, color: "text-terminal-negative" };
-  }
-  if (minutes >= openMin && minutes < closeMin) {
-    const left = closeMin - minutes;
-    const h = Math.floor(left / 60); const m = left % 60;
-    return { status: "Open", detail: `Closes in ${h > 0 ? h + "h " : ""}${m}m`, color: "text-terminal-positive" };
-  }
-  if (minutes < openMin) {
-    const left = openMin - minutes;
-    const h = Math.floor(left / 60); const m = left % 60;
-    return { status: "Closed", detail: `Opens in ${h > 0 ? h + "h " : ""}${m}m`, color: "text-terminal-negative" };
-  }
-  let daysAhead = 1;
-  for (let i = 1; i <= 7; i++) { if (g.tradingDays.includes((day + i) % 7)) { daysAhead = i; break; } }
-  if (daysAhead === 1) {
-    const left = 24 * 60 - minutes + openMin;
-    const h = Math.floor(left / 60); const m = left % 60;
-    return { status: "Closed", detail: `Opens in ${h}h ${m}m`, color: "text-terminal-negative" };
-  }
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  return { status: "Closed", detail: `Opens ${dayNames[(day + daysAhead) % 7]} ${String(g.openHour).padStart(2, "0")}:${String(g.openMinute).padStart(2, "0")}`, color: "text-terminal-negative" };
-}
 
 // --- Helpers ---
 
@@ -310,32 +260,29 @@ export default function FullscreenDashboard() {
     return () => clearInterval(i);
   }, []);
 
-  // Market status
-  const getMarketStatus = useCallback(() => {
-    const hel = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Helsinki",
-      hour: "numeric",
-      minute: "numeric",
-      weekday: "short",
-      hour12: false,
-    }).formatToParts(time);
+  // Market status from backend (holiday/half-day aware)
+  const [marketEntries, setMarketEntries] = useState<MarketStatusEntry[]>([]);
 
-    let hour = 0, minute = 0, weekday = "";
-    for (const p of hel) {
-      if (p.type === "hour") hour = parseInt(p.value);
-      if (p.type === "minute") minute = parseInt(p.value);
-      if (p.type === "weekday") weekday = p.value;
+  useEffect(() => {
+    function fetchMarkets() {
+      apiGetRaw<{ data: MarketStatusEntry[] }>("/markets/status")
+        .then((res) => setMarketEntries(res.data))
+        .catch(() => {});
     }
-    const m = hour * 60 + minute;
-    const isWeekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday);
+    fetchMarkets();
+    const interval = setInterval(fetchMarkets, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
-    if (!isWeekday) return { label: "Market Closed", color: "text-terminal-negative", dot: "bg-terminal-negative" };
-    if (m >= 540 && m < 600) return { label: "Pre-Market", color: "text-terminal-warning", dot: "bg-terminal-warning" };
-    if (m >= 600 && m < 1110) return { label: "Market Open", color: "text-terminal-positive", dot: "bg-terminal-positive" };
+  // Derive header market status: show "Open" if any non-crypto market is open
+  const headerMarket = (() => {
+    const nonCrypto = marketEntries.filter((e) => e.label !== "Crypto");
+    const anyOpen = nonCrypto.some((e) => e.status === "open");
+    const anyPre = nonCrypto.some((e) => e.status === "pre-market");
+    if (anyOpen) return { label: "Market Open", color: "text-terminal-positive", dot: "bg-terminal-positive" };
+    if (anyPre) return { label: "Pre-Market", color: "text-terminal-warning", dot: "bg-terminal-warning" };
     return { label: "Market Closed", color: "text-terminal-negative", dot: "bg-terminal-negative" };
-  }, [time]);
-
-  const marketStatus = getMarketStatus();
+  })();
 
   // Fetch data
   const fetchAll = useCallback(async () => {
@@ -454,8 +401,8 @@ export default function FullscreenDashboard() {
         <div className="flex items-center gap-3">
           {/* Market status */}
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${marketStatus.dot} ${marketStatus.dot.includes("positive") ? "animate-pulse" : ""}`} />
-            <span className={`font-mono text-sm ${marketStatus.color}`}>{marketStatus.label}</span>
+            <div className={`w-2 h-2 rounded-full ${headerMarket.dot} ${headerMarket.dot.includes("positive") ? "animate-pulse" : ""}`} />
+            <span className={`font-mono text-sm ${headerMarket.color}`}>{headerMarket.label}</span>
           </div>
 
           {/* Clock */}
@@ -572,31 +519,26 @@ export default function FullscreenDashboard() {
             Markets
           </div>
           <div className="flex-1 overflow-y-auto space-y-3">
-            {MARKET_GROUPS.map((g) => {
-              const info = getExchangeInfo(g);
+            {marketEntries.map((entry) => {
+              const isOpen = entry.status === "open";
+              const isPre = entry.status === "pre-market";
+              const isAfter = entry.status === "after-hours";
+              const dotClass = isOpen ? "bg-terminal-positive animate-pulse" : (isPre || isAfter) ? "bg-terminal-warning" : "bg-terminal-negative";
+              const statusLabel = isOpen ? "Open" : isPre ? "Pre" : isAfter ? "After" : "Closed";
+              const statusColor = isOpen ? "text-terminal-positive" : (isPre || isAfter) ? "text-terminal-warning" : "text-terminal-negative";
               return (
-                <div key={g.label} className="flex items-center justify-between py-2 border-b border-terminal-border last:border-0">
+                <div key={entry.label} className="flex items-center justify-between py-2 border-b border-terminal-border last:border-0">
                   <div className="flex items-center gap-2.5">
-                    <div className={`w-2.5 h-2.5 rounded-full ${info.status === "Open" ? "bg-terminal-positive animate-pulse" : "bg-terminal-negative"}`} />
-                    <span className="text-sm font-medium text-terminal-text-primary">{g.label}</span>
+                    <div className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
+                    <span className="text-sm font-medium text-terminal-text-primary">{entry.label}</span>
                   </div>
                   <div className="text-right">
-                    <div className={`text-sm font-mono ${info.color}`}>{info.status}</div>
-                    <div className="text-[10px] text-terminal-text-tertiary">{info.detail}</div>
+                    <div className={`text-sm font-mono ${statusColor}`}>{statusLabel}</div>
+                    <div className="text-[10px] text-terminal-text-tertiary">{entry.tooltip || ""}</div>
                   </div>
                 </div>
               );
             })}
-            <div className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-terminal-positive animate-pulse" />
-                <span className="text-sm font-medium text-terminal-text-primary">Crypto</span>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-mono text-terminal-positive">Open</div>
-                <div className="text-[10px] text-terminal-text-tertiary">24/7</div>
-              </div>
-            </div>
           </div>
         </div>
 

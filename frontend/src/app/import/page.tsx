@@ -200,8 +200,8 @@ function AddSingleHolding() {
     setError(null);
     setSuccess(null);
 
-    const qty = parseFloat(quantity);
-    const price = parseFloat(avgPrice) || 0;
+    const qty = parseFloat(quantity.replace(",", "."));
+    const price = parseFloat(avgPrice.replace(",", ".")) || 0;
     const priceCents = Math.round(price * 100);
     const totalCents = Math.round(qty * price * 100);
 

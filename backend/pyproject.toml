@@ -22,6 +22,7 @@ dependencies = [
     "apscheduler>=3.10",
     "beautifulsoup4",
     "lxml",
+    "exchange_calendars",
 ]
 
 [project.optional-dependencies]

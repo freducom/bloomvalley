@@ -218,7 +218,7 @@ async def get_holdings(
                 cost_eur_cents = int(total_cost / float(fx))
 
         # Average cost per unit
-        avg_cost_cents = int(total_cost / float(net_qty)) if net_qty > 0 else 0
+        avg_cost_cents = round(total_cost / float(net_qty)) if net_qty > 0 else 0
 
         # Unrealized P&L
         unrealized_pnl_cents = None

@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,15 @@ import httpx
 import yaml
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+from data_digest import (
+    auto_digest,
+    digest_analyst_summaries,
+    digest_fundamentals_for_security,
+    digest_insider_signals,
+    digest_news,
+    digest_technical,
+)
 
 # API key for backend authentication
 _API_KEY = os.environ.get("API_KEY", "")
@@ -351,6 +361,7 @@ AGENT_DATA = {
         "/news?limit=20", "/macro/summary", "/macro/regime",
         "/fundamentals?limit=200", "/recommendations?status=active&limit=50",
         "/research/notes?tag=research-analyst&limit=100",
+        "/research/notes?tag=analyst_report&limit=10",
     ],
 }
 
@@ -368,22 +379,36 @@ def load_agent_prompt(agent_name: str) -> str:
     raise FileNotFoundError(f"Agent definition not found for: {agent_name}")
 
 
-def build_prompt(agent_name: str, agent_def: str, data: dict[str, str], date_str: str) -> tuple[str, str]:
+def build_prompt(agent_name: str, agent_def: str, data: dict[str, str],
+                 date_str: str, cfg: dict | None = None) -> tuple[str, str]:
     """Build system prompt and user prompt for an agent."""
+    use_digest = cfg.get("digest_data", False) if cfg else False
+    use_short = cfg.get("short_prompts", False) if cfg else False
+
     system = f"""You are the {agent_name} for the Bloomvalley investment terminal.
 Follow your agent definition exactly. Today's date is {date_str}.
 The backend API data has been pre-fetched and provided below.
 Produce your complete analysis report. Be specific with numbers, dates, and actionable recommendations."""
 
-    data_section = "\n\n".join(
-        f"### Data from {ep}\n```json\n{content[:15000]}\n```"
-        for ep, content in data.items()
-        if not content.startswith("ERROR")
-    )
+    if use_digest:
+        digested = auto_digest(data)
+        data_section = "\n\n".join(
+            f"### {label}\n{content}"
+            for label, content in digested.items()
+            if content
+        )
+    else:
+        data_section = "\n\n".join(
+            f"### Data from {ep}\n```json\n{content[:15000]}\n```"
+            for ep, content in data.items()
+            if not content.startswith("ERROR")
+        )
+
+    prompt_def = _build_short_prompt(agent_name, agent_def) if use_short else agent_def
 
     user_prompt = f"""# Agent Definition
 
-{agent_def}
+{prompt_def}
 
 # Pre-fetched API Data
 
@@ -395,6 +420,57 @@ Analyze the data above and produce your complete report following the format in 
 Today is {date_str}. Be concrete and specific."""
 
     return system, user_prompt
+
+
+def _build_short_prompt(agent_name: str, full_def: str) -> str:
+    """Extract essential sections from a full agent definition for smaller models.
+
+    Keeps: role paragraph, data access list, output format section.
+    Strips: lengthy methodology explanations, detailed frameworks.
+    """
+    lines = full_def.split("\n")
+    result = []
+    in_output_section = False
+    in_role_section = True
+    role_lines = 0
+
+    for line in lines:
+        # Always keep headings
+        if line.startswith("#"):
+            header_lower = line.lower()
+            if any(k in header_lower for k in ["output", "format", "report structure",
+                                                  "deliverable", "response format"]):
+                in_output_section = True
+                in_role_section = False
+                result.append(line)
+                continue
+            elif any(k in header_lower for k in ["data", "api", "endpoint", "access"]):
+                in_output_section = False
+                in_role_section = False
+                result.append(line)
+                continue
+            elif any(k in header_lower for k in ["framework", "methodology", "process",
+                                                    "workflow", "detailed", "guidelines"]):
+                in_output_section = False
+                in_role_section = False
+                continue  # Skip these sections entirely
+            else:
+                in_output_section = False
+                in_role_section = False
+                continue  # Skip unknown sections
+
+        # Keep the role description (first ~15 lines before first heading)
+        if in_role_section:
+            role_lines += 1
+            if role_lines <= 20:
+                result.append(line)
+            continue
+
+        # Keep output format section
+        if in_output_section:
+            result.append(line)
+
+    return "\n".join(result)
 
 
 # ── Pipeline Refresh ──
@@ -703,7 +779,7 @@ async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
                 pass
 
         # Build prompt
-        system, user_prompt = build_prompt(agent_name, agent_def, data, date_str)
+        system, user_prompt = build_prompt(agent_name, agent_def, data, date_str, cfg)
 
         # Call LLM — research-analyst gets extra time (typically 450-570s)
         agent_timeout = 900 if agent_name == "research-analyst" else 600
@@ -719,6 +795,218 @@ async def run_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
     except Exception as e:
         elapsed = round(time.time() - start, 1)
         print(f"  [{agent_name}] FAILED after {elapsed}s: {e}", flush=True)
+        return None
+
+
+# ── Per-Security Agent Execution ──
+
+_RESEARCH_PER_SECURITY_TEMPLATE = """You are the research-analyst for the Bloomvalley investment terminal.
+Analyze {ticker} ({name}) and produce your report in EXACTLY this format.
+Today is {date_str}.
+
+{data_section}
+
+Write your analysis:
+
+## {n}. {ticker} — {name}
+
+**Investment Thesis**: [2-3 paragraphs covering the key investment case]
+
+### Bull Case
+[Best realistic upward scenario with target price if available]
+
+### Bear Case
+[Worst realistic downward scenario with downside target]
+
+### Base Case
+[Most likely outcome over 12 months]
+
+**Moat Assessment**: [None/Narrow/Wide] — [one-line reasoning]
+**Earnings Quality**: [High/Medium/Low/Red Flag]
+**Verdict: [BUY/HOLD/SELL/WAIT/AVOID]**
+
+Be specific with numbers. Use the data provided."""
+
+_TECHNICAL_PER_SECURITY_TEMPLATE = """You are the technical-analyst for the Bloomvalley investment terminal.
+Provide technical analysis for {ticker} ({name}). Today is {date_str}.
+
+{data_section}
+
+Write your analysis:
+
+### {n}. {ticker} — {name}
+
+**Trend**: [Bullish/Bearish/Neutral] ([timeframe])
+**Key Levels**: Support [price] | Resistance [price]
+**RSI**: [value] ([overbought/oversold/neutral])
+**MACD**: [bullish/bearish crossover or neutral]
+**Moving Averages**: [Price vs SMA50/SMA200 relationship]
+**Entry Signal**: [specific price or "none"]
+**Exit Signal**: [specific price or "none"]
+**Confidence**: [High/Medium/Low]
+**Risk/Reward**: [upside] vs [downside] = [ratio]
+
+Be specific with price levels from the data."""
+
+
+async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
+    """Run research-analyst or technical-analyst with per-security LLM calls.
+
+    Instead of one massive prompt for all securities, loops through each security
+    individually with focused data and prompts. Much better for smaller models.
+    """
+    backend_url = cfg["backend_url"]
+    per_sec_cfg = cfg.get("per_security", {})
+    batch_size = per_sec_cfg.get("batch_size", 1)
+    timeout_per = per_sec_cfg.get("timeout_per_call", 180)
+    max_concurrent = per_sec_cfg.get("max_concurrent", 1)
+
+    print(f"  [{agent_name}] Starting (per-security mode, batch={batch_size})...", flush=True)
+    start = time.time()
+
+    try:
+        # Fetch bulk data once
+        bulk_endpoints = ["/portfolio/holdings", "/fundamentals?limit=200",
+                          "/insiders/signals", "/news?limit=30", "/prices/latest"]
+        if agent_name == "research-analyst":
+            bulk_endpoints.append("/watchlists/")
+        data = await fetch_data(backend_url, bulk_endpoints)
+
+        # Parse holdings
+        holdings_raw = data.get("/portfolio/holdings", "[]")
+        try:
+            holdings = json.loads(holdings_raw)
+            if isinstance(holdings, dict):
+                holdings = holdings.get("data", [])
+        except (json.JSONDecodeError, TypeError):
+            holdings = []
+
+        # Parse watchlist items
+        watchlist_items = []
+        wl_raw = data.get("/watchlists/items", "")
+        if wl_raw and not wl_raw.startswith("ERROR"):
+            try:
+                watchlist_items = json.loads(wl_raw).get("data", [])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Build security list: held positions + watchlist batch
+        securities = []
+        seen_tickers = set()
+        for h in holdings:
+            ticker = h.get("ticker")
+            if ticker and ticker not in seen_tickers:
+                securities.append({
+                    "ticker": ticker,
+                    "name": h.get("name", ticker),
+                    "securityId": h.get("securityId"),
+                    "is_watchlist": False,
+                })
+                seen_tickers.add(ticker)
+
+        for item in watchlist_items:
+            ticker = item.get("ticker")
+            if ticker and ticker not in seen_tickers:
+                securities.append({
+                    "ticker": ticker,
+                    "name": item.get("securityName") or item.get("name", ticker),
+                    "securityId": item.get("securityId"),
+                    "is_watchlist": True,
+                })
+                seen_tickers.add(ticker)
+
+        if not securities:
+            print(f"  [{agent_name}] No securities to analyze", flush=True)
+            return None
+
+        # Select template
+        is_technical = agent_name == "technical-analyst"
+        template = _TECHNICAL_PER_SECURITY_TEMPLATE if is_technical else _RESEARCH_PER_SECURITY_TEMPLATE
+
+        # For technical analyst, fetch OHLC data in bulk
+        ohlc_data = {}
+        if is_technical:
+            for sec in securities[:40]:
+                sid = sec.get("securityId")
+                if sid:
+                    try:
+                        extra = await fetch_data(backend_url,
+                                                 [f"/charts/{sid}/ohlc?period=6M&indicators=sma,ema,rsi,macd,bb"])
+                        ohlc_data[sec["ticker"]] = list(extra.values())[0] if extra else ""
+                    except Exception:
+                        pass
+
+        # Raw data strings for digest functions
+        fundamentals_raw = data.get("/fundamentals?limit=200", "")
+        insiders_raw = data.get("/insiders/signals", "")
+        news_raw = data.get("/news?limit=30", "")
+
+        # Process securities
+        semaphore = asyncio.Semaphore(max_concurrent)
+        all_reports = []
+
+        async def analyze_security(n: int, sec: dict) -> str | None:
+            ticker = sec["ticker"]
+            name = sec["name"]
+            prefix = "W-" if sec["is_watchlist"] else ""
+
+            # Build per-security data section
+            if is_technical:
+                ohlc_raw = ohlc_data.get(ticker, "")
+                data_section = digest_technical(ohlc_raw, ticker)
+            else:
+                parts = []
+                fund_text = digest_fundamentals_for_security(fundamentals_raw, ticker)
+                if fund_text:
+                    parts.append(fund_text)
+                insider_text = digest_insider_signals(insiders_raw, ticker)
+                if insider_text and "No insider" not in insider_text:
+                    parts.append(insider_text)
+                news_text = digest_news(news_raw, ticker)
+                if news_text and "No recent" not in news_text:
+                    parts.append(news_text)
+                data_section = "\n\n".join(parts) if parts else f"Limited data available for {ticker}."
+
+            # Build prompt from template
+            prompt = template.format(
+                ticker=ticker, name=name, date_str=date_str,
+                n=f"{prefix}{n}", data_section=data_section,
+            )
+
+            async with semaphore:
+                try:
+                    report = await call_llm(prompt, "", cfg, timeout=timeout_per)
+                    return report
+                except Exception as e:
+                    print(f"  [{agent_name}] Failed for {ticker}: {e}", flush=True)
+                    return None
+
+        # Run all securities (batch_size controls how many in parallel)
+        tasks = [analyze_security(i + 1, sec) for i, sec in enumerate(securities)]
+        results = await asyncio.gather(*tasks)
+
+        # Collect successful reports
+        posted = 0
+        for sec, report in zip(securities, results):
+            if report:
+                all_reports.append(report)
+                posted += 1
+
+        # Concatenate into combined report
+        combined = "\n\n---\n\n".join(all_reports)
+
+        # Store combined report
+        await store_report(backend_url, agent_name, combined)
+
+        elapsed = round(time.time() - start, 1)
+        print(f"  [{agent_name}] Complete ({elapsed}s, {len(combined)} chars, "
+              f"{posted}/{len(securities)} securities)", flush=True)
+        return combined
+
+    except Exception as e:
+        elapsed = round(time.time() - start, 1)
+        print(f"  [{agent_name}] FAILED after {elapsed}s: {e}", flush=True)
+        traceback.print_exc()
         return None
 
 
@@ -826,21 +1114,37 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
     print(f"  [pm] Extracting recommendations from report (brief={brief_type})...", flush=True)
 
     try:
-        result = await call_llm(
-            f"Portfolio manager report:\n\n{report}",
-            EXTRACT_RECS_PROMPT,
-            cfg,
-        )
+        # Try to parse structured JSON block from PM output directly (avoids second LLM call)
+        recs = None
+        json_match = re.search(r'```json\s*\n(\[[\s\S]*?\])\s*\n```', report)
+        if json_match:
+            try:
+                recs = json.loads(json_match.group(1))
+                if isinstance(recs, list) and len(recs) > 0:
+                    print(f"  [pm] Parsed {len(recs)} recommendations from JSON block", flush=True)
+                else:
+                    recs = None
+            except (json.JSONDecodeError, TypeError):
+                recs = None
 
-        # Parse JSON — handle markdown fences if present
-        text = result.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        # Fallback: use second LLM call to extract recommendations
+        if recs is None:
+            print("  [pm] No JSON block found, using LLM extraction fallback...", flush=True)
+            result = await call_llm(
+                f"Portfolio manager report:\n\n{report}",
+                EXTRACT_RECS_PROMPT,
+                cfg,
+            )
 
-        recs = json.loads(text)
-        if not isinstance(recs, list):
-            print("  [pm] LLM did not return a JSON array", flush=True)
-            return
+            # Parse JSON — handle markdown fences if present
+            text = result.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+            recs = json.loads(text)
+            if not isinstance(recs, list):
+                print("  [pm] LLM did not return a JSON array", flush=True)
+                return
 
         # Resolve tickers to security IDs
         async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
@@ -1002,12 +1306,19 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
     semaphore = asyncio.Semaphore(max_parallel)
     completed_count = 0
 
+    # Use per-security mode for research + technical when enabled
+    per_sec_enabled = cfg.get("per_security", {}).get("enabled", False)
+    per_sec_agents = {"research-analyst", "technical-analyst"}
+
     async def run_with_limit(agent_name):
         nonlocal completed_count
         async with semaphore:
             await report_status(backend_url, "running", agent=agent_name,
                                 completed=completed_count, total=total_agents)
-            result = await run_agent(agent_name, cfg, date_str)
+            if per_sec_enabled and agent_name in per_sec_agents:
+                result = await run_per_security_agent(agent_name, cfg, date_str)
+            else:
+                result = await run_agent(agent_name, cfg, date_str)
             completed_count += 1
             return result
 
@@ -1027,11 +1338,8 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
         elif agent_name == "technical-analyst":
             await extract_technical_notes(result, backend_url, date_str)
 
-    # Step 4: Close old recommendations
-    if "portfolio-manager" in agents:
-        await close_old_recommendations(backend_url)
-
-    # Step 5: Run portfolio manager last (needs analyst outputs)
+    # Step 4: Run portfolio manager last (needs analyst outputs + previous recommendations)
+    # NOTE: old recs are closed AFTER PM runs so it can compare against them
     if "portfolio-manager" in agents:
         print("\n[swarm] Running portfolio manager (final synthesis)...", flush=True)
         await report_status(backend_url, "running", agent="portfolio-manager",
@@ -1039,8 +1347,9 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
         pm_report = await run_agent("portfolio-manager", cfg, date_str)
         completed_count += 1
 
-        # Step 6: Extract and post structured recommendations from PM report
+        # Step 5: Close old recs, then post new ones from PM report
         if pm_report:
+            await close_old_recommendations(backend_url)
             await report_status(backend_url, "running", message="Posting recommendations...")
             await extract_and_post_recommendations(pm_report, cfg, date_str, brief_type)
 
@@ -1064,7 +1373,11 @@ async def run_research_only(cfg: dict):
     await report_status(backend_url, "running", agent="research-analyst",
                         completed=0, total=1, message="Watchlist rotation")
     start = time.time()
-    report = await run_agent("research-analyst", cfg, date_str)
+    per_sec_enabled = cfg.get("per_security", {}).get("enabled", False)
+    if per_sec_enabled:
+        report = await run_per_security_agent("research-analyst", cfg, date_str)
+    else:
+        report = await run_agent("research-analyst", cfg, date_str)
     if report:
         await extract_per_security_notes(report, backend_url, date_str)
     elapsed = round(time.time() - start, 1)

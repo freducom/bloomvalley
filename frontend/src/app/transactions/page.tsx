@@ -151,9 +151,9 @@ export default function TransactionsPage() {
       if (editValues.tradeDate) body.trade_date = editValues.tradeDate;
       if (editValues.type) body.type = editValues.type;
       if (editValues.quantity) body.quantity = editValues.quantity;
-      if (editValues.priceCents !== undefined) body.price_cents = Math.round(parseFloat(editValues.priceCents || "0") * 100);
-      if (editValues.totalCents !== undefined) body.total_cents = Math.round(parseFloat(editValues.totalCents || "0") * 100);
-      if (editValues.feeCents !== undefined) body.fee_cents = Math.round(parseFloat(editValues.feeCents || "0") * 100);
+      if (editValues.priceCents !== undefined) body.price_cents = Math.round(parseFloat((editValues.priceCents || "0").replace(",", ".")) * 100);
+      if (editValues.totalCents !== undefined) body.total_cents = Math.round(parseFloat((editValues.totalCents || "0").replace(",", ".")) * 100);
+      if (editValues.feeCents !== undefined) body.fee_cents = Math.round(parseFloat((editValues.feeCents || "0").replace(",", ".")) * 100);
       if (editValues.notes !== undefined) body.notes = editValues.notes || null;
       await apiPut(`/transactions/${editingId}`, body);
       setEditingId(null);

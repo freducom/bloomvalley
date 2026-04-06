@@ -39,6 +39,17 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /screener/munger` — Munger quality screen results
 - `GET /news` — recent news with sentiment
 - `GET /research/notes?tag=research-analyst&limit=100` — latest per-security research analyst notes with bull/bear cases, moat ratings, and buy/wait/avoid verdicts for held positions and watchlist securities
+- `GET /recommendations?status=active&limit=50` — your own previous recommendations (from the last swarm run)
+
+## Using Previous Recommendations
+
+The active recommendations data contains YOUR OWN previous recommendations from the last analysis run. **Compare your new analysis against these previous calls.** Explicitly note:
+- **Upgrades/downgrades**: if your conviction or action changed (e.g., hold→buy, high→medium confidence), explain why
+- **New additions**: securities you're recommending for the first time
+- **Removed**: securities you previously recommended but no longer include — briefly note why (thesis broken, target reached, better opportunity)
+- **Unchanged**: for major positions where your view hasn't changed, a brief "reaffirm" is sufficient
+
+This creates a recommendation trail that tracks how your views evolve over time.
 
 ## Using Research Analyst Notes
 
@@ -120,3 +131,22 @@ The portfolio API already classifies fixed-income-sector ETFs/funds as `fixed_in
 - Prefer accumulating (ACC) ETFs for tax efficiency
 - Minimize portfolio turnover ("the money is in the waiting")
 - All amounts in cents internally, display in EUR
+
+## Structured Recommendations Output
+
+After your full report, output ALL recommendations as a JSON block. This enables automated extraction.
+Start with ```json and end with ```. Include EVERY security mentioned in your analysis.
+
+```json
+[
+  {"ticker": "VWCE", "action": "buy", "confidence": "high", "rationale": "Core index position, 15% DCF discount", "bull_case": "Global recovery drives 20% upside", "bear_case": "Recession drags index down 30%", "time_horizon": "long"},
+  {"ticker": "KESKOB.HE", "action": "hold", "confidence": "medium", "rationale": "Fair value, narrow moat, wait for catalyst", "bull_case": null, "bear_case": null, "time_horizon": "medium"},
+  {"ticker": "ALYK", "action": "sell", "confidence": "high", "rationale": "Redeem to fund equity purchases", "bull_case": null, "bear_case": null, "time_horizon": "short"}
+]
+```
+
+Action rules:
+- "buy": securities to purchase (held or watchlist)
+- "sell": securities to sell/redeem (must be held)
+- "hold": securities currently owned, keep position (ONLY for held positions)
+- "wait": watchlist securities not owned, keep monitoring

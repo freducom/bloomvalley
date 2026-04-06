@@ -83,3 +83,23 @@ research_schedule:
   - "0 1 * * *"    # 01:00 AM
   - "0 3 * * *"    # 03:00 AM
   - "0 5 * * *"    # 05:00 AM
+
+# ── Model optimization settings ──
+# These improve analysis quality for smaller local models (gemma4, qwen3).
+# For Claude CLI/API, defaults are fine (digest_data: true is beneficial for all).
+
+# Pre-digest API data into readable text (vs raw JSON dumps)
+# Recommended for all providers — reduces prompt noise
+digest_data: false
+
+# Use shortened agent definitions (for smaller models)
+# Strips verbose methodology text, keeps role + output format
+short_prompts: false
+
+# Per-security execution for research-analyst and technical-analyst
+# Instead of one massive prompt, loops through each security individually
+per_security:
+  enabled: false       # Set true for local models
+  batch_size: 1        # Securities per LLM call (1 for gemma4, 3-5 for Claude)
+  timeout_per_call: 180  # Seconds per individual call
+  max_concurrent: 1    # Parallel per-security calls (limited by GPU VRAM)
