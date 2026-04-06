@@ -195,8 +195,13 @@ async def dividend_history(
     security_id: int | None = Query(None, alias="securityId"),
     year: int | None = Query(None),
     limit: int = Query(200, ge=1, le=1000),
+    held_only: bool = Query(True, alias="heldOnly"),
 ):
-    """Historical dividend events, optionally filtered."""
+    """Historical dividend events, optionally filtered.
+
+    By default (heldOnly=true), only returns dividends for securities that
+    were actually held on the ex-date, based on transaction history.
+    """
     query = (
         select(DividendEvent, Security)
         .join(Security, DividendEvent.security_id == Security.id)
@@ -215,6 +220,57 @@ async def dividend_history(
     async with async_session() as session:
         result = await session.execute(query)
         rows = result.all()
+
+    # If held_only, filter to dividends where we held the security on the ex-date
+    if held_only and not security_id:
+        # Build historical positions from transactions (same approach as value-history)
+        async with async_session() as session:
+            tx_result = await session.execute(
+                select(
+                    Transaction.trade_date,
+                    Transaction.type,
+                    Transaction.security_id,
+                    Transaction.quantity,
+                )
+                .where(Transaction.security_id.isnot(None))
+                .where(Transaction.type.in_([
+                    "buy", "sell", "transfer_in", "transfer_out",
+                ]))
+                .order_by(Transaction.trade_date)
+            )
+            txns = tx_result.all()
+
+        # Build cumulative position deltas by date
+        from collections import defaultdict
+        deltas_by_date: dict[date, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+        for tx in txns:
+            qty = float(tx.quantity or 0)
+            if tx.type in ("buy", "transfer_in"):
+                deltas_by_date[tx.trade_date][tx.security_id] += qty
+            else:
+                deltas_by_date[tx.trade_date][tx.security_id] -= qty
+
+        # Build sorted list of (date, {sid: cumulative_qty})
+        sorted_dates = sorted(deltas_by_date.keys())
+        cumulative: dict[int, float] = defaultdict(float)
+        snapshots: list[tuple[date, dict[int, float]]] = []
+        for d in sorted_dates:
+            for sid, delta in deltas_by_date[d].items():
+                cumulative[sid] += delta
+            snapshots.append((d, {sid: qty for sid, qty in cumulative.items()}))
+
+        def _was_held(sid: int, on_date: date) -> bool:
+            """Check if security was held on a given date."""
+            # Find the last snapshot on or before on_date
+            pos = {}
+            for snap_date, snap_pos in snapshots:
+                if snap_date <= on_date:
+                    pos = snap_pos
+                else:
+                    break
+            return pos.get(sid, 0) > 0.001
+
+        rows = [(event, sec) for event, sec in rows if _was_held(sec.id, event.ex_date)]
 
     data = []
     for event, sec in rows:
