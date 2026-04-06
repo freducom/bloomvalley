@@ -55,6 +55,12 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /dividends/events?securityId={id}` — dividend history
 - `GET /news/security/{securityId}` — security news
 
+## News Source Credibility
+
+News items have a `source` field. Apply different weight based on credibility:
+- **High credibility** (factual reporting): `google_news`, `regional_rss` (CNBC, ECB, YLE, FT, Dagens Industri) — treat as reliable facts
+- **Lower credibility** (opinion/analysis): `substack` — these are individual analyst opinion pieces, not verified reporting. Useful for investment theses and alternative viewpoints, but never cite as factual news. When referencing Substack content, label it as "opinion" or "commentary" and note the author/publication.
+
 ## Earnings Quality Analysis
 
 For every security with reportable earnings, you MUST perform an earnings quality assessment. Focus on the metrics management teams hope nobody checks — the divergences between reported earnings and cash reality that precede every major blowup.

@@ -75,6 +75,8 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /portfolio/holdings` — current portfolio (check sector exposure)
 - `GET /watchlists/` — watchlist securities by sector
 
+**News source credibility:** Items with source `substack` are opinion/commentary pieces, not factual news. Weight them lower than `google_news` or `regional_rss` (CNBC, ECB, YLE, FT). Useful for alternative macro viewpoints but do not treat as confirmed data.
+
 ## Output Format
 
 1. **Regime Assessment** — current phase in the cycle with confidence level and estimated months until transition

@@ -58,6 +58,35 @@ REGIONAL_FEEDS = [
         "fallback_url": None,
         "is_global": True,
     },
+    # Substack feeds — opinion/analysis, not hard news. Treat with lower weight.
+    {
+        "name": "Substack: The Economist Off The Charts",
+        "url": "https://theeconomistoffthecharts.substack.com/feed",
+        "fallback_url": None,
+        "is_global": True,
+        "category": "substack",
+    },
+    {
+        "name": "Substack: Michael J Burry",
+        "url": "https://michaeljburry.substack.com/feed",
+        "fallback_url": None,
+        "is_global": True,
+        "category": "substack",
+    },
+    {
+        "name": "Substack: TSCSW",
+        "url": "https://tscsw.substack.com/feed",
+        "fallback_url": None,
+        "is_global": True,
+        "category": "substack",
+    },
+    {
+        "name": "Substack: Business Model Mastery",
+        "url": "https://bizmodelmastery.substack.com/feed",
+        "fallback_url": None,
+        "is_global": True,
+        "category": "substack",
+    },
 ]
 
 
@@ -212,6 +241,7 @@ async def _fetch_feed(
                     "summary": summary,
                     "source_name": feed["name"],
                     "is_global": feed["is_global"],
+                    "category": feed.get("category"),
                 }
             )
     except ElementTree.ParseError as e:
@@ -312,10 +342,11 @@ class RegionalNewsPipeline(PipelineAdapter):
                 if rec["fingerprint"] in existing_fps:
                     continue
 
+                source_tag = "substack" if rec.get("category") == "substack" else "regional_rss"
                 news_item = NewsItem(
                     title=rec["title"][:500],
                     url=rec["url"],
-                    source="regional_rss",
+                    source=source_tag,
                     published_at=rec["published_at"],
                     summary=rec.get("summary"),
                     fingerprint=rec["fingerprint"],
