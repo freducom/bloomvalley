@@ -135,6 +135,7 @@ async def call_ollama(prompt: str, system: str, cfg: dict) -> str:
                 ],
                 "stream": False,
                 "think": False,
+                "keep_alive": 0,
                 "options": {
                     "num_predict": cfg["ollama"].get("max_tokens", 8192),
                 },
@@ -539,6 +540,16 @@ _SECTION_RE = re.compile(
     r"^#{2,3} (?:W-)?(\d+)\. ([A-Z][A-Z0-9._-]+) — (.+?)$",
     re.MULTILINE,
 )
+
+
+def _strip_foreign_fundamentals(text: str, ticker: str) -> str:
+    """Remove any FUNDAMENTALS: blocks that don't belong to the target ticker."""
+    return re.sub(
+        r"\n*FUNDAMENTALS:\s+(?!" + re.escape(ticker) + r"\b)\S+.*",
+        "",
+        text,
+        flags=re.DOTALL,
+    ).rstrip()
 
 
 def _parse_research_sections(report: str) -> list[dict]:
@@ -977,6 +988,9 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
             async with semaphore:
                 try:
                     report = await call_llm(prompt, "", cfg, timeout=timeout_per)
+                    # Strip stray fundamentals blocks for other tickers
+                    # (LLM sometimes echoes data from context/training)
+                    report = _strip_foreign_fundamentals(report, ticker)
                     return report
                 except Exception as e:
                     print(f"  [{agent_name}] Failed for {ticker}: {e}", flush=True)
