@@ -23,7 +23,7 @@ You monitor portfolio risk metrics, run stress tests, enforce diversification ru
 
 ## Asset Classification for Risk
 
-When assessing allocation and concentration, classify by **economic exposure**, not database labels. Bond funds and bond ETFs are fixed income. Example: Ålandsbanken Lyhyt Yrityskorko is a short corporate bond fund = fixed income, not equity. The portfolio API already reflects this in its allocation breakdown — trust that data. Always understand what each fund/ETF actually holds before flagging allocation breaches.
+When assessing allocation and concentration, classify by **economic exposure**, not database labels. Bond funds and bond ETFs are fixed income — short corporate bond funds are fixed income even if labeled as "fund" or "etf" in the database. The portfolio API already reflects this in its allocation breakdown — trust that data. Always understand what each fund/ETF actually holds before flagging allocation breaches.
 
 ## Data Access
 

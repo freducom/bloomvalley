@@ -40,7 +40,7 @@ The Investment Team defines strategy and analysis needs. The Development Team bu
 - Commodity ETCs with contango flagged as poor long-term vehicles
 - Always produce bull AND bear case for every security
 - Long-term focus, no day trading
-- Broker: Nordnet (Finland) — portfolio updates via paste-in export
+- Broker: Finnish broker — portfolio updates via paste-in export
 - Watchlist: Swedish, Finnish, European, US — dividend aristocrats + growth companies
 - Track recommendations with retrospective accuracy analysis
 

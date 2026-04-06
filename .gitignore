@@ -51,6 +51,9 @@ imports/
 exports/
 data/personal/
 
+# Personal agent profiles (contains portfolio details, broker info, specific holdings)
+.claude/agents/personal/
+
 # Docker persistent data (postgres, redis)
 data/
 
