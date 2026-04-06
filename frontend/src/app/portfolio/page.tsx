@@ -8,7 +8,7 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot,
 } from "recharts";
 
 interface Recommendation {
@@ -483,22 +483,19 @@ function ValueHistoryChart() {
                   );
                 }}
               />
-              {dividends.map((d) => (
-                <ReferenceLine
-                  key={d.date}
-                  x={d.date}
-                  stroke="#a78bfa"
-                  strokeDasharray="3 3"
-                  strokeWidth={1}
-                  label={{
-                    value: "D",
-                    position: "top",
-                    fill: "#a78bfa",
-                    fontSize: 9,
-                    fontWeight: 600,
-                  }}
-                />
-              ))}
+              {data
+                .filter((p) => p.dividendCents)
+                .map((p) => (
+                  <ReferenceDot
+                    key={`div-${p.date}`}
+                    x={p.date}
+                    y={p.valueCents}
+                    r={4}
+                    fill="#a78bfa"
+                    stroke="#1a1f2e"
+                    strokeWidth={2}
+                  />
+                ))}
               <Area
                 type="monotone"
                 dataKey="valueCents"
