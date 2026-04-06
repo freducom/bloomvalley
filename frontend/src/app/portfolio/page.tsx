@@ -302,6 +302,8 @@ interface ValuePoint {
   date: string;
   valueCents: number;
   dividendCents?: number;
+  hasBuy?: boolean;
+  hasSell?: boolean;
 }
 
 interface DividendItem {
@@ -317,6 +319,18 @@ interface DividendAnnotation {
   items: DividendItem[];
 }
 
+interface TradeItem {
+  ticker: string;
+  type: "buy" | "sell";
+  amountEurCents: number;
+  quantity: number;
+}
+
+interface TradeAnnotation {
+  date: string;
+  items: TradeItem[];
+}
+
 const PERIOD_OPTIONS = [
   { label: "1M", days: 30 },
   { label: "3M", days: 90 },
@@ -328,30 +342,37 @@ const PERIOD_OPTIONS = [
 function ValueHistoryChart() {
   const [data, setData] = useState<ValuePoint[]>([]);
   const [dividends, setDividends] = useState<DividendAnnotation[]>([]);
+  const [trades, setTrades] = useState<TradeAnnotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(90);
 
   useEffect(() => {
     setLoading(true);
-    apiGetRaw<{ data: ValuePoint[]; dividends?: DividendAnnotation[] }>(
-      `/portfolio/value-history?days=${days}`
-    )
+    apiGetRaw<{
+      data: ValuePoint[];
+      dividends?: DividendAnnotation[];
+      trades?: TradeAnnotation[];
+    }>(`/portfolio/value-history?days=${days}`)
       .then((res) => {
-        // Merge dividend data into chart points for tooltip display
         const divMap = new Map<string, DividendAnnotation>();
-        for (const d of res.dividends || []) {
-          divMap.set(d.date, d);
-        }
+        for (const d of res.dividends || []) divMap.set(d.date, d);
+        const tradeMap = new Map<string, TradeAnnotation>();
+        for (const t of res.trades || []) tradeMap.set(t.date, t);
+
         const merged = res.data.map((p) => ({
           ...p,
           dividendCents: divMap.get(p.date)?.totalNetCents || undefined,
+          hasBuy: tradeMap.get(p.date)?.items.some((i) => i.type === "buy") || false,
+          hasSell: tradeMap.get(p.date)?.items.some((i) => i.type === "sell") || false,
         }));
         setData(merged);
         setDividends(res.dividends || []);
+        setTrades(res.trades || []);
       })
       .catch(() => {
         setData([]);
         setDividends([]);
+        setTrades([]);
       })
       .finally(() => setLoading(false));
   }, [days]);
@@ -455,6 +476,7 @@ function ValueHistoryChart() {
                     day: "numeric", month: "short", year: "numeric",
                   });
                   const divAnnotation = dividends.find((d) => d.date === point.date);
+                  const tradeAnnotation = trades.find((t) => t.date === point.date);
                   return (
                     <div style={{
                       backgroundColor: "#1a1f2e",
@@ -467,10 +489,34 @@ function ValueHistoryChart() {
                       <div style={{ color: "#e5e7eb" }}>
                         Value: {formatTooltipValue(point.valueCents)}
                       </div>
+                      {tradeAnnotation && (
+                        <div style={{ marginTop: 6, borderTop: "1px solid #2d3548", paddingTop: 4 }}>
+                          {tradeAnnotation.items.filter((i) => i.type === "buy").length > 0 && (
+                            <>
+                              <div style={{ color: "#22c55e", fontWeight: 600, marginBottom: 2 }}>Buy</div>
+                              {tradeAnnotation.items.filter((i) => i.type === "buy").map((item, i) => (
+                                <div key={`b${i}`} style={{ color: "#86efac" }}>
+                                  {item.ticker}: {item.quantity} shares ({formatCurrency(item.amountEurCents)})
+                                </div>
+                              ))}
+                            </>
+                          )}
+                          {tradeAnnotation.items.filter((i) => i.type === "sell").length > 0 && (
+                            <>
+                              <div style={{ color: "#ef4444", fontWeight: 600, marginBottom: 2, marginTop: 4 }}>Sell</div>
+                              {tradeAnnotation.items.filter((i) => i.type === "sell").map((item, i) => (
+                                <div key={`s${i}`} style={{ color: "#fca5a5" }}>
+                                  {item.ticker}: {item.quantity} shares ({formatCurrency(item.amountEurCents)})
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
                       {divAnnotation && (
                         <div style={{ marginTop: 6, borderTop: "1px solid #2d3548", paddingTop: 4 }}>
                           <div style={{ color: "#a78bfa", fontWeight: 600, marginBottom: 2 }}>
-                            Dividend received
+                            Dividend
                           </div>
                           {divAnnotation.items.map((item, i) => (
                             <div key={i} style={{ color: "#c4b5fd" }}>
@@ -483,19 +529,18 @@ function ValueHistoryChart() {
                   );
                 }}
               />
-              {data
-                .filter((p) => p.dividendCents)
-                .map((p) => (
-                  <ReferenceDot
-                    key={`div-${p.date}`}
-                    x={p.date}
-                    y={p.valueCents}
-                    r={4}
-                    fill="#a78bfa"
-                    stroke="#1a1f2e"
-                    strokeWidth={2}
-                  />
-                ))}
+              {data.filter((p) => p.hasBuy).map((p) => (
+                <ReferenceDot key={`buy-${p.date}`} x={p.date} y={p.valueCents}
+                  r={3} fill="#22c55e" stroke="#1a1f2e" strokeWidth={1.5} />
+              ))}
+              {data.filter((p) => p.hasSell).map((p) => (
+                <ReferenceDot key={`sell-${p.date}`} x={p.date} y={p.valueCents}
+                  r={3} fill="#ef4444" stroke="#1a1f2e" strokeWidth={1.5} />
+              ))}
+              {data.filter((p) => p.dividendCents).map((p) => (
+                <ReferenceDot key={`div-${p.date}`} x={p.date} y={p.valueCents}
+                  r={4} fill="#a78bfa" stroke="#1a1f2e" strokeWidth={2} />
+              ))}
               <Area
                 type="monotone"
                 dataKey="valueCents"

@@ -662,7 +662,61 @@ async def get_value_history(
                     "items": items,
                 })
 
-    return {"data": series, "dividends": dividends}
+    # Fetch buy/sell trades within the date range for annotations
+    trades = []
+    async with async_session() as session:
+        trade_result = await session.execute(
+            select(
+                Transaction.trade_date,
+                Transaction.type,
+                Transaction.total_cents,
+                Transaction.fee_cents,
+                Transaction.currency,
+                Transaction.quantity,
+                Transaction.security_id,
+            )
+            .where(Transaction.type.in_(["buy", "sell"]))
+            .where(Transaction.trade_date >= from_date)
+            .where(Transaction.security_id.isnot(None))
+            .order_by(Transaction.trade_date)
+        )
+        trade_txns = trade_result.all()
+
+        if trade_txns:
+            trade_sec_ids = {t.security_id for t in trade_txns}
+            sec_names_t = {}
+            if trade_sec_ids:
+                sec_result = await session.execute(
+                    select(Security.id, Security.ticker)
+                    .where(Security.id.in_(list(trade_sec_ids)))
+                )
+                sec_names_t = {r.id: r.ticker for r in sec_result.all()}
+
+            from collections import defaultdict as _dd2
+            trades_by_date: dict[date, list] = _dd2(list)
+            for t in trade_txns:
+                amount = abs(t.total_cents or 0)
+                # Convert to EUR for display
+                cur = t.currency or "EUR"
+                if cur != "EUR":
+                    fx = float(fx_rates.get(cur, Decimal("1")))
+                    amount_eur = int(amount / fx) if fx else amount
+                else:
+                    amount_eur = amount
+                trades_by_date[t.trade_date].append({
+                    "ticker": sec_names_t.get(t.security_id, "?"),
+                    "type": t.type,
+                    "amountEurCents": amount_eur,
+                    "quantity": float(t.quantity or 0),
+                })
+
+            for d, items in sorted(trades_by_date.items()):
+                trades.append({
+                    "date": d.isoformat(),
+                    "items": items,
+                })
+
+    return {"data": series, "dividends": dividends, "trades": trades}
 
 
 @router.post("/snapshot")
