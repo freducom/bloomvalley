@@ -8,7 +8,7 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 
 interface Recommendation {
@@ -301,6 +301,20 @@ export default function PortfolioPage() {
 interface ValuePoint {
   date: string;
   valueCents: number;
+  dividendCents?: number;
+}
+
+interface DividendItem {
+  ticker: string;
+  grossCents: number;
+  netCents: number;
+  currency: string;
+}
+
+interface DividendAnnotation {
+  date: string;
+  totalNetCents: number;
+  items: DividendItem[];
 }
 
 const PERIOD_OPTIONS = [
@@ -313,14 +327,32 @@ const PERIOD_OPTIONS = [
 
 function ValueHistoryChart() {
   const [data, setData] = useState<ValuePoint[]>([]);
+  const [dividends, setDividends] = useState<DividendAnnotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(90);
 
   useEffect(() => {
     setLoading(true);
-    apiGetRaw<{ data: ValuePoint[] }>(`/portfolio/value-history?days=${days}`)
-      .then((res) => setData(res.data))
-      .catch(() => setData([]))
+    apiGetRaw<{ data: ValuePoint[]; dividends?: DividendAnnotation[] }>(
+      `/portfolio/value-history?days=${days}`
+    )
+      .then((res) => {
+        // Merge dividend data into chart points for tooltip display
+        const divMap = new Map<string, DividendAnnotation>();
+        for (const d of res.dividends || []) {
+          divMap.set(d.date, d);
+        }
+        const merged = res.data.map((p) => ({
+          ...p,
+          dividendCents: divMap.get(p.date)?.totalNetCents || undefined,
+        }));
+        setData(merged);
+        setDividends(res.dividends || []);
+      })
+      .catch(() => {
+        setData([]);
+        setDividends([]);
+      })
       .finally(() => setLoading(false));
   }, [days]);
 
@@ -415,14 +447,58 @@ function ValueHistoryChart() {
                   fontSize: "12px",
                 }}
                 labelStyle={{ color: "#9ca3af" }}
-                formatter={(value: number) => [formatTooltipValue(value), "Value"]}
-                labelFormatter={(d: string) => {
-                  const dt = new Date(d);
-                  return dt.toLocaleDateString("en-GB", {
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  const point = payload[0]?.payload as ValuePoint;
+                  const dt = new Date(label);
+                  const dateStr = dt.toLocaleDateString("en-GB", {
                     day: "numeric", month: "short", year: "numeric",
                   });
+                  const divAnnotation = dividends.find((d) => d.date === point.date);
+                  return (
+                    <div style={{
+                      backgroundColor: "#1a1f2e",
+                      border: "1px solid #2d3548",
+                      borderRadius: "4px",
+                      padding: "8px 12px",
+                      fontSize: "12px",
+                    }}>
+                      <div style={{ color: "#9ca3af", marginBottom: 4 }}>{dateStr}</div>
+                      <div style={{ color: "#e5e7eb" }}>
+                        Value: {formatTooltipValue(point.valueCents)}
+                      </div>
+                      {divAnnotation && (
+                        <div style={{ marginTop: 6, borderTop: "1px solid #2d3548", paddingTop: 4 }}>
+                          <div style={{ color: "#a78bfa", fontWeight: 600, marginBottom: 2 }}>
+                            Dividend received
+                          </div>
+                          {divAnnotation.items.map((item, i) => (
+                            <div key={i} style={{ color: "#c4b5fd" }}>
+                              {item.ticker}: {formatCurrency(item.netCents)} net
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
                 }}
               />
+              {dividends.map((d) => (
+                <ReferenceLine
+                  key={d.date}
+                  x={d.date}
+                  stroke="#a78bfa"
+                  strokeDasharray="3 3"
+                  strokeWidth={1}
+                  label={{
+                    value: "D",
+                    position: "top",
+                    fill: "#a78bfa",
+                    fontSize: 9,
+                    fontWeight: 600,
+                  }}
+                />
+              ))}
               <Area
                 type="monotone"
                 dataKey="valueCents"

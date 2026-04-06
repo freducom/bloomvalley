@@ -613,7 +613,56 @@ async def get_value_history(
                 "cashCents": cash_eur,
             })
 
-    return {"data": series}
+    # Fetch dividend payments within the date range for annotations
+    dividends = []
+    async with async_session() as session:
+        div_result = await session.execute(
+            select(
+                Transaction.trade_date,
+                Transaction.total_cents,
+                Transaction.withholding_tax_cents,
+                Transaction.currency,
+                Transaction.security_id,
+            )
+            .where(Transaction.type == "dividend")
+            .where(Transaction.trade_date >= from_date)
+            .order_by(Transaction.trade_date)
+        )
+        div_txns = div_result.all()
+
+        if div_txns:
+            # Resolve security names
+            div_sec_ids = {t.security_id for t in div_txns if t.security_id}
+            sec_names = {}
+            if div_sec_ids:
+                sec_result = await session.execute(
+                    select(Security.id, Security.ticker)
+                    .where(Security.id.in_(list(div_sec_ids)))
+                )
+                sec_names = {r.id: r.ticker for r in sec_result.all()}
+
+            # Group by date
+            from collections import defaultdict as _dd
+            divs_by_date: dict[date, list] = _dd(list)
+            for t in div_txns:
+                net = (t.total_cents or 0)
+                gross = net + (t.withholding_tax_cents or 0)
+                divs_by_date[t.trade_date].append({
+                    "ticker": sec_names.get(t.security_id, "?"),
+                    "grossCents": gross,
+                    "netCents": net,
+                    "currency": t.currency or "EUR",
+                })
+
+            for d, items in sorted(divs_by_date.items()):
+                total_net = sum(i["netCents"] for i in items)
+                dividends.append({
+                    "date": d.isoformat(),
+                    "totalNetCents": total_net,
+                    "items": items,
+                })
+
+    return {"data": series, "dividends": dividends}
 
 
 @router.post("/snapshot")
