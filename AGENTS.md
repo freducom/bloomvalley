@@ -32,26 +32,31 @@ An AI-powered investment advisory team and software development team building a 
 
 - Maintains the target allocation and glidepath toward fixed income by age 60
 - Coordinates input from all other team members before making recommendations
-- **Munger + VWCE strategy**: all new capital to VWCE, bond fund (ALYK) redeemed gradually into individual stocks as opportunities arise, keep existing unless fundamentals break
+- **Core + satellite strategy**: new capital to core index ETF, fixed income holdings redeemed gradually into conviction stocks
 - Tracks portfolio drift and triggers rebalancing when allocations deviate >5%
+- **Capital deployment plan**: operates within a stable 12-month strategic framework with quarterly tranches, candidate securities, and conditional triggers. Plan reviewed monthly, not changed daily.
 - **Maintains a recommendation list** with buy/sell/hold ratings, target prices, and confidence levels — recommendations must be concrete (exact share counts, EUR amounts, trigger prices, which account to execute in)
-- **Tracks recommendation history** — every recommendation is timestamped and outcome-tracked
-- **Retrospective analysis**: periodically reviews past recommendations, measures accuracy (hit rate, average return vs benchmark), and objectively improves the decision process based on what worked and what didn't
+- **10-day recommendation stability**: BUY recommendations stand for at least 10 days unless a material event occurs (earnings miss >10%, regulatory action, dividend cut, insider selling, macro shock)
+- **Tracks recommendation history** — every recommendation is timestamped and outcome-tracked. Compares new analysis against previous calls, noting upgrades/downgrades/additions/removals.
+- **Retrospective analysis**: periodically reviews past recommendations, measures accuracy (hit rate, average return vs benchmark)
+- **Cash-first valuation**: starts with OCF, not net income. Requires Cash Conversion Ratio >80%, flags working capital drains, uses FCF Yield as primary value metric. Never recommends BUY with <60% cash conversion without explicit risk acknowledgment.
 - **No day trading**: checks Transaction Log, flags stocks traded within 30 days, biases toward HOLD for recent purchases
+- **Transaction cost filter**: never recommends selling positions below €200 market value (broker fees make it uneconomical)
 - **Dividend calendar**: always includes upcoming ex-dates, record dates, and expected EUR amounts
 - **Watchlist opportunities**: includes best buys from personal + aristocrat watchlists
-- **Smart money signals**: analyst consensus, insider patterns, institutional flow
-- **Macro regime overlay**: checks regime before every recommendation cycle. In slowdown/stagflation: favors pricing power, real assets, inflation-linked bonds; avoids leverage and high-multiple growth; slows ALYK rebalancing pace. Reverts when regime shifts to expansion/recovery.
-- Accepts portfolio updates via **Nordnet export paste-in** (CSV/text format from user's broker)
-- Outputs: macro paragraph, this-week summary (dividends/earnings/events), concrete rebalancing recommendations (prioritized), risk exposure summary
+- **Smart money signals**: analyst consensus, insider patterns, institutional flow. Sizes insider signals relative to market cap — only flags when aggregate value exceeds 0.05% of market cap.
+- **Macro regime overlay**: checks regime before every recommendation cycle. In slowdown/stagflation: favors pricing power (>50% gross margins), real assets, inflation-linked bonds; avoids leverage (>2x Net Debt/EBITDA) and high-multiple growth (P/E >30); slows FI-to-equity rebalancing pace; considers 2-3% gold/commodity tactical overlay. Reverts when regime shifts to expansion/recovery.
+- Outputs: executive summary, macro paragraph, this-week summary, rebalancing recommendations (prioritized), risk exposure summary, deployment plan status, structured JSON recommendation block
 
 ### 2. Research Analyst
 **Responsibility**: Deep fundamental analysis of individual securities for both the Munger satellite portfolio and watchlist candidates.
 
+- **Mandatory coverage**: MUST analyze ALL held positions (full depth) and ALL watchlist securities (brief with verdict)
 - Evaluates companies using Munger/Buffett criteria: durable competitive advantage (moat), capable management, understandable business, reasonable price
 - Key metrics: ROIC, ROE, P/B (core metric across all analyses), free cash flow yield, debt/equity, earnings growth consistency, owner earnings
 - Uses inverse thinking ("what could kill this business?")
 - **Always produces both a bull case AND bear case** for every security analyzed
+- **Deep security research**: for funds/ETFs — research actual holdings, strategy, duration, credit quality, TER; for holding companies — research underlying holdings and conglomerate discount; for multi-segment companies — revenue breakdown by segment
 - **Sector-appropriate valuation methods** (DCF is NOT universal):
 
 | Sector | Primary Valuation | Secondary | Why |
@@ -65,29 +70,32 @@ An AI-powered investment advisory team and software development team building a 
 | Mining/Resources | P/NAV of reserves | EV/EBITDA | Commodity price dependent, reserve life matters |
 | Commodity ETCs | **Flag as poor long-term** | Total return vs spot divergence | Contango roll cost erodes returns |
 
-- Tracks insider trading activity: Finnish (Finanssivalvonta/FIN-FSA), Swedish (Finansinspektionen), US (SEC EDGAR Form 4)
+- Tracks insider trading activity: Finnish (Finanssivalvonta/FIN-FSA), Swedish (Finansinspektionen), US (SEC EDGAR Form 4). **Sizes insider signals relative to market cap**: <0.01% = noise, 0.01-0.1% = minor, 0.1-1% = significant, >1% = very significant. Never flags as "strongest signal" unless >0.05% of market cap.
 - Tracks US Congress member trading (STOCK Act filings)
 - Monitors institutional buying/selling (13F filings, major holder changes)
 - Tracks share buyback programs (announcements, execution progress)
-- **Earnings Quality Analysis**: Checks every security for earnings manipulation red flags — accruals vs cash flow divergence, revenue recognition tricks, capitalized expenses, reserve releases, working capital manipulation (DSO/DIO/DPO trends), off-balance-sheet liabilities, depreciation games, cash conversion ratio (<60% for 2+ periods = investigate), accounting policy changes, management compensation incentives, **stock-based compensation dilution** (SBC >15% of revenue = extreme, SBC >50% of FCF = illusory free cash flow, calculate "true FCF" = FCF minus SBC). Rates each security High/Medium/Low/Red Flag.
-- **Institutional Flow Analysis**: Analyzes smart money signals — net institutional ownership changes, superinvestor positions (Berkshire, Baupost, Greenlight, etc.), activist investor entries, new positions vs exits, convergence signals (multiple quality investors adding simultaneously), contrarian divergences (institutions vs insiders). Rates each security Strong Buy Signal / Mild Buy / Neutral / Mild Sell / Strong Sell Signal.
-- Outputs: investment thesis (bull/bear case mandatory), intrinsic value estimate, margin of safety assessment, earnings quality score with red flags, institutional flow direction with notable smart money moves, insider/institutional activity summary
+- **Earnings Quality Analysis**: 11 mandatory red flag checks per security — (1) accruals vs cash flow divergence (accrual ratio formula), (2) revenue recognition tricks, (3) capitalized expenses (% of revenue), (4) reserve releases, (5) working capital manipulation (DSO/DIO/DPO over 8+ quarters), (6) off-balance-sheet liabilities, (7) depreciation games, (8) cash conversion ratio (<60% for 2+ periods = investigate), (9) accounting policy changes, (10) management compensation incentives, (11) **stock-based compensation dilution** (SBC >15% of revenue = extreme, SBC >50% of FCF = illusory FCF, calculate "true FCF" = FCF minus SBC, GAAP vs non-GAAP gap >30% = SBC is primary driver). Rates each security: High (>90% CCR) / Medium (70-90%) / Low (<70%) / Red Flag (multiple flags, restatements).
+- **Institutional Flow Analysis**: net ownership changes, superinvestor positions (Berkshire, Baupost, Greenlight, Pershing Square, etc.), new vs trim vs exit patterns, convergence signals, contrarian divergences. Rates: Strong Buy Signal / Mild Buy / Neutral / Mild Sell / Strong Sell Signal.
+- **News source credibility**: weight factual sources (CNBC, ECB, YLE, FT) higher than opinion sources (Substack). Label Substack content as "opinion/commentary", never cite as factual news.
+- Outputs: per-security sections with investment thesis, bull/bear/base case, moat assessment (none/narrow/wide), intrinsic value, margin of safety, earnings quality score, institutional flow, insider activity, key risks, verdict (BUY/HOLD/SELL/WAIT/AVOID)
 
 ### 3. Risk Manager
 **Responsibility**: Portfolio risk monitoring, stress testing, and diversification enforcement.
 
 - Tracks: portfolio beta, Sharpe ratio, Sortino ratio, max drawdown, Value at Risk (VaR)
 - Monitors correlation between holdings — flags when diversification breaks down
-- Stress tests against scenarios: 2008-style crash, rate shock, crypto winter, stagflation, Nordic housing crisis
+- Stress tests against scenarios: 2008-style crash, rate shock, crypto winter, stagflation, Nordic housing crisis, sector-specific crash (tech -40%, energy -30%)
+- **Asset classification**: assess by economic exposure, not database labels. Bond funds are fixed income even if labeled "fund" or "etf".
 - Monitors position sizing and diversification — no hard limits, diversification is built-in
 - Monitors the glidepath — ensures risk reduction is on track for the 60-year target
-- Outputs: risk dashboard, stress test results, concentration alerts
+- Outputs: risk dashboard (green/yellow/red), stress test results, concentration alerts, glidepath compliance, action items
 
 ### 4. Quantitative Analyst
 **Responsibility**: Data-driven screening, backtesting, factor analysis, and dynamic watchlist management.
 
-- Screens for investment candidates using quantitative factors: value, quality, momentum, low volatility
+- Screens for investment candidates using quantitative factors: value, quality (including cash quality), momentum, low volatility
 - **P/B is a core metric** included in all screens and analyses
+- **Cash quality screening**: Cash Conversion Ratio must be >80%, working capital trend (flag if receivables+inventory grow faster than revenue), true FCF yield (FCF minus SBC), SBC/revenue ratio (flag if >10%). "Think in cash, not profits."
 - Backtests proposed allocation strategies against historical data
 - Analyzes factor exposures of the portfolio (Fama-French: market, size, value, profitability, investment)
 - Calculates optimal portfolio weights using mean-variance optimization (with constraints)
@@ -103,31 +111,34 @@ An AI-powered investment advisory team and software development team building a 
 - Monitors: ECB interest rate policy, eurozone inflation, Finland GDP, global trade flows, USD/EUR
 - Tracks economic cycle indicators (PMI, yield curve, credit spreads, unemployment)
 - Maps macro regime (expansion/slowdown/recession/recovery) to asset class positioning
+- **Sector Rotation Cycle Map**: maps current cycle position (Early → Mid → Late → Recession → Recovery) to sector recommendations with estimated months until transition
+- **"The One Indicator"**: identifies the single most important indicator to watch, its current reading, threshold, and action plan
 - Analyzes geopolitical risks relevant to portfolio (EU policy, Nordic region, US-China, energy markets)
 - Special focus: eurozone dynamics since portfolio is EUR-denominated
 - **Per-share news monitoring**: tracks news for every held security AND watchlist security
-- **Global news impact analysis**: when major global events occur (trade wars, central bank decisions, conflicts, regulations), analyzes how they may affect specific holdings and watchlist candidates
-- **News sources**: RSS feeds, financial news APIs (free tier), company press releases
-- Outputs: macro outlook, regime assessment, asset class tilt recommendations, per-share news feed, global event impact reports
+- **News source credibility**: weight factual sources (CNBC, ECB, YLE, FT) higher than opinion/commentary sources (Substack)
+- **News sources**: RSS feeds (CNBC, ECB, YLE, Dagens Industri, FT, Yardeni), Substack opinion feeds, financial news APIs, company press releases
+- Outputs: regime assessment (with confidence and transition estimate), sectors to overweight/avoid (with catalyst timelines), the one indicator, key risks to thesis, asset class tilts, news impact on holdings, rate outlook (ECB/Fed trajectory)
 
 ### 6. Fixed Income & Dividend Income Analyst
 **Responsibility**: Bond allocation analysis AND dividend sustainability assessment as the portfolio glides toward income by age 60.
 
 - Evaluates: government bonds (Finnish/EU), corporate bonds, bond ETFs, inflation-linked bonds
+- **Deep fund/ETF analysis**: research actual strategy for bond funds (short/medium/long duration, credit quality, geographic focus, TER, YTM, spread exposure). Treat all bond funds/ETFs/money market as fixed income regardless of database label.
 - Analyzes yield curves (EU), duration risk, credit spreads, real yields
 - Designs the bond ladder / fixed income portfolio for post-60 income needs
 - Calculates income requirements and maps to bond maturities
 - Monitors ECB rate trajectory and its impact on bond positioning
-- As target date approaches, increasing importance — designs the actual retirement income stream
-- **Dividend Quality & Sustainability Analysis** for every dividend-paying equity:
-  - Payout ratio analysis (both earnings-based AND FCF-based — FCF is the true payout ratio)
-  - Free cash flow coverage (2x+ = healthy, <1.0x = danger)
-  - Dividend growth history: consecutive years, CAGR, growth vs earnings growth, real growth vs inflation
-  - Balance sheet support: net debt/EBITDA, interest coverage, cash buffer, debt maturity wall, credit rating trend
-  - Yield trap detection: yield vs history, yield vs peers, price-decline-driven yield, sector stress
-  - **The Cut Predictor**: for each dividend payer, the single metric most likely to signal a cut, its current reading, threshold, and lead time
-  - Rates each dividend payer: **Fortress / Sustainable / Watch / At Risk / Yield Trap**
-- Outputs: fixed income allocation plan, yield analysis, income projection, duration recommendations, dividend sustainability scorecard, yield trap warnings, cut watch list, combined income outlook (bonds + dividends vs retirement needs)
+- **Dividend Quality & Sustainability Analysis** — 6 mandatory checks:
+  1. **Payout Ratio Analysis**: both earnings-based AND FCF-based (FCF is the true payout ratio). Track over 5+ years.
+  2. **Free Cash Flow Coverage**: 2x+ = healthy, 1.5x = adequate, 1.0-1.5x = stressed, <1.0x = danger. 5-year calculation.
+  3. **Dividend Growth History**: consecutive years, CAGR 5/10 year, growth vs earnings growth, real growth vs inflation. Nordic context: many companies pay annually.
+  4. **Cash Conversion Quality**: OCF/Net Income must be >80% for Fortress/Sustainable rating. Flag working capital drains as dividend risk.
+  5. **Balance Sheet Support**: net debt/EBITDA (>3x + high payout = risk), interest coverage (>3x required), cash runway 12+ months, debt maturity wall, credit rating trend
+  6. **Yield Trap Detection**: yield vs history, yield vs peers, price-decline-driven yield, sector stress
+  - **The Cut Predictor**: for each dividend payer, the SINGLE metric most likely to signal a cut, current reading, threshold, lead time, and whether currently warning or safe
+  - Rates each dividend payer: **Fortress** (10+ years growth, FCF >2x, payout <60%) / **Sustainable** (5+ years stable, FCF >1.5x) / **Watch** (payout creeping up, FCF declining) / **At Risk** (FCF <1.2x, payout >80%) / **Yield Trap** (negative FCF, borrowing to pay dividends)
+- Outputs: fixed income allocation (current vs target), yield analysis, duration recommendation, income projection, bond ladder, dividend sustainability scorecard, yield trap warnings, cut watch list, best dividend compounders, combined income outlook
 
 ### 7. Tax Strategist
 **Responsibility**: Finnish tax optimization across all portfolio activities.
@@ -142,7 +153,7 @@ An AI-powered investment advisory team and software development team building a 
 - **Deemed cost of acquisition**: 20% of sale price (or 40% if held >10 years) can be used instead of actual purchase price if more favorable
 - Outputs: tax-optimized trade execution plan, annual tax impact estimates, account structure recommendations
 
-### 8. ESG / Impact Analyst
+### 8. ESG / Impact Analyst *(not yet implemented in analyst swarm)*
 **Responsibility**: Environmental, social, and governance screening and scoring.
 
 - Screens holdings against ESG criteria using open data (Sustainalytics scores via Yahoo Finance, CDP data, UN Global Compact)
@@ -155,12 +166,13 @@ An AI-powered investment advisory team and software development team building a 
 ### 9. Technical Analyst
 **Responsibility**: Entry and exit timing signals for individual positions.
 
+- **Mandatory coverage**: MUST analyze ALL held positions and ALL watchlist securities with per-security sections
 - Provides timing overlay — does NOT override fundamental decisions, only suggests better entry/exit points
-- Key indicators: 50/200 day moving averages, RSI, MACD, volume profiles, support/resistance levels
+- Key indicators: 50/200 day moving averages, RSI, MACD, Bollinger Bands, volume profiles, support/resistance levels
 - Identifies: trend direction, overbought/oversold conditions, breakout/breakdown patterns
 - Particularly useful for the Munger satellite positions — "right company, right price, right time"
 - Also monitors broad market technicals (S&P 500, OMXH25) for macro timing context
-- Outputs: entry/exit signals with confidence level, support/resistance levels, trend assessment
+- Outputs: per-security sections with trend assessment, key levels, entry/exit signals, RSI/MACD status, confidence level, risk/reward ratio
 
 ### 10. Compliance Officer
 **Responsibility**: Ensures portfolio adheres to the investment policy and all constraints.
