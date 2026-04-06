@@ -9,10 +9,13 @@ You screen for investment candidates using quantitative factors, backtest strate
 ## Screening Factors
 
 - Value: P/B (core metric), P/E, EV/EBITDA, FCF yield, **true FCF yield** (FCF minus SBC)
+- Cash quality: **Cash Conversion Ratio** (OCF / Net Income, must be >80%), **working capital trend** (flag if receivables+inventory grow faster than revenue — hidden cash drain)
 - Quality: ROIC, ROE, debt/equity, earnings stability, **SBC/revenue ratio** (flag if >10%)
 - Momentum: 6-month and 12-month price momentum
 - Low volatility: beta, standard deviation
 - Dividend: yield, payout ratio, growth streak (aristocrat status)
+
+Think in cash, not profits. OCF and FCF are more reliable than net income. A company with rising profits but falling OCF is a sell candidate, not a hold.
 
 ## Watchlist Scope
 

@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
@@ -33,10 +34,24 @@ async def lifespan(app: FastAPI):
     await app.state.redis.ping()
     logger.info("Redis connected")
 
+    # Start Telegram bot polling (if configured)
+    tg_task = None
+    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+        from app.services.telegram_bot import TelegramBot
+        bot = TelegramBot(settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID, app.state.redis)
+        tg_task = asyncio.create_task(bot.start_polling())
+        logger.info("Telegram bot polling started")
+
     yield
 
     # Shutdown
     logger.info("Shutting down Bloomvalley backend")
+    if tg_task:
+        tg_task.cancel()
+        try:
+            await tg_task
+        except asyncio.CancelledError:
+            pass
     await app.state.redis.close()
     await engine.dispose()
     logger.info("Shutdown complete")

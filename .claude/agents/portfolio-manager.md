@@ -62,14 +62,16 @@ The research notes data contains the Research Analyst's detailed analysis of ind
 3. **Bond fund reallocation**: ALYK is redeemed gradually to fund equity purchases as the portfolio rebalances toward the glidepath target. Recommend specific securities to buy with each redemption. Size redemptions based on available opportunities and market conditions — no fixed monthly amount.
 4. **Position sizing relative to conviction**: High conviction = larger position. Size recommendations in exact share counts and EUR amounts.
 5. **Tax implications**: OST is tax-deferred (trades inside are tax-free). Regular account: 30% up to €30k, 34% above. Always state which account to execute in.
-6. **Valuation signals**: Use multiple metrics together for every held and watchlisted security:
+6. **Cash-first valuation**: Think in cash, not profits. Start with Operating Cash Flow (OCF), not net income. A company can appear profitable on paper while cash is leaving the business. Use these signals together for every held and watchlisted security:
+   - **Cash Conversion Ratio** (OCF / Net Income): Healthy companies convert >80% of earnings to cash. Below 60% = red flag regardless of how good the P/E looks.
+   - **FCF Yield**: Free Cash Flow (OCF minus CapEx) relative to price — the real bottom line. Higher is better. If reported FCF is positive but working capital is inflating it, dig deeper.
+   - **Working capital trend**: If receivables and inventory grow faster than revenue, the business is quietly draining cash even if profits look healthy. Flag deteriorating working capital.
    - **ROIC vs WACC**: A company consistently returning above its WACC is creating value. High ROIC is the most important quality signal.
    - **DCF margin of safety**: A high-ROIC company trading at a wide DCF discount is the strongest buy signal.
    - **P/B**: Use where meaningful (banks, industrials, asset-heavy). Ignore for software/asset-light businesses.
-   - **FCF Yield**: Free cash flow yield — higher is better, signals cash generation relative to price.
    - **Net Debt/EBITDA**: Leverage indicator — lower is safer. Above 3x warrants caution.
    - **Dividend yield**: Dividend payers are a positive signal. The portfolio should have a meaningful dividend-paying component, growing as the investor ages. But ROIC matters more than yield — never chase yield at the expense of quality.
-   Flag undervalued (buy) and overvalued (trim) positions based on these combined signals.
+   Flag undervalued (buy) and overvalued (trim) positions based on these combined signals. Never recommend a BUY on a company with poor cash conversion (<60%) without explicitly acknowledging the risk.
 7. **Risk reduction**: Trim overvalued or low-conviction positions. Free capital goes to VWCE or next high-conviction buy.
 8. **Earnings analysis verdicts**: For any position with recent quarterly results, give a buy/hold/sell verdict based on the earnings.
 9. **Smart money signals**: Note accumulation/distribution patterns, insider buying/selling, institutional flow, analyst consensus (e.g., "14B/4H/1S, avg PT €100.66 (+23%)"). **Size insider signals relative to market cap** — insider buying of <0.01% of market cap is noise regardless of cluster count. Only flag insider activity as a meaningful signal when aggregate transaction value exceeds 0.05% of market cap.

@@ -1,5 +1,6 @@
-"""Telegram notification service — sends alerts to a private chat."""
+"""Telegram notification service — sends alerts and supports bidirectional chat."""
 
+import asyncio
 from datetime import datetime
 
 import httpx
@@ -14,7 +15,11 @@ HELSINKI = ZoneInfo("Europe/Helsinki")
 QUIET_START = 21  # 21:00
 QUIET_END = 7     # 07:00
 
-API_URL = "https://api.telegram.org/bot{token}/sendMessage"
+_BASE_URL = "https://api.telegram.org/bot{token}"
+API_URL = _BASE_URL + "/sendMessage"
+
+# Shared lock to prevent interleaving between outbound briefs and chat replies
+send_lock = asyncio.Lock()
 
 
 def is_configured() -> bool:
@@ -43,24 +48,25 @@ async def send(text: str, force: bool = False) -> bool:
         return False
 
     try:
-        # Split into chunks of 4096 chars (Telegram limit) at line boundaries
-        chunks = _split_message(text, 4096)
-        async with httpx.AsyncClient(timeout=10) as client:
-            for chunk in chunks:
-                resp = await client.post(
-                    API_URL.format(token=settings.TELEGRAM_BOT_TOKEN),
-                    json={
-                        "chat_id": settings.TELEGRAM_CHAT_ID,
-                        "text": chunk,
-                        "parse_mode": "HTML",
-                        "disable_web_page_preview": True,
-                    },
-                )
-                if resp.status_code != 200:
-                    logger.warning("telegram_send_failed", status=resp.status_code, body=resp.text[:200])
-                    return False
-            logger.info("telegram_sent", chars=len(text), chunks=len(chunks))
-            return True
+        async with send_lock:
+            # Split into chunks of 4096 chars (Telegram limit) at line boundaries
+            chunks = _split_message(text, 4096)
+            async with httpx.AsyncClient(timeout=10) as client:
+                for chunk in chunks:
+                    resp = await client.post(
+                        API_URL.format(token=settings.TELEGRAM_BOT_TOKEN),
+                        json={
+                            "chat_id": settings.TELEGRAM_CHAT_ID,
+                            "text": chunk,
+                            "parse_mode": "HTML",
+                            "disable_web_page_preview": True,
+                        },
+                    )
+                    if resp.status_code != 200:
+                        logger.warning("telegram_send_failed", status=resp.status_code, body=resp.text[:200])
+                        return False
+                logger.info("telegram_sent", chars=len(text), chunks=len(chunks))
+                return True
     except Exception as e:
         logger.error("telegram_send_error", error=str(e))
         return False
@@ -230,3 +236,66 @@ async def notify_macro_regime_change(previous: str, current: str, confidence: st
     )
 
     await send(text)
+
+
+# ── Bidirectional Chat Helpers ──
+
+
+async def get_updates(offset: int = 0, timeout: int = 30) -> list[dict]:
+    """Long-poll for new messages from Telegram."""
+    if not is_configured():
+        return []
+    try:
+        url = _BASE_URL.format(token=settings.TELEGRAM_BOT_TOKEN) + "/getUpdates"
+        async with httpx.AsyncClient(timeout=timeout + 10) as client:
+            resp = await client.get(url, params={
+                "offset": offset,
+                "timeout": timeout,
+                "allowed_updates": '["message"]',
+            })
+            if resp.status_code == 200:
+                return resp.json().get("result", [])
+            logger.warning("telegram_get_updates_failed", status=resp.status_code)
+            return []
+    except Exception as e:
+        logger.error("telegram_get_updates_error", error=str(e))
+        return []
+
+
+async def send_chat_action(chat_id: str | int, action: str = "typing"):
+    """Send a chat action (typing indicator) to Telegram."""
+    if not is_configured():
+        return
+    try:
+        url = _BASE_URL.format(token=settings.TELEGRAM_BOT_TOKEN) + "/sendChatAction"
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(url, json={"chat_id": chat_id, "action": action})
+    except Exception:
+        pass  # Non-critical
+
+
+async def send_reply(chat_id: str | int, text: str, parse_mode: str = "HTML"):
+    """Send a reply message to a specific chat, with chunking and send lock."""
+    if not is_configured():
+        return False
+    try:
+        async with send_lock:
+            chunks = _split_message(text, 4096)
+            async with httpx.AsyncClient(timeout=15) as client:
+                for chunk in chunks:
+                    resp = await client.post(
+                        API_URL.format(token=settings.TELEGRAM_BOT_TOKEN),
+                        json={
+                            "chat_id": chat_id,
+                            "text": chunk,
+                            "parse_mode": parse_mode,
+                            "disable_web_page_preview": True,
+                        },
+                    )
+                    if resp.status_code != 200:
+                        logger.warning("telegram_reply_failed", status=resp.status_code)
+                        return False
+            return True
+    except Exception as e:
+        logger.error("telegram_reply_error", error=str(e))
+        return False

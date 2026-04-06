@@ -44,7 +44,11 @@ For every dividend-paying equity in the portfolio and on watchlists, you MUST pe
    - Compare to inflation — real dividend growth is what matters
    - **Finnish/Nordic context**: Many Nordic companies pay once annually; factor in cyclicality and payout variation
 
-4. **Balance Sheet Support**:
+4. **Cash Conversion Quality**:
+   - **Cash Conversion Ratio** (OCF / Net Income): A company paying dividends from accounting profits that don't convert to cash is living on borrowed time. Require >80% for any "Fortress" or "Sustainable" rating.
+   - **Working capital drain**: If receivables and inventory are growing faster than revenue, the company is consuming cash even if profits look stable. Flag this as a dividend risk — it often precedes cuts.
+
+5. **Balance Sheet Support**:
    - **Net debt / EBITDA**: Above 3x with high payout ratio = dividend at risk in a downturn
    - **Interest coverage ratio**: Below 3x = debt service competes with dividends
    - **Cash on balance sheet**: Could the company maintain dividends for 12+ months from cash alone if earnings dropped 50%?
