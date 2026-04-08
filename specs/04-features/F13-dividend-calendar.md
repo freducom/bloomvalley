@@ -236,7 +236,7 @@ Table showing tax impact of dividends:
 
 ## Business Rules
 
-1. **Automatic population**: Dividend events are fetched from Yahoo Finance dividend data. The `dividend_events` table is populated by the data pipeline; `dividend_receipts` are created when a dividend transaction is recorded.
+1. **Automatic population**: Dividend events are fetched from Yahoo Finance dividend data via the `yahoo_dividends` pipeline. The `dividend_reconciliation` pipeline then matches events against actual holdings on each ex-date and auto-creates both `dividends` records and `transactions` (type=`dividend`). The reconciliation is idempotent and skips events that already have a matching dividend or transaction record (e.g., Nordnet-imported ones). Run order: `yahoo_dividends` first, then `dividend_reconciliation`.
 
 2. **Ex-date sell warning**: When a user initiates a sell order for a security that has an ex-date within the next 5 business days, display a warning: "Selling before {ex-date} will forfeit the upcoming dividend of {amount}/share (payment date: {payment_date})."
 
@@ -289,3 +289,4 @@ Table showing tax impact of dividends:
 | Date | Change |
 |------|--------|
 | 2026-03-19 | Initial draft |
+| 2026-04-08 | Added `dividend_reconciliation` pipeline for auto-matching events to holdings |

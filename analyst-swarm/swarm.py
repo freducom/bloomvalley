@@ -192,16 +192,27 @@ async def call_claude_cli(prompt: str, system: str, cfg: dict, timeout: int = 60
         os.unlink(tmp_path)
 
 
+_effective_provider: str = "unknown"  # tracks which LLM actually ran last
+
+
+def get_llm_tag() -> str:
+    """Return a tag indicating which LLM provider generated the content."""
+    return f"llm:{_effective_provider}"
+
+
 async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> str:
     """Route to the configured LLM backend. Falls back to Ollama if claude_cli fails."""
-    global _cli_fallback_notified
+    global _cli_fallback_notified, _effective_provider
     provider = cfg.get("llm_provider", "claude")
 
     if provider == "claude":
+        _effective_provider = "claude"
         return await call_claude(prompt, system, cfg)
     elif provider == "claude_cli":
         try:
-            return await call_claude_cli(prompt, system, cfg, timeout=timeout)
+            result = await call_claude_cli(prompt, system, cfg, timeout=timeout)
+            _effective_provider = "claude"
+            return result
         except Exception as e:
             err_msg = str(e)
             print(f"  [llm] claude_cli failed: {err_msg[:200]}", flush=True)
@@ -223,8 +234,10 @@ async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> s
                     "Run <code>claude /login</code> on the host to re-authenticate."
                 )
 
+            _effective_provider = "ollama"
             return await call_ollama(prompt, system, cfg)
     elif provider == "ollama":
+        _effective_provider = "ollama"
         return await call_ollama(prompt, system, cfg)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
@@ -527,7 +540,7 @@ async def store_report(backend_url: str, agent_name: str, report: str):
             await client.post("/research/notes", json={
                 "title": f"{agent_name.replace('-', ' ').title()} — {datetime.now().strftime('%Y-%m-%d')}",
                 "thesis": report[:60000],
-                "tags": ["analyst_report", agent_name, "swarm"],
+                "tags": ["analyst_report", agent_name, "swarm", get_llm_tag()],
             })
         except Exception as e:
             print(f"  [!] Failed to store report for {agent_name}: {e}", flush=True)
@@ -616,7 +629,8 @@ def _extract_moat(text: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
-async def extract_per_security_notes(report: str, backend_url: str, date_str: str):
+async def extract_per_security_notes(report: str, backend_url: str, date_str: str,
+                                     llm_tag: str | None = None):
     """Parse research analyst report into per-security research notes and POST them."""
     sections = _parse_research_sections(report)
     if not sections:
@@ -651,7 +665,8 @@ async def extract_per_security_notes(report: str, backend_url: str, date_str: st
                 "baseCase": sec["base_case"],
                 "moatRating": sec["moat_rating"],
                 "tags": ["research-analyst", "swarm",
-                         "watchlist" if sec["is_watchlist"] else "held"],
+                         "watchlist" if sec["is_watchlist"] else "held",
+                         llm_tag or get_llm_tag()],
             }
 
             try:
@@ -703,7 +718,8 @@ def _parse_technical_sections(report: str) -> list[dict]:
     return sections
 
 
-async def extract_technical_notes(report: str, backend_url: str, date_str: str):
+async def extract_technical_notes(report: str, backend_url: str, date_str: str,
+                                   llm_tag: str | None = None):
     """Parse technical analyst report into per-security notes and POST them."""
     sections = _parse_technical_sections(report)
     if not sections:
@@ -731,7 +747,8 @@ async def extract_technical_notes(report: str, backend_url: str, date_str: str):
                 "securityId": sec_id,
                 "title": f"Technical Analysis: {sec['name']} ({ticker}) - {date_str}",
                 "thesis": sec["body"][:60000],
-                "tags": ["technical-analyst", "technical", "swarm"],
+                "tags": ["technical-analyst", "technical", "swarm",
+                         llm_tag or get_llm_tag()],
             }
 
             try:
@@ -1025,6 +1042,104 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
         return None
 
 
+# ── Deployment Plan: Auto-track Progress ──
+
+
+async def update_deployment_progress(backend_url: str):
+    """Compare buy transactions against active deployment plan and update progress.
+
+    Sums all buy transactions since the tranche's planned_date (or plan start)
+    and updates the in-progress tranche's executed amount.
+    """
+    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+        try:
+            # Get active deployment plan
+            resp = await client.get("/deployment-plans/current")
+            if resp.status_code != 200:
+                return
+            plan = resp.json().get("data", {})
+            plan_id = plan.get("id")
+            if not plan_id:
+                return
+
+            tranches = plan.get("tranches", [])
+            if not tranches:
+                return
+
+            # Find the current tranche (first non-completed one)
+            current = None
+            for t in tranches:
+                if t.get("status") != "completed":
+                    current = t
+                    break
+            if not current:
+                return
+
+            tranche_id = current["id"]
+            planned_date = current.get("plannedDate", plan.get("startDate", ""))
+            target_cents = current.get("amountCents", 0)
+
+            # Get FX rates for currency conversion
+            fx_resp = await client.get("/prices/fx-rates")
+            fx_rates = {}
+            if fx_resp.status_code == 200:
+                for r in fx_resp.json().get("data", []):
+                    fx_rates[r.get("currency", r.get("quoteCurrency", ""))] = r.get("rate", 1)
+
+            # Sum buy transactions since plan start date
+            # (deployment = new capital deployed, i.e. buys funded by ALYK redemption)
+            start = plan.get("startDate", planned_date)
+            tx_resp = await client.get(f"/transactions?limit=500")
+            if tx_resp.status_code != 200:
+                return
+
+            txns = tx_resp.json().get("data", [])
+            total_deployed = 0
+            notes_parts = []
+
+            for tx in txns:
+                if tx.get("tradeDate", "") < start:
+                    continue
+                if tx.get("type") != "buy":
+                    continue
+
+                total_cents = tx.get("totalCents", 0)
+                currency = tx.get("currency", "EUR")
+
+                if currency == "EUR":
+                    eur_cents = total_cents
+                else:
+                    fx = fx_rates.get(currency, 1)
+                    eur_cents = int(total_cents / fx) if fx else total_cents
+
+                total_deployed += eur_cents
+                ticker = tx.get("ticker", "?")
+                dt = tx.get("tradeDate", "?")
+                notes_parts.append(f"{dt}: {ticker} {eur_cents/100:.0f}EUR")
+
+            if total_deployed <= 0:
+                return
+
+            # Update the tranche
+            status = "completed" if total_deployed >= target_cents else "in_progress"
+            notes = "; ".join(notes_parts[-10:])  # keep last 10 entries
+
+            await client.put(
+                f"/deployment-plans/{plan_id}/tranches/{tranche_id}",
+                json={
+                    "status": status,
+                    "executedAmountCents": total_deployed,
+                    "executionNotes": notes,
+                },
+            )
+            print(f"  [deployment] Updated tranche {tranche_id}: "
+                  f"{total_deployed/100:,.0f}/{target_cents/100:,.0f} EUR ({status})",
+                  flush=True)
+
+        except Exception as e:
+            print(f"  [deployment] Failed to update progress: {e}", flush=True)
+
+
 # ── Portfolio Manager: Close Old Recs + Post New ──
 
 async def close_old_recommendations(backend_url: str):
@@ -1106,8 +1221,8 @@ Return a JSON array of objects. Each object must have these fields:
 - "action": "buy" | "sell" | "hold" | "wait"
 - "confidence": "high" | "medium" | "low"
 - "rationale": string (1-3 sentence summary of the recommendation)
-- "bull_case": string or null
-- "bear_case": string or null
+- "bull_case": string (REQUIRED — what could go right, never null)
+- "bear_case": string (REQUIRED — what could go wrong, never null)
 - "time_horizon": "short" | "medium" | "long" (short=<3m, medium=3-12m, long=>12m)
 
 IMPORTANT action rules:
@@ -1334,13 +1449,15 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
                 result = await run_per_security_agent(agent_name, cfg, date_str)
             else:
                 result = await run_agent(agent_name, cfg, date_str)
+            llm_tag = get_llm_tag()  # capture before another agent overwrites it
             completed_count += 1
-            return result
+            return (result, llm_tag)
 
     analyst_tasks = [run_with_limit(a) for a in analysts]
     results = await asyncio.gather(*analyst_tasks, return_exceptions=True)
 
-    completed = sum(1 for r in results if r and not isinstance(r, Exception))
+    completed = sum(1 for r in results if r and not isinstance(r, Exception)
+                     and r[0])  # r is (report, llm_tag) tuple
     failed = len(results) - completed
     print(f"\n[swarm] Analysts: {completed} completed, {failed} failed", flush=True)
 
@@ -1348,10 +1465,13 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
     for agent_name, result in zip(analysts, results):
         if not result or isinstance(result, Exception):
             continue
+        report, llm_tag = result
+        if not report:
+            continue
         if agent_name == "research-analyst":
-            await extract_per_security_notes(result, backend_url, date_str)
+            await extract_per_security_notes(report, backend_url, date_str, llm_tag)
         elif agent_name == "technical-analyst":
-            await extract_technical_notes(result, backend_url, date_str)
+            await extract_technical_notes(report, backend_url, date_str, llm_tag)
 
     # Step 4: Run portfolio manager last (needs analyst outputs + previous recommendations)
     # NOTE: old recs are closed AFTER PM runs so it can compare against them
@@ -1367,6 +1487,9 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
             await close_old_recommendations(backend_url)
             await report_status(backend_url, "running", message="Posting recommendations...")
             await extract_and_post_recommendations(pm_report, cfg, date_str, brief_type)
+
+    # Step 6: Update deployment plan progress from transactions
+    await update_deployment_progress(backend_url)
 
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle",
@@ -1393,8 +1516,9 @@ async def run_research_only(cfg: dict):
         report = await run_per_security_agent("research-analyst", cfg, date_str)
     else:
         report = await run_agent("research-analyst", cfg, date_str)
+    llm_tag = get_llm_tag()
     if report:
-        await extract_per_security_notes(report, backend_url, date_str)
+        await extract_per_security_notes(report, backend_url, date_str, llm_tag)
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle", completed=1, total=1,
                         message=f"Research complete in {elapsed}s")

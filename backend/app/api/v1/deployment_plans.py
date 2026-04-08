@@ -59,6 +59,8 @@ class TrancheUpdate(BaseModel):
     status: Optional[str] = None
     amountCents: Optional[int] = None
     plannedDate: Optional[date] = None
+    executedAmountCents: Optional[int] = None
+    executionNotes: Optional[str] = None
 
 
 class TrancheComplete(BaseModel):
@@ -277,6 +279,10 @@ async def update_tranche(plan_id: int, tranche_id: int, body: TrancheUpdate):
             tranche.amount_cents = body.amountCents
         if body.plannedDate is not None:
             tranche.planned_date = body.plannedDate
+        if body.executedAmountCents is not None:
+            tranche.executed_amount_cents = body.executedAmountCents
+        if body.executionNotes is not None:
+            tranche.execution_notes = body.executionNotes
 
         await session.commit()
 

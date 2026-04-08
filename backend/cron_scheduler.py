@@ -102,6 +102,11 @@ def main() -> None:
                       day_of_week="mon-fri", hour=23, minute=30,
                       id="yahoo_dividends")
 
+    # Dividend reconciliation — weekdays at 23:45, after yahoo_dividends completes
+    scheduler.add_job(trigger, "cron", args=["dividend_reconciliation"],
+                      day_of_week="mon-fri", hour=23, minute=45,
+                      id="dividend_reconciliation")
+
     # Google News — every 4 hours
     scheduler.add_job(trigger, "interval", args=["google_news"],
                       hours=4, id="google_news")

@@ -246,6 +246,7 @@ curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coi
 |----------|--------|----------|
 | `yahoo_daily_prices` | Yahoo Finance | Weekdays 23:00 |
 | `yahoo_dividends` | Yahoo Finance | Weekdays 23:30 |
+| `dividend_reconciliation` | Internal | After `yahoo_dividends` |
 | `yahoo_fundamentals` | Yahoo Finance | Weekdays 23:45 |
 | `ecb_fx_rates` | ECB | Weekdays 17:00 |
 | `ecb_macro_indicators` | ECB SDW | Weekdays 12:00 |

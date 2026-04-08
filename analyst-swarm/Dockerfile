@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY swarm.py .
 COPY data_digest.py .
+COPY run_full_claude.py .
+COPY run_pm.py .
 COPY config.yaml .
 
 # Agent definitions are mounted from the host

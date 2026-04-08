@@ -53,6 +53,7 @@ See `AGENTS.md` for full team definitions, workflows, data sources, glidepath sc
 - Test all financial calculations thoroughly (tax scenarios, edge cases)
 - Every data source must be replaceable (adapter pattern)
 - Show stale/missing data visibly in UI — never show wrong data silently
+- **Document financial terms in the UI** — whenever adding new features that display financial metrics, indicators, or technical terms, add an (i) hover tooltip (`InfoTip` component) explaining what the term means and why it matters. See the macro page indicators or portfolio Brinson Attribution for the pattern. Users should never have to leave the terminal to understand what a number means.
 - **Never commit personal data** — no real portfolio holdings, monetary values, account balances, ticker positions, API keys, passwords, or any personally identifiable financial information in committed code, tests, seed data, or documentation. Use placeholder/example values only.
 - No multi-tenancy — single-user personal tool. API protected by static `API_KEY` (see `.env`).
 - Respect all API rate limits, implement backoff and caching

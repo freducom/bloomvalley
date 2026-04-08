@@ -7,6 +7,7 @@ import { TickerLink } from "@/components/ui/TickerLink";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
+import { InfoTip } from "@/components/ui/InfoTip";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot,
 } from "recharts";
@@ -648,12 +649,7 @@ function BrinsonAttribution() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Return Attribution (Brinson)</h2>
-          <span className="relative group">
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-terminal-text-tertiary text-terminal-text-tertiary text-[10px] cursor-help leading-none">i</span>
-            <span className="absolute left-6 top-0 z-10 hidden group-hover:block w-72 p-2 text-xs text-terminal-text-primary bg-terminal-bg-tertiary border border-terminal-border rounded shadow-md">
-              Brinson-Fachler attribution decomposes your portfolio&apos;s return vs. a benchmark into three effects: <strong>Allocation</strong> (over/underweighting sectors), <strong>Selection</strong> (picking better/worse securities within sectors), and <strong>Interaction</strong> (the combined effect of both decisions).
-            </span>
-          </span>
+          <InfoTip text="Brinson-Fachler attribution decomposes your portfolio's return vs. a benchmark into three effects: Allocation (over/underweighting sectors), Selection (picking better/worse securities within sectors), and Interaction (the combined effect of both decisions)." />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}

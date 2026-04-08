@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiGetRaw } from "@/lib/api";
 import { TickerLink } from "@/components/ui/TickerLink";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 interface AgentInfo {
   hasNote: boolean;
@@ -92,7 +93,7 @@ export default function ConsensusPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <h1 className="text-lg font-bold text-terminal-text-primary mb-4">Analyst Consensus</h1>
+        <h1 className="text-lg font-bold text-terminal-text-primary mb-4">Analyst Consensus <InfoTip text="Aggregated view of how all 9 AI analyst agents agree or disagree on each security. Highlights conflicts between Research Analyst and Portfolio Manager recommendations." /></h1>
         <div className="text-sm text-terminal-text-muted animate-pulse">Loading consensus data...</div>
       </div>
     );
@@ -100,7 +101,7 @@ export default function ConsensusPage() {
 
   return (
     <div className="p-6 max-w-7xl">
-      <h1 className="text-lg font-bold text-terminal-text-primary mb-2">Analyst Consensus</h1>
+      <h1 className="text-lg font-bold text-terminal-text-primary mb-2">Analyst Consensus <InfoTip text="Aggregated view of how all 9 AI analyst agents agree or disagree on each security. Highlights conflicts between Research Analyst and Portfolio Manager recommendations." /></h1>
       <p className="text-xs text-terminal-text-muted mb-4">
         How the 9 AI analysts agree or disagree on each security. Conflicts are flagged when the Research Analyst
         and Portfolio Manager disagree.
@@ -115,7 +116,7 @@ export default function ConsensusPage() {
         {conflicts > 0 && (
           <div className="bg-red-500/10 border border-red-500/30 rounded px-4 py-2">
             <span className="text-xl font-bold text-red-400">{conflicts}</span>
-            <span className="text-xs text-red-400/70 ml-2">Conflicts</span>
+            <span className="text-xs text-red-400/70 ml-2">Conflicts <InfoTip text="Disagreement between Research Analyst and Portfolio Manager on a security's recommendation. Conflicts warrant closer investigation." /></span>
           </div>
         )}
       </div>
@@ -149,9 +150,9 @@ export default function ConsensusPage() {
               <th className="text-left p-2">Security</th>
               <th className="text-center p-2">PM Action</th>
               <th className="text-center p-2">Research Verdict</th>
-              <th className="text-center p-2">Moat</th>
-              <th className="text-center p-2">Coverage</th>
-              <th className="text-center p-2">Status</th>
+              <th className="text-center p-2">Moat <InfoTip text="Competitive advantage durability rating (None/Narrow/Wide). Consensus across analyst agents." /></th>
+              <th className="text-center p-2">Coverage <InfoTip text="Number of AI analyst agents that have analyzed this security. Higher coverage means more comprehensive analysis." /></th>
+              <th className="text-center p-2">Status <InfoTip text="Disagreement between Research Analyst and Portfolio Manager on a security's recommendation. Conflicts warrant closer investigation." /></th>
             </tr>
           </thead>
           <tbody>

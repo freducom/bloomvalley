@@ -101,6 +101,10 @@ class Dividend(Base):
             "net_amount_cents = gross_amount_cents - withholding_tax_cents",
             name="chk_dividends_net_amount",
         ),
+        UniqueConstraint(
+            "account_id", "security_id", "ex_date",
+            name="uq_dividends_account_security_ex_date",
+        ),
         Index("idx_dividends_account_id", "account_id"),
         Index("idx_dividends_security_id", "security_id"),
         Index("idx_dividends_ex_date", "ex_date"),

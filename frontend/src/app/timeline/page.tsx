@@ -5,6 +5,7 @@ import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
+import { InfoTip } from "@/components/ui/InfoTip";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ReferenceLine, Cell,
@@ -101,7 +102,7 @@ export default function TimelinePage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Capital Deployment Timeline</h1>
+        <h1 className="text-2xl font-bold">Capital Deployment Timeline <InfoTip text="Quarterly capital deployment schedule. Defines how much new capital to invest each quarter, split between core index holdings and high-conviction satellite positions." /></h1>
         <div className="h-64 bg-terminal-bg-secondary rounded animate-pulse" />
       </div>
     );
@@ -110,7 +111,7 @@ export default function TimelinePage() {
   if (!plan) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Capital Deployment Timeline</h1>
+        <h1 className="text-2xl font-bold">Capital Deployment Timeline <InfoTip text="Quarterly capital deployment schedule. Defines how much new capital to invest each quarter, split between core index holdings and high-conviction satellite positions." /></h1>
         <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-8 text-center">
           <p className="text-terminal-text-secondary mb-4">
             No active deployment plan. The portfolio manager will create one on the next analyst swarm run.
@@ -135,7 +136,7 @@ export default function TimelinePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Capital Deployment Timeline</h1>
+          <h1 className="text-2xl font-bold">Capital Deployment Timeline <InfoTip text="Quarterly capital deployment schedule. Defines how much new capital to invest each quarter, split between core index holdings and high-conviction satellite positions." /></h1>
           <p className="text-terminal-text-secondary text-sm mt-1">{plan.name}</p>
         </div>
         {reviewDue && (
@@ -213,7 +214,11 @@ export default function TimelinePage() {
                   border: "1px solid #2d3548",
                   borderRadius: "4px",
                   fontSize: "12px",
+                  color: "#e5e7eb",
                 }}
+                labelStyle={{ color: "#9ca3af" }}
+                itemStyle={{ color: "#e5e7eb" }}
+                cursor={{ fill: "rgba(139, 92, 246, 0.1)" }}
                 formatter={(value: number, name: string) => [
                   `€${value.toLocaleString()}`,
                   name === "executed" ? "Executed" : "Planned",
@@ -252,7 +257,7 @@ export default function TimelinePage() {
 
       {/* Tranche Detail Cards */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-terminal-text-secondary">Tranches</h3>
+        <h3 className="text-sm font-semibold text-terminal-text-secondary">Tranches <InfoTip text="A scheduled batch of capital to deploy. Each tranche specifies the amount, target allocation (core vs conviction), and deployment quarter." /></h3>
         {plan.tranches.map((tranche) => (
           <TrancheCard key={tranche.id} tranche={tranche} recs={recs} />
         ))}
@@ -311,13 +316,41 @@ function TrancheCard({ tranche, recs }: { tranche: Tranche; recs: Recommendation
         </span>
       </div>
 
-      {/* Amount + Allocation */}
+      {/* Amount + Deployment Progress + Allocation */}
       <Private>
         <div className="flex items-center gap-4 mb-3">
-          <span className="text-lg font-bold">
-            {formatCurrency(tranche.amountCents)}
-          </span>
+          <div>
+            <span className="text-lg font-bold">
+              {formatCurrency(tranche.amountCents)}
+            </span>
+            {(tranche.executedAmountCents ?? 0) > 0 && (
+              <div className="text-xs text-terminal-text-secondary mt-0.5">
+                <span className="text-emerald-400 font-semibold">
+                  {formatCurrency(tranche.executedAmountCents)}
+                </span>
+                {" deployed "}
+                <span className="text-terminal-text-tertiary">
+                  ({Math.round(((tranche.executedAmountCents ?? 0) / tranche.amountCents) * 100)}%)
+                </span>
+                {tranche.amountCents > (tranche.executedAmountCents ?? 0) && (
+                  <span className="text-terminal-text-tertiary">
+                    {" — "}{formatCurrency(tranche.amountCents - (tranche.executedAmountCents ?? 0))} remaining
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex-1">
+            {/* Deployment progress bar */}
+            {(tranche.executedAmountCents ?? 0) > 0 && (
+              <div className="flex h-1.5 rounded-full overflow-hidden bg-terminal-bg-primary mb-1.5">
+                <div
+                  className="bg-emerald-500 transition-all"
+                  style={{ width: `${Math.min(100, ((tranche.executedAmountCents ?? 0) / tranche.amountCents) * 100)}%` }}
+                />
+              </div>
+            )}
+            {/* Allocation split bar */}
             <div className="flex h-2 rounded-full overflow-hidden bg-terminal-bg-primary">
               <div
                 className="bg-blue-500"
@@ -336,13 +369,20 @@ function TrancheCard({ tranche, recs }: { tranche: Tranche; recs: Recommendation
               />
             </div>
             <div className="flex text-xs text-terminal-text-secondary mt-1 gap-3">
-              <span>Core {tranche.coreAllocationPct}%</span>
-              <span>Conviction {tranche.convictionAllocationPct}%</span>
-              <span>Cash {tranche.cashBufferPct}%</span>
+              <span>Core {tranche.coreAllocationPct}% <InfoTip text="Index fund allocation (60-70% of portfolio). Low-cost, broad market exposure following the Boglehead philosophy." /></span>
+              <span>Conviction {tranche.convictionAllocationPct}% <InfoTip text="Individual stock picks (30-40% of portfolio). High-conviction Munger-style positions with demonstrated competitive advantages." /></span>
+              <span>Cash {tranche.cashBufferPct}% <InfoTip text="Cash reserve maintained for opportunistic purchases during market downturns. Typically 3-5% of portfolio value." /></span>
             </div>
           </div>
         </div>
       </Private>
+
+      {/* Execution notes */}
+      {tranche.executionNotes && (
+        <div className="text-xs text-terminal-text-tertiary bg-terminal-bg-primary rounded px-3 py-1.5 mb-3 font-mono">
+          {tranche.executionNotes}
+        </div>
+      )}
 
       {/* Candidate Securities */}
       {tranche.candidateTickers && tranche.candidateTickers.length > 0 && (

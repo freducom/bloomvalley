@@ -14,6 +14,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { Private } from "@/lib/privacy";
 import { formatCurrency, formatLargeNumber, formatPercent } from "@/lib/format";
 import { apiGetRaw } from "@/lib/api";
@@ -357,19 +358,19 @@ export default function ProjectionsPage() {
             changeType="neutral"
           />
           <MetricCard
-            label="P(Reaching Target)"
+            label={<>P(Reaching Target) <InfoTip text="Monte Carlo simulation result showing the likelihood of reaching your target portfolio value, based on thousands of randomized return scenarios." /></>}
             value={formatPercent(s.probabilityOfTarget * 100)}
             change={`Target: ${formatLargeNumber(s.targetValue)}`}
             changeType={s.probabilityOfTarget >= 0.5 ? "positive" : "negative"}
           />
           <MetricCard
-            label="Safe Withdrawal Rate"
+            label={<>Safe Withdrawal Rate <InfoTip text="The maximum percentage you can withdraw annually from your portfolio without running out of money over a given timeframe. The classic '4% rule' is based on historical US market returns." /></>}
             value={formatPercent(s.safeWithdrawalRate * 100)}
             change="95% survival to age 95"
             changeType={s.safeWithdrawalRate >= 0.035 ? "positive" : "neutral"}
           />
           <MetricCard
-            label="P(Lasting to 90)"
+            label={<>P(Lasting to 90) <InfoTip text="Likelihood that your portfolio survives to the target age given planned withdrawals. Based on Monte Carlo simulation with historical return distributions." /></>}
             value={formatPercent(s.probabilityLastingTo90 * 100)}
             change={`To 95: ${formatPercent(s.probabilityLastingTo95 * 100)}`}
             changeType={s.probabilityLastingTo90 >= 0.85 ? "positive" : "negative"}
@@ -382,7 +383,7 @@ export default function ProjectionsPage() {
         <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-terminal-text-secondary">
-              Portfolio Value Projection
+              Portfolio Value Projection <InfoTip text="Confidence bands from Monte Carlo simulation. P50 is the median outcome; P5/P95 show the 5th/95th percentile (worst/best 5% of scenarios)." />
             </h3>
             <div className="flex gap-1">
               {(["all", "accumulation", "withdrawal"] as const).map((phase) => (
@@ -519,7 +520,7 @@ export default function ProjectionsPage() {
           {/* Survival Probabilities */}
           <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
             <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">
-              Survival Probabilities
+              Survival Probabilities <InfoTip text="Likelihood that your portfolio survives to the target age given planned withdrawals. Based on Monte Carlo simulation with historical return distributions." />
             </h3>
             <div className="space-y-3">
               {[
@@ -559,7 +560,7 @@ export default function ProjectionsPage() {
             </div>
             <div className="mt-4 pt-3 border-t border-terminal-border">
               <div className="flex justify-between text-xs">
-                <span className="text-terminal-text-tertiary">Safe Withdrawal Rate</span>
+                <span className="text-terminal-text-tertiary">Safe Withdrawal Rate <InfoTip text="The maximum percentage you can withdraw annually from your portfolio without running out of money over a given timeframe. The classic '4% rule' is based on historical US market returns." /></span>
                 <span className="font-mono text-terminal-accent font-semibold">
                   {formatPercent(s.safeWithdrawalRate * 100)}
                 </span>

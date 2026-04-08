@@ -18,6 +18,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { apiGetRaw } from "@/lib/api";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 /* ── Types ── */
 
@@ -97,21 +98,22 @@ export default function OptimizationPage() {
 
       <div className="flex gap-1 bg-terminal-bg-secondary rounded-lg p-1 border border-terminal-border w-fit">
         {([
-          { key: "frontier" as Tab, label: "Efficient Frontier" },
-          { key: "optimal" as Tab, label: "Optimal Portfolio" },
-          { key: "riskParity" as Tab, label: "Risk Parity" },
-          { key: "rebalance" as Tab, label: "Rebalance" },
+          { key: "frontier" as Tab, label: "Efficient Frontier", tip: "The set of optimal portfolios that offer the highest expected return for each level of risk. Portfolios below the frontier are suboptimal — you can get more return for the same risk." },
+          { key: "optimal" as Tab, label: "Optimal Portfolio", tip: "The portfolio allocation that maximizes the Sharpe ratio (risk-adjusted return) on the efficient frontier. Also called the tangent portfolio." },
+          { key: "riskParity" as Tab, label: "Risk Parity", tip: "Allocation strategy where each asset contributes equally to total portfolio risk. Results in higher bond/low-vol allocations than market-cap weighting." },
+          { key: "rebalance" as Tab, label: "Rebalance", tip: "Adjustments needed to bring current portfolio weights back to target allocations. Drift occurs naturally as assets move at different rates." },
         ]).map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-1.5 text-sm rounded ${
+            className={`px-4 py-1.5 text-sm rounded flex items-center gap-1 ${
               tab === t.key
                 ? "bg-terminal-bg-tertiary text-terminal-text-primary"
                 : "text-terminal-text-secondary hover:text-terminal-text-primary"
             }`}
           >
             {t.label}
+            <InfoTip text={t.tip} />
           </button>
         ))}
       </div>
@@ -196,8 +198,9 @@ function FrontierTab() {
       </div>
 
       <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
-        <h3 className="text-sm font-medium text-terminal-text-secondary mb-4">
+        <h3 className="text-sm font-medium text-terminal-text-secondary mb-4 flex items-center gap-1">
           Efficient Frontier
+          <InfoTip text="The set of optimal portfolios that offer the highest expected return for each level of risk. Portfolios below the frontier are suboptimal — you can get more return for the same risk." />
         </h3>
         <ResponsiveContainer width="100%" height={400}>
           <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
@@ -268,7 +271,10 @@ function OptimalTab() {
   return (
     <div className="space-y-6">
       <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
-        <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Risk Tolerance</h3>
+        <h3 className="text-sm font-medium text-terminal-text-secondary mb-3 flex items-center gap-1">
+          Optimal Portfolio
+          <InfoTip text="The portfolio allocation that maximizes the Sharpe ratio (risk-adjusted return) on the efficient frontier. Also called the tangent portfolio." />
+        </h3>
         <div className="flex items-center gap-4">
           <span className="text-xs text-terminal-text-tertiary">Aggressive</span>
           <input
@@ -384,8 +390,9 @@ function RiskParityTab() {
       </div>
 
       <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
-        <h3 className="text-sm font-medium text-terminal-text-secondary mb-4">
-          Weights vs Risk Contribution (top 15)
+        <h3 className="text-sm font-medium text-terminal-text-secondary mb-4 flex items-center gap-1">
+          Risk Parity — Weights vs Risk Contribution (top 15)
+          <InfoTip text="Allocation strategy where each asset contributes equally to total portfolio risk. Results in higher bond/low-vol allocations than market-cap weighting." />
         </h3>
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 60 }}>
@@ -434,7 +441,10 @@ function RebalanceTab() {
   return (
     <div className="space-y-6">
       <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4">
-        <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Risk Tolerance</h3>
+        <h3 className="text-sm font-medium text-terminal-text-secondary mb-3 flex items-center gap-1">
+          Rebalance
+          <InfoTip text="Adjustments needed to bring current portfolio weights back to target allocations. Drift occurs naturally as assets move at different rates." />
+        </h3>
         <div className="flex items-center gap-4">
           <span className="text-xs text-terminal-text-tertiary">Aggressive</span>
           <input type="range" min={1} max={10} value={riskTolerance}

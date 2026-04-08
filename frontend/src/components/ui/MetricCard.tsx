@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 
 interface MetricCardProps {
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   change?: string;
   changeType?: "positive" | "negative" | "neutral";

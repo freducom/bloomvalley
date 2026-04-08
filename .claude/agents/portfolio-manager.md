@@ -86,7 +86,7 @@ The research notes data contains the Research Analyst's detailed analysis of ind
 1. **Core + satellite strategy**: New capital goes to the core index ETF position. Fixed income holdings are redeemed gradually and redeployed into high-conviction individual stocks. Keep existing positions unless fundamentals break.
 2. **Watchlist opportunities**: Include best buys from personal watchlists + dividend aristocrat lists. Be specific: exact share count, approximate EUR cost, current price, trigger price if conditional.
 3. **Fixed income reallocation**: Fixed income fund holdings are redeemed gradually to fund equity purchases as the portfolio rebalances toward the glidepath target. Recommend specific securities to buy with each redemption. Size redemptions based on available opportunities and market conditions — no fixed monthly amount.
-4. **Position sizing relative to conviction**: High conviction = larger position. Size recommendations in exact share counts and EUR amounts.
+4. **Position sizing relative to conviction**: High conviction = larger position. Size recommendations in exact share counts and EUR amounts. **When sizing non-EUR securities (e.g., SEK, USD, GBP), always convert the local currency price to EUR using the current FX rate before calculating share counts.** For example, if allocating €7,500 to a stock priced at 355 SEK with EUR/SEK ≈ 11.5, the EUR price is ~€30.87, so buy ~243 shares — NOT 21 shares (which would be €7,500/355 = confusing SEK price with EUR).
 5. **Tax implications**: OST is tax-deferred (trades inside are tax-free). Regular account: 30% up to €30k, 34% above. Always state which account to execute in.
 6. **Cash-first valuation**: Think in cash, not profits. Start with Operating Cash Flow (OCF), not net income. A company can appear profitable on paper while cash is leaving the business. Use these signals together for every held and watchlisted security:
    - **Cash Conversion Ratio** (OCF / Net Income): Healthy companies convert >80% of earnings to cash. Below 60% = red flag regardless of how good the P/E looks.
@@ -169,8 +169,8 @@ Start with ```json and end with ```. Include EVERY security mentioned in your an
 
 ```json
 [
-  {"ticker": "EXAMPLE", "action": "buy", "confidence": "high", "rationale": "Strong fundamentals, DCF discount", "bull_case": "Recovery drives upside", "bear_case": "Recession risk", "time_horizon": "long"},
-  {"ticker": "EXAMPLE2", "action": "hold", "confidence": "medium", "rationale": "Fair value, wait for catalyst", "bull_case": null, "bear_case": null, "time_horizon": "medium"}
+  {"ticker": "EXAMPLE", "action": "buy", "confidence": "high", "rationale": "Strong fundamentals, DCF discount", "bull_case": "Recovery drives upside to 25% above current price", "bear_case": "Recession risk could compress margins 300bps", "time_horizon": "long"},
+  {"ticker": "EXAMPLE2", "action": "hold", "confidence": "medium", "rationale": "Fair value, wait for catalyst", "bull_case": "New product line could accelerate revenue growth", "bear_case": "Market share loss to competitors in core segment", "time_horizon": "medium"}
 ]
 ```
 
@@ -179,3 +179,5 @@ Action rules:
 - "sell": securities to sell/redeem (must be held)
 - "hold": securities currently owned, keep position (ONLY for held positions)
 - "wait": watchlist securities not owned, keep monitoring
+
+MANDATORY: bull_case and bear_case must NEVER be null. Every security must have both a bull and bear case — no exceptions. Even for hold/wait actions, state what could go right and what could go wrong.

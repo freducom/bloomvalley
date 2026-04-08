@@ -6,6 +6,7 @@ import Link from "next/link";
 import { apiGet, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent, formatDate, formatLargeNumber } from "@/lib/format";
 import { Private } from "@/lib/privacy";
+import { InfoTip } from "@/components/ui/InfoTip";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -227,14 +228,19 @@ function MetricCell({
   label,
   value,
   colorClass,
+  tooltip,
 }: {
   label: string;
   value: string;
   colorClass?: string;
+  tooltip?: string;
 }) {
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-3">
-      <div className="text-xs text-terminal-text-secondary">{label}</div>
+      <div className="text-xs text-terminal-text-secondary flex items-center gap-1">
+        {label}
+        {tooltip && <InfoTip text={tooltip} />}
+      </div>
       <div className={`font-mono text-sm mt-1 ${colorClass || ""}`}>{value}</div>
     </div>
   );
@@ -439,9 +445,18 @@ export default function SecurityDetailPage() {
 
   /* ── Derived data ── */
   const isHeld = holdings.length > 0;
-  // Most recent research-analyst and technical notes (API returns newest first)
-  const latestResearchAnalyst = research
-    .find((n) => n.tags?.includes("research-analyst")) || null;
+
+  // Pick best research note: prefer Claude if <5 days old, otherwise latest Ollama
+  const CLAUDE_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+  const now = Date.now();
+  const researchAnalystNotes = research.filter((n) => n.tags?.includes("research-analyst"));
+  const claudeResearch = researchAnalystNotes.find((n) => n.tags?.includes("llm:claude")) || null;
+  const ollamaResearch = researchAnalystNotes.find((n) => n.tags?.includes("llm:ollama")) || null;
+  const claudeAge = claudeResearch?.createdAt ? now - new Date(claudeResearch.createdAt).getTime() : Infinity;
+  const latestResearchAnalyst = (claudeResearch && claudeAge < CLAUDE_MAX_AGE_MS)
+    ? claudeResearch
+    : ollamaResearch || claudeResearch || researchAnalystNotes[0] || null;
+
   const latestTechnical = research
     .find((n) => n.tags?.includes("technical-analyst")) || null;
   const latestResearch = latestResearchAnalyst || latestTechnical || (research.length > 0 ? research[0] : null);
@@ -578,11 +593,18 @@ export default function SecurityDetailPage() {
         <div className="border border-terminal-accent/30 bg-terminal-accent/5 rounded-md p-4 mb-6">
           <div className="flex items-baseline justify-between mb-2">
             <h2 className="text-sm font-semibold text-terminal-accent">AI Analysis</h2>
-            {latestResearch?.createdAt && (
-              <span className="text-xs text-terminal-text-muted">
-                {new Date(latestResearch.createdAt).toLocaleDateString("fi-FI")}
-              </span>
-            )}
+            <div className="flex items-baseline gap-2">
+              {latestResearch?.tags?.some((t: string) => t.startsWith("llm:")) && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono">
+                  {latestResearch.tags.find((t: string) => t.startsWith("llm:"))?.replace("llm:", "").toUpperCase()}
+                </span>
+              )}
+              {latestResearch?.createdAt && (
+                <span className="text-xs text-terminal-text-muted">
+                  {new Date(latestResearch.createdAt).toLocaleDateString("fi-FI")}
+                </span>
+              )}
+            </div>
           </div>
           {(latestResearch?.thesis || analystExcerpt) ? (
             <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
@@ -656,40 +678,49 @@ export default function SecurityDetailPage() {
               label="ROIC"
               value={fundamentals.roic !== null ? formatPercent(fundamentals.roic * 100) : "-"}
               colorClass={roicColor(fundamentals.roic)}
+              tooltip="Return on Invested Capital. Measures profit generation efficiency relative to total capital invested. Above 15% suggests a durable competitive advantage."
             />
             <MetricCell
               label="P/B"
               value={fundamentals.priceToBook !== null ? fundamentals.priceToBook.toFixed(2) : "-"}
+              tooltip="Price-to-Book ratio. Market price vs. net asset value. Core valuation metric for banks and asset-heavy businesses."
             />
             <MetricCell
               label="PE Ratio"
               value={fundamentals.peRatio !== null ? fundamentals.peRatio.toFixed(1) : "-"}
+              tooltip="Price-to-Earnings ratio. Share price divided by earnings per share. Compare within the same sector for meaningful benchmarks."
             />
             <MetricCell
               label="FCF Yield"
               value={fundamentals.fcfYield !== null ? formatPercent(fundamentals.fcfYield * 100) : "-"}
               colorClass={fcfYieldColor(fundamentals.fcfYield)}
+              tooltip="Free Cash Flow yield. Cash generated after capital expenditures relative to market cap. Higher = more cash available for shareholders."
             />
             <MetricCell
               label="Net Debt / EBITDA"
               value={fundamentals.netDebtEbitda !== null ? `${fundamentals.netDebtEbitda.toFixed(1)}x` : "-"}
               colorClass={debtColor(fundamentals.netDebtEbitda)}
+              tooltip="Leverage ratio. Years of operating earnings needed to repay net debt. Below 2x is conservative; above 4x is risky."
             />
             <MetricCell
               label="Dividend Yield"
               value={fundamentals.dividendYield !== null ? formatPercent(fundamentals.dividendYield * 100) : "-"}
+              tooltip="Annual dividend payment divided by share price. The income component of total return."
             />
             <MetricCell
               label="Gross Margin"
               value={fundamentals.grossMargin !== null ? formatPercent(fundamentals.grossMargin * 100) : "-"}
+              tooltip="Revenue minus cost of goods sold as a percentage of revenue. Indicates pricing power."
             />
             <MetricCell
               label="Operating Margin"
               value={fundamentals.operatingMargin !== null ? formatPercent(fundamentals.operatingMargin * 100) : "-"}
+              tooltip="Operating profit as a percentage of revenue. Core business profitability before interest and taxes."
             />
             <MetricCell
               label="DCF Value"
               value={fundamentals.dcfValueCents !== null ? formatLargeNumber(fundamentals.dcfValueCents, currency) : "-"}
+              tooltip="Discounted Cash Flow intrinsic value. Estimated fair value based on projected future cash flows discounted to present value."
             />
             <MetricCell
               label="DCF Upside"
@@ -703,6 +734,7 @@ export default function SecurityDetailPage() {
             <MetricCell
               label="Short Interest"
               value={fundamentals.shortInterestPct !== null ? `${fundamentals.shortInterestPct.toFixed(2)}%` : "-"}
+              tooltip="Percentage of shares currently sold short. High levels signal bearish sentiment or potential short squeeze."
             />
           </div>
           {fundamentals.updatedAt && (

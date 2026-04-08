@@ -5,6 +5,7 @@ import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 interface RiskMetrics {
   annualizedReturn: number;
@@ -291,7 +292,7 @@ function TopPositionsCard({ positions }: { positions: Position[] }) {
   const top = positions.slice(0, 10);
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
-      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Top 10 Positions</h3>
+      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Top 10 Positions <InfoTip text="Largest portfolio holdings by value. High concentration in a few positions increases idiosyncratic risk." /></h3>
       <div className="space-y-1.5">
         {top.map((p, i) => (
           <div key={`${p.ticker}-${i}`} className="flex items-center gap-2">
@@ -317,7 +318,7 @@ function TopPositionsCard({ positions }: { positions: Position[] }) {
 function SectorCard({ sectors }: { sectors: { sector: string; weight: number; notable: boolean }[] }) {
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
-      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Sector Exposure</h3>
+      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Sector Exposure <InfoTip text="Portfolio allocation by industry sector. Concentrated sector bets increase risk — diversification across sectors reduces drawdowns." /></h3>
       <div className="space-y-1.5">
         {sectors.map((s) => (
           <div key={s.sector} className="flex items-center gap-2">
@@ -354,7 +355,7 @@ function CorrelationCard({ correlation }: { correlation: CorrelationMatrix }) {
 
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4 lg:col-span-2">
-      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Correlation Matrix</h3>
+      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Correlation Matrix <InfoTip text="Shows how portfolio holdings move relative to each other. Values near +1.0 mean assets move together (less diversification); near -1.0 means they move opposite (good hedge)." /></h3>
       <div className="overflow-x-auto">
         <table className="text-xs">
           <thead>
@@ -409,7 +410,7 @@ function CorrelationCard({ correlation }: { correlation: CorrelationMatrix }) {
 function StressTestCard({ tests }: { tests: StressTest[] }) {
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
-      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Stress Tests</h3>
+      <h3 className="text-sm font-medium text-terminal-text-secondary mb-3">Stress Tests <InfoTip text="Simulates portfolio impact under historical crisis scenarios (e.g., 2008 financial crisis, COVID crash). Shows estimated loss if similar market conditions recur." /></h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {tests.map((t) => (
           <div key={t.id} className="bg-terminal-bg-tertiary rounded-lg p-3">
@@ -432,7 +433,7 @@ function GlidepathCard({ glidepath }: { glidepath: Glidepath }) {
   return (
     <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-4">
       <h3 className="text-sm font-medium text-terminal-text-secondary mb-1">
-        Glidepath — Age {glidepath.currentAge} → {glidepath.targetAge}
+        Glidepath — Age {glidepath.currentAge} → {glidepath.targetAge} <InfoTip text="Age-based asset allocation strategy that gradually shifts from equities to fixed income as the target retirement age approaches. Reduces risk as time horizon shortens." />
       </h3>
       <p className="text-xs text-terminal-text-secondary mb-4">
         Current allocation vs. target for fixed-income transition by age 60

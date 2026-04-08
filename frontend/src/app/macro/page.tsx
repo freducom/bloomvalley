@@ -59,6 +59,62 @@ interface SeriesData {
   points: SeriesPoint[];
 }
 
+import { InfoTip } from "@/components/ui/InfoTip";
+
+// Descriptions for every macro indicator code
+const INDICATOR_DESC: Record<string, string> = {
+  // Finland
+  FI_HICP: "Harmonised Index of Consumer Prices for Finland. ECB-comparable inflation measure used across the eurozone. Monthly, base year 2015 = 100.",
+  FPCPITOTLZGFIN: "Finland consumer price inflation, year-over-year percentage change. Measures how fast prices are rising for Finnish consumers.",
+  FI_UNEMP: "Finnish unemployment rate from ECB Labour Force Survey. Percentage of the labour force that is unemployed.",
+  LRHUTTTTFIM156S: "Finland harmonised unemployment rate (OECD/FRED). Alternative source for Finnish unemployment data.",
+  FI_GDP_YOY: "Finland real GDP growth, year-over-year. Measures the rate of economic expansion or contraction.",
+  CLVMNACSCAB1GQFI: "Finland real GDP (chain-linked volumes, seasonally adjusted). FRED mirror of Eurostat national accounts data.",
+
+  // Eurozone
+  ECB_MRR: "ECB Main Refinancing Rate. The interest rate banks pay to borrow from the ECB for one week — the primary tool for eurozone monetary policy.",
+  ECB_DFR: "ECB Deposit Facility Rate. The rate banks earn on overnight deposits at the ECB — sets the floor for short-term money market rates.",
+  ECBMRRFR: "ECB Main Refinancing Rate (FRED mirror). Same as ECB_MRR, sourced from FRED.",
+  ECBDFR: "ECB Deposit Facility Rate (FRED mirror). Same as ECB_DFR, sourced from FRED.",
+  EZ_YC_2Y: "Eurozone AAA sovereign yield curve at 2-year maturity. Reflects short-term interest rate expectations and ECB policy outlook.",
+  EZ_YC_5Y: "Eurozone AAA sovereign yield curve at 5-year maturity. Mid-curve benchmark for eurozone government borrowing costs.",
+  EZ_YC_10Y: "Eurozone AAA sovereign yield curve at 10-year maturity. Key benchmark for long-term borrowing costs and mortgage rates.",
+  EZ_YC_30Y: "Eurozone AAA sovereign yield curve at 30-year maturity. Reflects very long-term inflation expectations and term premium.",
+  IRLTLT01DEM156N: "Germany 10-year government bond yield. Benchmark safe-haven rate for the eurozone, analogous to US 10Y Treasury.",
+  EZ_HICP: "Eurozone Harmonised Index of Consumer Prices. The ECB's primary inflation gauge — their 2% target is based on this measure.",
+  EZ_HICP_CORE: "Eurozone Core HICP (excluding energy and food). Shows underlying inflation trend without volatile components — what the ECB watches for rate decisions.",
+  CP0000EZ19M086NEST: "Eurozone CPI from FRED (Eurostat source). All-items consumer price index for the euro area.",
+  EZ_GDP_YOY: "Eurozone real GDP growth, year-over-year. Aggregate economic growth across all euro area member states.",
+  CLVMNACSCAB1GQEA19: "Eurozone real GDP (chain-linked volumes, seasonally adjusted). FRED mirror of Eurostat data.",
+  EZ_UNEMP: "Eurozone unemployment rate. Percentage of the labour force that is unemployed across the euro area.",
+  LRHUTTTTEZM156S: "Eurozone harmonised unemployment rate (OECD/FRED). Alternative source for eurozone unemployment.",
+
+  // United States
+  FEDFUNDS: "Federal Funds Effective Rate. The actual overnight interbank lending rate — reflects where the Fed has set monetary policy.",
+  DFF: "Federal Funds Daily Rate. Daily observation of the effective federal funds rate.",
+  DGS2: "US 2-Year Treasury yield. Highly sensitive to Fed rate expectations — the market's best guess of near-term policy.",
+  DGS5: "US 5-Year Treasury yield. Mid-curve benchmark balancing rate expectations and term premium.",
+  DGS10: "US 10-Year Treasury yield. The single most important interest rate in global finance — drives mortgages, corporate bonds, and equity valuations.",
+  DGS30: "US 30-Year Treasury yield. The long bond — reflects long-term inflation expectations and the term premium investors demand for duration risk.",
+  T10Y2Y: "10Y-2Y Treasury spread. Classic yield curve slope indicator. Negative (inverted) readings have preceded every US recession since 1970.",
+  T10Y3M: "10Y-3M Treasury spread. Alternative yield curve measure. The Fed's preferred recession predictor — more reliable than 10Y-2Y historically.",
+  CPIAUCSL: "US Consumer Price Index (All Urban Consumers). The headline CPI number — measures average price changes for a basket of goods and services.",
+  CPILFESL: "US Core CPI (excluding food and energy). Strips out volatile components to show the underlying inflation trend. The Fed watches this closely.",
+  PCEPI: "Personal Consumption Expenditures Price Index. The Fed's officially preferred inflation measure — broader than CPI and accounts for substitution effects.",
+  T5YIE: "5-Year Breakeven Inflation Rate. Market-implied inflation expectation derived from TIPS spread. What bond traders expect average inflation to be over the next 5 years.",
+  T10YIE: "10-Year Breakeven Inflation Rate. Market-implied long-term inflation expectation. Key gauge of whether inflation expectations remain anchored.",
+  GDP: "US Nominal GDP. Total value of goods and services produced, not adjusted for inflation.",
+  GDPC1: "US Real GDP (inflation-adjusted). The primary measure of US economic output and growth.",
+  UNRATE: "US Unemployment Rate. Percentage of the labour force actively seeking but unable to find work. A lagging indicator — rises after recessions have already started.",
+  PAYEMS: "US Total Nonfarm Payrolls. Monthly count of employed workers excluding farms. The most-watched jobs number — drives market reactions on release day.",
+  ICSA: "Initial Jobless Claims (weekly). Number of new unemployment insurance claims filed. A leading indicator — spikes signal deteriorating labour market conditions.",
+  MANEMP: "US Manufacturing Employment. Jobs in the manufacturing sector. A cyclical indicator that tends to lead broader economic turns.",
+
+  // Global / Credit
+  BAMLH0A0HYM2: "ICE BofA US High Yield OAS (Option-Adjusted Spread). The extra yield investors demand over Treasuries for holding junk bonds. Spikes signal credit stress and risk aversion — a key fear gauge.",
+  BAMLC0A0CM: "ICE BofA US Investment Grade OAS. Credit spread for high-quality corporate bonds. Lower and more stable than HY OAS — widens during financial stress.",
+};
+
 const CHART_COLORS = {
   bg: "#0A0E17",
   text: "#9CA3AF",
@@ -77,6 +133,28 @@ const REGION_FLAGS: Record<string, string> = {
   ez: "EU",
   us: "US",
   global: "GL",
+};
+
+// Key indicator charts shown prominently per region
+const REGION_KEY_CHARTS: Record<string, { code: string; label: string }[]> = {
+  fi: [
+    { code: "FI_HICP", label: "Finland HICP" },
+  ],
+  ez: [
+    { code: "EZ_HICP", label: "Eurozone HICP" },
+    { code: "EZ_HICP_CORE", label: "Eurozone Core HICP" },
+  ],
+  us: [
+    { code: "CPIAUCSL", label: "US CPI (All Urban)" },
+    { code: "CPILFESL", label: "US Core CPI (ex Food & Energy)" },
+    { code: "PCEPI", label: "US PCE Price Index" },
+    { code: "T5YIE", label: "5Y Breakeven Inflation" },
+    { code: "T10YIE", label: "10Y Breakeven Inflation" },
+  ],
+  global: [
+    { code: "BAMLH0A0HYM2", label: "US HY OAS (Credit Spread)" },
+    { code: "BAMLC0A0CM", label: "US IG OAS (Credit Spread)" },
+  ],
 };
 
 function YieldCurveChart({ data }: { data: YieldCurveData }) {
@@ -301,6 +379,52 @@ function MiniChart({ code, period }: { code: string; period: string }) {
   return <div ref={containerRef} />;
 }
 
+function KeyChartPanel({ charts }: { charts: { code: string; label: string }[] }) {
+  const [period, setPeriod] = useState("2Y");
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">Key Indicators</h2>
+        <div className="flex gap-1">
+          {(["1Y", "2Y", "5Y", "MAX"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-2 py-0.5 text-xs font-mono rounded ${
+                period === p
+                  ? "bg-terminal-accent/20 text-terminal-accent"
+                  : "text-terminal-text-secondary hover:text-terminal-text-primary"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {charts.map((c) => (
+          <div
+            key={c.code}
+            className="bg-terminal-bg-secondary border border-terminal-border rounded-md overflow-hidden"
+          >
+            <div className="px-3 py-2 border-b border-terminal-border flex items-center gap-1">
+              <span className="text-sm font-medium">{c.label}</span>
+              {INDICATOR_DESC[c.code] && (
+                <InfoTip text={INDICATOR_DESC[c.code]} />
+              )}
+              <span className="text-xs text-terminal-text-tertiary font-mono ml-auto">
+                {c.code}
+              </span>
+            </div>
+            <MiniChart code={c.code} period={period} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MacroPage() {
   const [regions, setRegions] = useState<RegionData[]>([]);
   const [usYieldCurve, setUsYieldCurve] = useState<YieldCurveData | null>(null);
@@ -434,6 +558,11 @@ export default function MacroPage() {
         </div>
       )}
 
+      {/* Key indicator charts for active region */}
+      {REGION_KEY_CHARTS[activeRegion] && (
+        <KeyChartPanel charts={REGION_KEY_CHARTS[activeRegion]} />
+      )}
+
       {/* Indicator categories for active region */}
       {activeData?.categories.map((cat) => (
         <div key={cat.category} className="mb-6">
@@ -461,11 +590,14 @@ export default function MacroPage() {
                         : "border-terminal-border hover:border-terminal-accent/50"
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="text-xs text-terminal-text-secondary font-mono">
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex items-center gap-1 text-xs text-terminal-text-secondary font-mono">
                         {ind.name}
+                        {INDICATOR_DESC[ind.code] && (
+                          <InfoTip text={INDICATOR_DESC[ind.code]} />
+                        )}
                       </div>
-                      <div className="text-xs text-terminal-text-tertiary font-mono">
+                      <div className="text-xs text-terminal-text-tertiary font-mono shrink-0">
                         {ind.code}
                       </div>
                     </div>

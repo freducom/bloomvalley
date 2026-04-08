@@ -5,6 +5,7 @@ import { apiGet, apiPost, apiDelete, apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import Link from "next/link";
 import { TickerLink } from "@/components/ui/TickerLink";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 interface WatchlistSummary {
   id: number;
@@ -448,12 +449,12 @@ export default function WatchlistPage() {
                                         fund.roic >= 0.10 ? "bg-terminal-warning/15 text-terminal-warning" :
                                         "bg-terminal-negative/15 text-terminal-negative"
                                       }`}>
-                                        ROIC {formatPercent(fund.roic * 100)}
+                                        ROIC <InfoTip text="Return on Invested Capital. Measures how efficiently a company generates profits from its invested capital (equity + debt). Higher is better — above 15% suggests a competitive moat." /> {formatPercent(fund.roic * 100)}
                                       </span>
                                     )}
                                     {fund.priceToBook !== null && (
                                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-secondary">
-                                        P/B {fund.priceToBook.toFixed(2)}
+                                        P/B <InfoTip text="Price-to-Book ratio. Compares market price to book value (assets minus liabilities). Below 1.0 may indicate undervaluation; above 3.0 is typical for high-quality businesses." /> {fund.priceToBook.toFixed(2)}
                                       </span>
                                     )}
                                     {fund.fcfYield !== null && (
@@ -461,17 +462,17 @@ export default function WatchlistPage() {
                                         fund.fcfYield > 0.05 ? "bg-terminal-positive/15 text-terminal-positive" :
                                         "bg-terminal-bg-tertiary text-terminal-text-secondary"
                                       }`}>
-                                        FCF {formatPercent(fund.fcfYield * 100)}
+                                        FCF <InfoTip text="Free Cash Flow yield. Cash generated after capital expenditures as a percentage of market cap. Higher yields mean more cash available for dividends, buybacks, or reinvestment." /> {formatPercent(fund.fcfYield * 100)}
                                       </span>
                                     )}
                                     {fund.dividendYield !== null && (
                                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-secondary">
-                                        Div {formatPercent(fund.dividendYield * 100)}
+                                        Div <InfoTip text="Dividend yield. Annual dividend per share divided by the current share price. Measures the income return on an investment." /> {formatPercent(fund.dividendYield * 100)}
                                       </span>
                                     )}
                                     {fund.peRatio !== null && (
                                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-terminal-bg-tertiary text-terminal-text-secondary">
-                                        PE {fund.peRatio.toFixed(1)}
+                                        PE <InfoTip text="Price-to-Earnings ratio. Share price divided by earnings per share. Lower P/E may indicate undervaluation, but compare within the same sector." /> {fund.peRatio.toFixed(1)}
                                       </span>
                                     )}
                                     {fund.netDebtEbitda !== null && (
@@ -479,7 +480,7 @@ export default function WatchlistPage() {
                                         fund.netDebtEbitda > 3 ? "bg-terminal-negative/15 text-terminal-negative" :
                                         "bg-terminal-bg-tertiary text-terminal-text-secondary"
                                       }`}>
-                                        D/E {fund.netDebtEbitda.toFixed(1)}x
+                                        D/E <InfoTip text="Net Debt-to-EBITDA ratio. Measures how many years it would take to repay debt from operating earnings. Below 2x is conservative; above 4x signals high leverage risk." /> {fund.netDebtEbitda.toFixed(1)}x
                                       </span>
                                     )}
                                   </div>

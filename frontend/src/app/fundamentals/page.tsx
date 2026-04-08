@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent, formatLargeNumber } from "@/lib/format";
 import { TickerLink } from "@/components/ui/TickerLink";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 /* ── Types ── */
 
@@ -96,11 +97,11 @@ const SQUEEZE_COLORS: Record<string, string> = {
 export default function FundamentalsPage() {
   const [tab, setTab] = useState<Tab>("overview");
 
-  const tabs: { key: Tab; label: string }[] = [
+  const tabs: { key: Tab; label: string; tooltip?: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "dcf", label: "DCF Valuations" },
-    { key: "shorts", label: "Short Interest" },
-    { key: "smartmoney", label: "Smart Money" },
+    { key: "dcf", label: "DCF Valuations", tooltip: "Discounted Cash Flow valuations. Estimates intrinsic value by projecting future cash flows and discounting them back to present value." },
+    { key: "shorts", label: "Short Interest", tooltip: "Short selling data. Shows how many shares are being bet against — can signal bearish sentiment or contrarian opportunity." },
+    { key: "smartmoney", label: "Smart Money", tooltip: "Institutional ownership tracking. Monitors positions of hedge funds and superinvestors for conviction signals." },
     { key: "earnings", label: "Earnings" },
   ];
 
@@ -118,7 +119,7 @@ export default function FundamentalsPage() {
                 : "border-transparent text-terminal-text-secondary hover:text-terminal-text-primary"
             }`}
           >
-            {t.label}
+            {t.label}{t.tooltip && <> <InfoTip text={t.tooltip} /></>}
           </button>
         ))}
       </div>
@@ -397,17 +398,17 @@ function OverviewTab() {
           <tr className="border-b border-terminal-border text-terminal-text-secondary text-xs">
             <TH k="ticker" align="text-left" title="Company ticker and name">Security</TH>
             <TH k="currentPriceCents" title="Current market price per share">Price</TH>
-            <TH k="priceToBook" title="Price-to-Book ratio. Useful for banks, industrials, asset-heavy businesses. Less meaningful for software/asset-light companies.">P/B</TH>
-            <TH k="peRatio" title="Price-to-Earnings ratio. Lower = cheaper relative to earnings. Compare within sector, not across sectors.">PE</TH>
-            <TH k="roic" title="Return on Invested Capital. The most important quality metric. A company returning above its WACC (~8-12%) is creating value. >15% = excellent, 10-15% = good, <10% = weak.">ROIC</TH>
-            <TH k="fcfYield" title="Free Cash Flow Yield = FCF / Market Cap. Higher means more cash generation per EUR invested. >5% is attractive.">FCF Yield</TH>
-            <TH k="netDebtEbitda" title="Net Debt / EBITDA. Measures leverage. <1x = conservative, 1-3x = moderate, >3x = risky. Negative means net cash position.">Debt/EBITDA</TH>
-            <TH k="dividendYield" title="Annual dividend yield. Dividend payers are a positive signal. Growing importance as portfolio ages toward income focus.">Div Yield</TH>
-            <TH k="grossMargin" title="Gross margin — revenue minus cost of goods sold. Higher = stronger pricing power and competitive advantage.">Gross Mgn</TH>
-            <TH k="operatingMargin" title="Operating margin — profit from core operations. Higher = more efficient business. Key profitability indicator.">Op Mgn</TH>
-            <TH k="dcfUpsidePct" title="DCF (Discounted Cash Flow) upside/downside vs current market cap. Positive = undervalued. A high-ROIC company with large DCF upside is the strongest buy signal.">DCF Upside</TH>
-            <TH k="shortInterestPct" title="Short interest as % of float. High short interest can signal bearish sentiment or potential squeeze. Less important than fundamentals.">Short %</TH>
-            <th className="text-center p-3" title="Smart money signal from institutional flow and insider patterns. Supplementary indicator — less important than ROIC and DCF.">Smart Money</th>
+            <TH k="priceToBook" title="Price-to-Book ratio. Useful for banks, industrials, asset-heavy businesses. Less meaningful for software/asset-light companies.">P/B <InfoTip text="Price-to-Book ratio. Compares market price to book value. Below 1.0 may indicate undervaluation; above 3.0 is typical for high-quality businesses." /></TH>
+            <TH k="peRatio" title="Price-to-Earnings ratio. Lower = cheaper relative to earnings. Compare within sector, not across sectors.">PE <InfoTip text="Price-to-Earnings ratio. Share price divided by earnings per share. Lower P/E may indicate undervaluation, but compare within the same sector." /></TH>
+            <TH k="roic" title="Return on Invested Capital. The most important quality metric. A company returning above its WACC (~8-12%) is creating value. >15% = excellent, 10-15% = good, <10% = weak.">ROIC <InfoTip text="Return on Invested Capital. Measures how efficiently a company generates profits from its invested capital. Above 15% suggests a competitive moat." /></TH>
+            <TH k="fcfYield" title="Free Cash Flow Yield = FCF / Market Cap. Higher means more cash generation per EUR invested. >5% is attractive.">FCF Yield <InfoTip text="Free Cash Flow yield. Cash generated after capex as a percentage of market cap. Higher yields mean more cash for shareholders." /></TH>
+            <TH k="netDebtEbitda" title="Net Debt / EBITDA. Measures leverage. <1x = conservative, 1-3x = moderate, >3x = risky. Negative means net cash position.">Debt/EBITDA <InfoTip text="Leverage ratio. How many years of operating earnings needed to repay net debt. Below 2x is conservative; above 4x is high leverage." /></TH>
+            <TH k="dividendYield" title="Annual dividend yield. Dividend payers are a positive signal. Growing importance as portfolio ages toward income focus.">Div Yield <InfoTip text="Annual dividend per share divided by share price. Measures income return on an investment." /></TH>
+            <TH k="grossMargin" title="Gross margin — revenue minus cost of goods sold. Higher = stronger pricing power and competitive advantage.">Gross Mgn <InfoTip text="Revenue minus cost of goods sold, as a percentage of revenue. Higher margins indicate pricing power and efficiency." /></TH>
+            <TH k="operatingMargin" title="Operating margin — profit from core operations. Higher = more efficient business. Key profitability indicator.">Op Mgn <InfoTip text="Operating income as a percentage of revenue. Measures core business profitability before interest and taxes." /></TH>
+            <TH k="dcfUpsidePct" title="DCF (Discounted Cash Flow) upside/downside vs current market cap. Positive = undervalued. A high-ROIC company with large DCF upside is the strongest buy signal.">DCF Upside <InfoTip text="Discounted Cash Flow upside. Difference between the DCF-derived intrinsic value and the current market price. Positive = undervalued." /></TH>
+            <TH k="shortInterestPct" title="Short interest as % of float. High short interest can signal bearish sentiment or potential squeeze. Less important than fundamentals.">Short % <InfoTip text="Percentage of shares outstanding currently sold short. High short interest (>10%) signals bearish sentiment or potential squeeze risk." /></TH>
+            <th className="text-center p-3" title="Smart money signal from institutional flow and insider patterns. Supplementary indicator — less important than ROIC and DCF.">Smart Money <InfoTip text="Institutional ownership signals. Tracks whether sophisticated investors (hedge funds, superinvestors) are buying or selling." /></th>
             <TH k="updatedAt" align="text-left" title="Last time fundamentals data was updated">Updated</TH>
           </tr>
         </thead>

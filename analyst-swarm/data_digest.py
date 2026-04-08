@@ -27,6 +27,17 @@ def _cents_to_eur(cents: int | None) -> str:
     return f"€{cents / 100:,.2f}"
 
 
+def _cents_to_currency(cents: int | None, currency: str = "EUR") -> str:
+    """Format cents in native currency. Use for non-EUR price display."""
+    if cents is None:
+        return "N/A"
+    symbols = {"EUR": "€", "USD": "$", "GBP": "£"}
+    sym = symbols.get(currency, "")
+    if sym:
+        return f"{sym}{cents / 100:,.2f}"
+    return f"{cents / 100:,.2f} {currency}"
+
+
 def _pct(val: float | None, decimals: int = 1) -> str:
     if val is None:
         return "N/A"
@@ -43,7 +54,7 @@ def digest_holdings(json_str: str) -> str:
         return "No holdings data available."
 
     lines = ["PORTFOLIO HOLDINGS"]
-    lines.append(f"{'Ticker':<14} {'Name':<30} {'Qty':>8} {'Price':>10} "
+    lines.append(f"{'Ticker':<14} {'Name':<30} {'Qty':>8} {'Price(native)':>14} "
                  f"{'Value EUR':>12} {'Wt%':>6} {'P&L%':>7} {'Class':<6}")
     lines.append("-" * 100)
 
@@ -58,12 +69,13 @@ def digest_holdings(json_str: str) -> str:
             qty_s = f"{qty_f:.2f}" if qty_f != int(qty_f) else str(int(qty_f))
         except (ValueError, TypeError):
             qty_s = str(qty)
-        price = _cents_to_eur(h.get("currentPriceCents"))
+        pccy = h.get("priceCurrency") or h.get("currency") or "EUR"
+        price = _cents_to_currency(h.get("currentPriceCents"), pccy)
         value = _cents_to_eur(h.get("marketValueEurCents"))
         weight = f"{h.get('marketValueEurCents', 0) / total * 100:.1f}%" if total else "N/A"
         pnl = _pct(h.get("unrealizedPnlPct"))
         cls = h.get("assetClass", "?")[:6]
-        lines.append(f"{ticker:<14} {name:<30} {qty_s:>8} {price:>10} "
+        lines.append(f"{ticker:<14} {name:<30} {qty_s:>8} {price:>14} "
                      f"{value:>12} {weight:>6} {pnl:>7} {cls:<6}")
 
     lines.append(f"\nTotal: {_cents_to_eur(total)} across {len(items)} positions")
@@ -130,13 +142,20 @@ def digest_fundamentals_for_security(json_str: str, ticker: str) -> str:
         if val is not None:
             lines.append(f"  {label}: {val}")
 
+    # Price currency — important for position sizing
+    currency = rec.get("currency", "EUR")
+    if currency != "EUR":
+        lines.append(f"  Price Currency: {currency} (convert to EUR before sizing positions!)")
+
     # DCF valuation
     dcf_per_share = rec.get("dcfPerShareCents")
     current = rec.get("currentPriceCents")
     if dcf_per_share and current:
         upside = rec.get("dcfUpsidePct")
-        lines.append(f"  DCF Value: {_cents_to_eur(dcf_per_share)}/share "
-                     f"(current: {_cents_to_eur(current)}, upside: {_pct(upside)})")
+        current_str = _cents_to_currency(current, currency)
+        dcf_str = _cents_to_currency(dcf_per_share, currency)
+        lines.append(f"  DCF Value: {dcf_str}/share "
+                     f"(current: {current_str}, upside: {_pct(upside)})")
         if rec.get("dcfModelNotes"):
             lines.append(f"  DCF Model: {rec['dcfModelNotes']}")
 
@@ -483,7 +502,8 @@ def digest_transactions(json_str: str) -> str:
         ticker = t.get("ticker", "?")
         qty = t.get("quantity", "?")
         price = t.get("priceCents")
-        price_str = _cents_to_eur(price) if price else "?"
+        tccy = t.get("currency") or "EUR"
+        price_str = _cents_to_currency(price, tccy) if price else "?"
         lines.append(f"  {date} {action:>6} {ticker:<14} {qty:>8} @ {price_str}")
 
     return "\n".join(lines)

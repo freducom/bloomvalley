@@ -5,6 +5,7 @@ import { apiGet, apiGetRaw, apiPost } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 interface Holding {
   accountId: number;
@@ -432,13 +433,13 @@ export default function HoldingsPage() {
                 <TH k="accountName" align="text-left">Account</TH>
                 <TH k="assetClass" align="text-left">Class</TH>
                 <TH k="quantity">Qty</TH>
-                <TH k="avgCostCents">Avg Cost</TH>
+                <TH k="avgCostCents"><span className="inline-flex items-center gap-1">Avg Cost <InfoTip text="Volume-weighted average purchase price per share across all buy transactions. Used to calculate unrealized P&L." /></span></TH>
                 <TH k="currentPriceCents">Close</TH>
-                <TH k="liveChange">Live</TH>
+                <TH k="liveChange"><span className="inline-flex items-center gap-1">Live <InfoTip text="Intraday price change from the previous close. Updates during market hours." /></span></TH>
                 <TH k="marketValueEurCents">Market Value</TH>
-                <TH k="unrealizedPnlCents">P&L</TH>
+                <TH k="unrealizedPnlCents"><span className="inline-flex items-center gap-1">P&L <InfoTip text="Unrealized Profit & Loss. Difference between current market value and total cost basis. Not realized until the position is sold." /></span></TH>
                 <TH k="unrealizedPnlPct">P&L %</TH>
-                <TH k="upcomingDivCents">Div 6M</TH>
+                <TH k="upcomingDivCents"><span className="inline-flex items-center gap-1">Div 6M <InfoTip text="Estimated dividend income for the next 6 months based on declared or projected dividend schedules." /></span></TH>
                 <th className="px-4 py-2 text-right font-medium whitespace-nowrap"></th>
               </tr>
             </thead>

@@ -5,6 +5,7 @@ import { apiGet } from "@/lib/api";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 interface UpcomingDividend {
   securityId: number;
@@ -116,13 +117,13 @@ export default function DividendsPage() {
       {yieldData && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-3">
-            <div className="text-xs text-terminal-text-secondary">Annual Income (est.)</div>
+            <div className="text-xs text-terminal-text-secondary">Annual Income (est.) <InfoTip text="Estimated annual dividend income based on current holdings and declared dividend rates. Actual income may vary with dividend changes and portfolio adjustments." /></div>
             <div className="text-xl font-mono font-bold text-green-400">
               <Private>{formatCurrency(yieldData.annualDividendIncomeCents)}</Private>
             </div>
           </div>
           <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-3">
-            <div className="text-xs text-terminal-text-secondary">Portfolio Yield</div>
+            <div className="text-xs text-terminal-text-secondary">Portfolio Yield <InfoTip text="Current annual dividend income divided by current portfolio market value. Measures the income percentage your portfolio generates at today's prices." /></div>
             <div className="text-xl font-mono font-bold">
               {yieldData.portfolioDividendYield != null
                 ? formatPercent(yieldData.portfolioDividendYield)
@@ -130,7 +131,7 @@ export default function DividendsPage() {
             </div>
           </div>
           <div className="bg-terminal-bg-secondary border border-terminal-border rounded-lg p-3">
-            <div className="text-xs text-terminal-text-secondary">Yield on Cost</div>
+            <div className="text-xs text-terminal-text-secondary">Yield on Cost <InfoTip text="Current annual dividend income divided by original purchase cost. Shows the income return on your actual invested capital — rises over time as dividends grow." /></div>
             <div className="text-xl font-mono font-bold">
               {yieldData.yieldOnCost != null ? formatPercent(yieldData.yieldOnCost) : "—"}
             </div>

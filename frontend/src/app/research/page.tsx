@@ -602,8 +602,8 @@ function NoteDetail({
 
       {/* Footer */}
       <div className="text-xs text-terminal-text-secondary pt-2 border-t border-terminal-border">
-        Created {new Date(note.createdAt).toLocaleDateString()} · Updated{" "}
-        {new Date(note.updatedAt).toLocaleDateString()}
+        Created {new Date(note.createdAt).toLocaleString("fi-FI")} · Updated{" "}
+        {new Date(note.updatedAt).toLocaleString("fi-FI")}
       </div>
     </div>
   );
