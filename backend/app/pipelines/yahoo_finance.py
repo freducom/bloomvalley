@@ -216,6 +216,43 @@ class YahooFinancePrices(PipelineAdapter):
             # Rate limiting: 200ms delay between batches
             await asyncio.sleep(0.2)
 
+        # Supplement with intraday quotes for tickers missing today's price
+        today = date.today()
+        tickers_with_today = {r["ticker"] for r in raw_records if r.get("date") == today}
+        missing_today = [t for t in yahoo_tickers if t not in tickers_with_today]
+
+        if missing_today:
+            logger.info("yahoo_fetching_live_quotes", count=len(missing_today))
+            for ticker in missing_today:
+                sec = ticker_map.get(ticker)
+                if not sec:
+                    continue
+                try:
+                    info = await asyncio.to_thread(lambda t=ticker: yf.Ticker(t).fast_info)
+                    last_price = getattr(info, "last_price", None)
+                    if last_price and last_price > 0:
+                        yahoo_ccy = getattr(info, "currency", sec.currency)
+                        minor = MINOR_CURRENCY_MAP.get(yahoo_ccy)
+                        divisor = minor[1] if minor else 1
+                        currency = minor[0] if minor else yahoo_ccy
+                        price = last_price / divisor if divisor != 1 else last_price
+
+                        raw_records.append({
+                            "security_id": sec.id,
+                            "ticker": ticker,
+                            "date": today,
+                            "open": price,
+                            "high": price,
+                            "low": price,
+                            "close": price,
+                            "adj_close": price,
+                            "volume": None,
+                            "currency": currency,
+                        })
+                except Exception:
+                    pass
+                await asyncio.sleep(0.15)
+
         logger.info("yahoo_fetch_complete", records=len(raw_records))
         return raw_records
 
