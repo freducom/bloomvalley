@@ -840,7 +840,7 @@ Today is {date_str}.
 
 Write your analysis:
 
-## {n}. {ticker} — {name}
+## {ticker} — {name}
 
 **Investment Thesis**: [2-3 paragraphs covering the key investment case]
 
@@ -866,7 +866,7 @@ Provide technical analysis for {ticker} ({name}). Today is {date_str}.
 
 Write your analysis:
 
-### {n}. {ticker} — {name}
+### {ticker} — {name}
 
 **Trend**: [Bullish/Bearish/Neutral] ([timeframe])
 **Key Levels**: Support [price] | Resistance [price]
