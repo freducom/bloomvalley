@@ -40,7 +40,7 @@ An AI-powered investment advisory team and software development team building a 
 - **Tracks recommendation history** — every recommendation is timestamped and outcome-tracked. Compares new analysis against previous calls, noting upgrades/downgrades/additions/removals.
 - **Retrospective analysis**: periodically reviews past recommendations, measures accuracy (hit rate, average return vs benchmark)
 - **Cash-first valuation**: starts with OCF, not net income. Requires Cash Conversion Ratio >80%, flags working capital drains, uses FCF Yield as primary value metric. Never recommends BUY with <60% cash conversion without explicit risk acknowledgment.
-- **No day trading**: checks Transaction Log, flags stocks traded within 30 days, biases toward HOLD for recent purchases
+- **No day trading**: checks buy transactions endpoint ONLY (`/transactions?type=buy`), never uses `createdAt` or other metadata dates. Flags stocks with a buy transaction within 30 days, biases toward HOLD for recent purchases. No buy in the list = no window.
 - **Transaction cost filter**: never recommends selling positions below €200 market value (broker fees make it uneconomical)
 - **Dividend calendar**: always includes upcoming ex-dates, record dates, and expected EUR amounts
 - **Watchlist opportunities**: includes best buys from personal + aristocrat watchlists

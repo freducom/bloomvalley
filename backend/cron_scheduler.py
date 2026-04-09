@@ -164,10 +164,16 @@ def main() -> None:
     scheduler.add_job(trigger, "interval", args=["regional_news"],
                       hours=4, id="regional_news")
 
-    # Yahoo fundamentals (ROIC, P/B, FCF, margins, DCF) — weekdays at 23:45
+    # Yahoo fundamentals (P/B, FCF, margins, DCF) — weekdays at 23:45
     scheduler.add_job(trigger, "cron", args=["yahoo_fundamentals"],
                       day_of_week="mon-fri", hour=23, minute=45,
                       id="yahoo_fundamentals")
+
+    # Morningstar fundamentals (ROIC, ROE — overrides Yahoo) — weekdays at 00:15
+    # Runs after yahoo_fundamentals to overlay Morningstar's standardised ROIC
+    scheduler.add_job(trigger, "cron", args=["morningstar_fundamentals"],
+                      day_of_week="tue-sat", hour=0, minute=15,
+                      id="morningstar_fundamentals")
 
     # Macro regime change detection — every 4 hours during daytime
     scheduler.add_job(check_macro_regime, "cron",

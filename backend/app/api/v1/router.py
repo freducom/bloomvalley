@@ -55,6 +55,7 @@ import app.pipelines.sec_edgar  # noqa: F401
 import app.pipelines.quiver_congress  # noqa: F401
 import app.pipelines.gdelt  # noqa: F401
 import app.pipelines.morningstar  # noqa: F401
+import app.pipelines.morningstar_fundamentals  # noqa: F401
 import app.pipelines.french_factors  # noqa: F401
 import app.pipelines.yahoo_fundamentals  # noqa: F401
 import app.pipelines.regional_news  # noqa: F401

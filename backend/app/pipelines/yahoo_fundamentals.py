@@ -48,35 +48,60 @@ def _safe_decimal(value) -> float | None:
         return None
 
 
+def _get_financial_debt(info: dict) -> int | None:
+    """
+    Return financial debt excluding IFRS 16 lease liabilities.
+
+    Yahoo Finance ``totalDebt`` includes capital-lease obligations, which
+    inflates leverage and deflates ROIC for asset-heavy retailers and similar
+    companies.  When the balance-sheet breakdown is available we subtract
+    lease obligations; otherwise we fall back to ``totalDebt`` as-is.
+    """
+    total_debt = _safe_get(info, "totalDebt")
+    if total_debt is None:
+        return None
+
+    # Check balance-sheet field first, then info dict
+    lease_obligations = (
+        _safe_get(info, "bs_capital_lease_obligations")
+        or _safe_get(info, "capitalLeaseObligations")
+        or 0
+    )
+    financial_debt = total_debt - lease_obligations
+    # Sanity: if subtraction goes negative (data quirks), fall back
+    return financial_debt if financial_debt > 0 else total_debt
+
+
 def _compute_roic(info: dict) -> float | None:
     """
     Compute ROIC (Return on Invested Capital).
 
-    Preferred: EBIT * (1 - tax_rate) / (totalDebt + stockholdersEquity - totalCash)
-    Fallback 1: returnOnAssets as proxy
-    Fallback 2: returnOnEquity as proxy
+    Preferred: EBIT * (1 - tax_rate) / invested_capital
+    Uses financial debt (excluding IFRS 16 leases) to avoid penalising
+    companies with large lease portfolios (retailers, airlines, etc.).
+    Falls back to balance-sheet values when info dict is incomplete.
     """
-    ebit = _safe_get(info, "ebit")
-    total_debt = _safe_get(info, "totalDebt")
-    equity = _safe_get(info, "stockholdersEquity")
+    ebit = _safe_get(info, "ebit") or _safe_get(info, "bs_ebit")
+    equity = _safe_get(info, "stockholdersEquity") or _safe_get(info, "bs_stockholders_equity")
     total_cash = _safe_get(info, "totalCash")
+    financial_debt = _get_financial_debt(info)
 
-    if ebit is not None and total_debt is not None and equity is not None:
+    if ebit is not None and financial_debt is not None and equity is not None:
         cash = total_cash if total_cash is not None else 0
-        invested_capital = total_debt + equity - cash
+        invested_capital = financial_debt + equity - cash
         if invested_capital > 0:
             nopat = ebit * (1 - DEFAULT_TAX_RATE)
             return nopat / invested_capital
+
+    # Fallback: returnOnEquity (better proxy than ROA for capital efficiency)
+    roe = _safe_get(info, "returnOnEquity")
+    if roe is not None:
+        return float(roe)
 
     # Fallback: returnOnAssets
     roa = _safe_get(info, "returnOnAssets")
     if roa is not None:
         return float(roa)
-
-    # Fallback: returnOnEquity
-    roe = _safe_get(info, "returnOnEquity")
-    if roe is not None:
-        return float(roe)
 
     return None
 
@@ -119,7 +144,40 @@ class YahooFundamentals(PipelineAdapter):
         for sec in securities:
             yahoo_ticker = _build_yahoo_ticker(sec.ticker, sec.exchange, sec.asset_class)
             try:
-                info = await asyncio.to_thread(lambda t=yahoo_ticker: yf.Ticker(t).info)
+                def _fetch_ticker(t=yahoo_ticker):
+                    ticker_obj = yf.Ticker(t)
+                    info = ticker_obj.info
+                    # Fetch balance sheet & income statement for data the
+                    # info dict sometimes omits (equity, EBIT, lease obligations)
+                    bs_extras = {}
+                    try:
+                        bs = ticker_obj.balance_sheet
+                        if bs is not None and not bs.empty:
+                            col = bs.columns[0]
+                            for field, key in [
+                                ("Capital Lease Obligations", "bs_capital_lease_obligations"),
+                                ("Stockholders Equity", "bs_stockholders_equity"),
+                                ("Net Debt", "bs_net_debt"),
+                            ]:
+                                if field in bs.index:
+                                    val = bs.loc[field, col]
+                                    if val is not None and val == val:  # not NaN
+                                        bs_extras[key] = float(val)
+                    except Exception:
+                        pass
+                    try:
+                        inc = ticker_obj.income_stmt
+                        if inc is not None and not inc.empty:
+                            col = inc.columns[0]
+                            if "EBIT" in inc.index:
+                                val = inc.loc["EBIT", col]
+                                if val is not None and val == val:
+                                    bs_extras["bs_ebit"] = float(val)
+                    except Exception:
+                        pass
+                    return {**info, **bs_extras}
+
+                info = await asyncio.to_thread(_fetch_ticker)
                 if not info or info.get("regularMarketPrice") is None:
                     logger.warning(
                         "yahoo_fundamentals_no_data",
@@ -224,13 +282,13 @@ class YahooFundamentals(PipelineAdapter):
             pe_ratio = _safe_decimal(_safe_get(info, "trailingPE"))
             market_cap = _safe_get(info, "marketCap")
 
-            # Computed: net_debt_ebitda
-            total_debt = _safe_get(info, "totalDebt")
+            # Computed: net_debt_ebitda (using financial debt excl. IFRS 16 leases)
+            financial_debt = _get_financial_debt(info)
             total_cash = _safe_get(info, "totalCash")
             ebitda = _safe_get(info, "ebitda")
             net_debt_ebitda = None
-            if total_debt is not None and total_cash is not None and ebitda is not None and ebitda != 0:
-                net_debt_ebitda = (total_debt - total_cash) / ebitda
+            if financial_debt is not None and total_cash is not None and ebitda is not None and ebitda != 0:
+                net_debt_ebitda = (financial_debt - total_cash) / ebitda
 
             # Computed: fcf_yield
             fcf_yield = None

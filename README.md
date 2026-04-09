@@ -262,6 +262,7 @@ curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coi
 | `sec_edgar_filings` | SEC EDGAR | Weekdays 21:00 |
 | `quiver_congress_trades` | Quiver Quantitative | Weekdays 20:00 |
 | `morningstar_ratings` | Morningstar | Sundays 11:00 |
+| `morningstar_fundamentals` | Morningstar SAL API | Tue-Sat 00:15 |
 | `justetf_profiles` | justETF | Sundays 10:00 |
 | `french_factors` | Kenneth French Library | Sundays 12:00 |
 | `news_cleanup` | — | Daily 04:00 |

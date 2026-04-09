@@ -6,6 +6,7 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import { Private } from "@/lib/privacy";
 import { TickerLink } from "@/components/ui/TickerLink";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { PriceWithDate } from "@/components/ui/PriceWithDate";
 
 interface Holding {
   accountId: number;
@@ -479,7 +480,7 @@ export default function HoldingsPage() {
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">
                       {h.currentPriceCents != null
-                        ? formatCurrency(h.currentPriceCents, h.priceCurrency)
+                        ? <PriceWithDate date={h.priceDate} source={h.priceSource}>{formatCurrency(h.currentPriceCents, h.priceCurrency)}</PriceWithDate>
                         : <span className="text-terminal-text-tertiary">--</span>}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-sm">

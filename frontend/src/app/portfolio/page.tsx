@@ -16,9 +16,10 @@ interface Recommendation {
   id: number;
   ticker: string;
   securityName: string;
-  action: "BUY" | "SELL" | "HOLD";
+  action: string;
   confidence: "high" | "medium" | "low";
   rationale: string;
+  recommendedDate: string | null;
 }
 
 interface Holding {
@@ -236,7 +237,23 @@ export default function PortfolioPage() {
           {/* Recommendations */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">Recommendations</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold">Recommendations</h2>
+                {recommendations.length > 0 && (() => {
+                  const dates = recommendations
+                    .map((r) => r.recommendedDate)
+                    .filter(Boolean)
+                    .sort()
+                    .reverse();
+                  if (!dates.length) return null;
+                  const latest = new Date(dates[0]!);
+                  return (
+                    <span className="text-xs text-terminal-text-tertiary font-mono">
+                      Updated {latest.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  );
+                })()}
+              </div>
               <Link
                 href="/recommendations"
                 className="text-sm text-terminal-accent hover:underline font-mono"
@@ -257,14 +274,14 @@ export default function PortfolioPage() {
                   >
                     <span
                       className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${
-                        rec.action === "BUY"
+                        rec.action.toLowerCase() === "buy"
                           ? "bg-terminal-positive/20 text-terminal-positive"
-                          : rec.action === "SELL"
+                          : rec.action.toLowerCase() === "sell"
                           ? "bg-terminal-negative/20 text-terminal-negative"
                           : "bg-terminal-warning/20 text-terminal-warning"
                       }`}
                     >
-                      {rec.action}
+                      {rec.action.toUpperCase()}
                     </span>
                     <TickerLink ticker={rec.ticker} className="font-mono text-sm text-terminal-accent whitespace-nowrap hover:underline" />
                     <span className="text-sm text-terminal-text-secondary truncate flex-1 min-w-0">
@@ -407,7 +424,14 @@ function ValueHistoryChart() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Portfolio Value</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold">Portfolio Value</h2>
+          {data.length > 0 && (
+            <span className="text-xs text-terminal-text-tertiary font-mono">
+              as of {new Date(data[data.length - 1].date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+          )}
+        </div>
         <div className="flex gap-1">
           {PERIOD_OPTIONS.map((p) => (
             <button

@@ -5,6 +5,7 @@ import { apiGetRaw } from "@/lib/api";
 import { formatCurrency, formatDate, formatPercent, formatLargeNumber } from "@/lib/format";
 import { TickerLink } from "@/components/ui/TickerLink";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { PriceWithDate } from "@/components/ui/PriceWithDate";
 
 /* ── Types ── */
 
@@ -420,7 +421,7 @@ function OverviewTab() {
                 <span className="text-xs text-terminal-text-secondary">{f.securityName}</span>
               </td>
               <td className="text-right p-3 font-mono text-xs">
-                {f.currentPriceCents ? formatCurrency(f.currentPriceCents, f.currency) : "-"}
+                {f.currentPriceCents ? <PriceWithDate date={f.updatedAt}>{formatCurrency(f.currentPriceCents, f.currency)}</PriceWithDate> : "-"}
               </td>
               <td className={`text-right p-3 font-mono text-xs ${
                 f.priceToBook !== null && f.priceToBook < 1 ? "text-terminal-positive" :
@@ -528,7 +529,7 @@ function DcfTab() {
             <div className="ml-auto flex items-center gap-6">
               <div className="text-right">
                 <span className="text-xs text-terminal-text-secondary block">Current</span>
-                <span className="font-mono text-sm">{f.currentPriceCents ? formatCurrency(f.currentPriceCents, f.currency) : "-"}</span>
+                <span className="font-mono text-sm">{f.currentPriceCents ? <PriceWithDate date={f.updatedAt}>{formatCurrency(f.currentPriceCents, f.currency)}</PriceWithDate> : "-"}</span>
               </div>
               <div className="text-right">
                 <span className="text-xs text-terminal-text-secondary block">DCF / Share</span>
@@ -664,7 +665,7 @@ function ShortsTab() {
                 )}
               </td>
               <td className="text-right p-3 font-mono text-xs">
-                {f.currentPriceCents ? formatCurrency(f.currentPriceCents, f.currency) : "-"}
+                {f.currentPriceCents ? <PriceWithDate date={f.updatedAt}>{formatCurrency(f.currentPriceCents, f.currency)}</PriceWithDate> : "-"}
               </td>
               <td className="p-3 text-xs text-terminal-text-secondary">{formatDate(f.updatedAt)}</td>
             </tr>

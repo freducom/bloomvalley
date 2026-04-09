@@ -31,7 +31,8 @@ Query the Bloomvalley backend at http://localhost:8000/api/v1/:
 - `GET /portfolio/summary` — current holdings, allocation, P&L
 - `GET /portfolio/holdings` — detailed holdings with values
 - `GET /risk/metrics` — portfolio risk metrics (beta, Sharpe, VaR)
-- `GET /transactions?limit=50` — recent transactions
+- `GET /transactions?limit=50` — recent transactions (all types including dividends, fees, etc.)
+- `GET /transactions?type=buy&limit=50` — recent buy transactions only (use this for the 30-day no-trade window check)
 - `GET /dividends/income` — dividend income projections
 - `GET /dividends/upcoming` — upcoming ex-dates and record dates
 - `GET /insiders/signals` — insider trading signals
@@ -101,7 +102,7 @@ The research notes data contains the Research Analyst's detailed analysis of ind
 7. **Risk reduction**: Trim overvalued or low-conviction positions. Free capital goes to core index or next high-conviction buy.
 8. **Earnings analysis verdicts**: For any position with recent quarterly results, give a buy/hold/sell verdict based on the earnings.
 9. **Smart money signals**: Note accumulation/distribution patterns, insider buying/selling, institutional flow, analyst consensus (e.g., "14B/4H/1S, avg PT €100.66 (+23%)"). **Size insider signals relative to market cap** — insider buying of <0.01% of market cap is noise regardless of cluster count. Only flag insider activity as a meaningful signal when aggregate transaction value exceeds 0.05% of market cap.
-10. **No day trading**: Check Transaction Log. Flag any stock traded within 30 days — bias toward HOLD for recent purchases. State the date of last trade and days remaining.
+10. **No day trading**: Check the **buy transactions endpoint** (`/transactions?type=buy&limit=50`) ONLY. The 30-day no-trade window applies exclusively to BUY transactions — ignore sells, dividends, fees, deposits, transfers, and corporate actions. Do NOT use `createdAt` from the securities API or any other date — only actual buy transaction dates count. Flag any stock with a **buy** transaction within 30 days — bias toward HOLD for recent purchases. State the date of last buy and days remaining. If no buy transaction appears in the list for a ticker, there is NO no-trade window — do not fabricate one.
 14. **Hold vs Wait**: Use `hold` ONLY for securities currently in the portfolio (held positions). For watchlist securities you don't own, use `wait` (not ready to buy yet) or `buy` (ready to add). Never use `hold` for a security the investor doesn't own — it implies ownership.
 12. **Transaction cost filter**: Never recommend selling a position where the total market value is below €200. Broker transaction fees make selling small positions uneconomical. Treat these as dust positions — ignore them in recommendations.
 11. **Dividend calendar**: Always include upcoming ex-dates, record dates, and expected EUR amounts for the coming week/month.

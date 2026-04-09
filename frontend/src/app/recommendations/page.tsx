@@ -200,6 +200,11 @@ function PortfolioManagerBrief() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono font-semibold tracking-wider text-terminal-text-secondary">PORTFOLIO MANAGER</span>
+          {note.tags?.some((t: string) => t.startsWith("llm:")) && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono">
+              {note.tags.find((t: string) => t.startsWith("llm:"))?.replace("llm:", "").toUpperCase()}
+            </span>
+          )}
           <span className="text-xs text-terminal-text-tertiary font-mono">{dateStr}</span>
         </div>
         <button
@@ -299,6 +304,11 @@ function AnalystSummaries() {
               <div className="flex items-center gap-2">
                 <span className="text-sm">{meta.icon}</span>
                 <span className="text-xs font-medium text-terminal-text-primary">{meta.label}</span>
+                {note.tags.some((t: string) => t.startsWith("llm:")) && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono ml-auto">
+                    {note.tags.find((t: string) => t.startsWith("llm:"))?.replace("llm:", "").toUpperCase()}
+                  </span>
+                )}
               </div>
               {!isExpanded && (
                 <p className="text-xs text-terminal-text-tertiary mt-1 line-clamp-2">

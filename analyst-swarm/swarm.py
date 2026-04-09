@@ -370,7 +370,8 @@ AGENT_DATA = {
     ],
     "portfolio-manager": [
         "/deployment-plans/current",
-        "/portfolio/holdings", "/portfolio/summary", "/transactions?limit=50",
+        "/portfolio/holdings", "/portfolio/summary",
+        "/transactions?type=buy&limit=50", "/transactions?limit=50",
         "/dividends/upcoming", "/risk/metrics", "/risk/stress-tests",
         "/watchlists/", "/screener/munger", "/insiders/signals",
         "/news?limit=20", "/macro/summary", "/macro/regime",
@@ -402,7 +403,8 @@ def build_prompt(agent_name: str, agent_def: str, data: dict[str, str],
 
     system = f"""You are the {agent_name} for the Bloomvalley investment terminal.
 Follow your agent definition exactly. Today's date is {date_str}.
-The backend API data has been pre-fetched and provided below.
+ALL backend API data has been pre-fetched and is provided below — do NOT attempt to make API calls yourself.
+If a data section shows an error, that data is unavailable — work with what you have, do not ask for permission to fetch it.
 Produce your complete analysis report. Be specific with numbers, dates, and actionable recommendations."""
 
     if use_digest:
@@ -415,8 +417,9 @@ Produce your complete analysis report. Be specific with numbers, dates, and acti
     else:
         data_section = "\n\n".join(
             f"### Data from {ep}\n```json\n{content[:15000]}\n```"
-            for ep, content in data.items()
             if not content.startswith("ERROR")
+            else f"### Data from {ep}\n*Unavailable: {content}*"
+            for ep, content in data.items()
         )
 
     prompt_def = _build_short_prompt(agent_name, agent_def) if use_short else agent_def

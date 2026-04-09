@@ -51,6 +51,28 @@ SEED_SECURITIES = [
     {"ticker": "VUSA", "name": "Vanguard S&P 500 UCITS ETF", "asset_class": "etf", "currency": "USD", "exchange": "XLON", "is_accumulating": False, "isin": "IE00B3XXRP09"},
     {"ticker": "IEGA", "name": "iShares Core Euro Government Bond UCITS ETF", "asset_class": "etf", "currency": "EUR", "exchange": "XAMS", "is_accumulating": True, "isin": "IE00B4WXJJ64"},
 
+    # Norwegian stocks
+    {"ticker": "TEL.OL", "name": "Telenor ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Communication Services", "country": "NO"},
+    {"ticker": "GJF.OL", "name": "Gjensidige Forsikring ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Financials", "country": "NO"},
+    {"ticker": "EPR.OL", "name": "Europris ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Consumer Discretionary", "country": "NO"},
+    {"ticker": "DNB.OL", "name": "DNB Bank ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Financials", "country": "NO"},
+    {"ticker": "VEI.OL", "name": "Veidekke ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Industrials", "country": "NO"},
+    {"ticker": "ORK.OL", "name": "Orkla ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Consumer Staples", "country": "NO"},
+    {"ticker": "SRBNK.OL", "name": "SpareBank 1 SR-Bank ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Financials", "country": "NO"},
+    {"ticker": "EQNR.OL", "name": "Equinor ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Energy", "country": "NO"},
+    {"ticker": "MOWI.OL", "name": "Mowi ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Consumer Staples", "country": "NO"},
+    {"ticker": "KOG.OL", "name": "Kongsberg Gruppen ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Industrials", "country": "NO"},
+    {"ticker": "TOM.OL", "name": "Tomra Systems ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Industrials", "country": "NO"},
+    {"ticker": "YAR.OL", "name": "Yara International ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Materials", "country": "NO"},
+    {"ticker": "SALM.OL", "name": "SalMar ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Consumer Staples", "country": "NO"},
+    {"ticker": "KID.OL", "name": "Kid ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Consumer Discretionary", "country": "NO"},
+    {"ticker": "NHY.OL", "name": "Norsk Hydro ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Materials", "country": "NO"},
+    {"ticker": "MING.OL", "name": "SpareBank 1 SMN", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Financials", "country": "NO"},
+    {"ticker": "AFG.OL", "name": "AF Gruppen ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Industrials", "country": "NO"},
+    {"ticker": "AKRBP.OL", "name": "Aker BP ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Energy", "country": "NO"},
+    {"ticker": "LSG.OL", "name": "Lerøy Seafood Group ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Consumer Staples", "country": "NO"},
+    {"ticker": "PROT.OL", "name": "Protector Forsikring ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Financials", "country": "NO"},
+
     # Crypto
     {"ticker": "BTC", "name": "Bitcoin", "asset_class": "crypto", "currency": "USD", "coingecko_id": "bitcoin"},
     {"ticker": "ETH", "name": "Ethereum", "asset_class": "crypto", "currency": "USD", "coingecko_id": "ethereum"},

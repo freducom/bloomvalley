@@ -8,6 +8,7 @@ import { formatCurrency, formatPercent, formatDate, formatLargeNumber } from "@/
 import { Private } from "@/lib/privacy";
 import { InfoTip } from "@/components/ui/InfoTip";
 import ReactMarkdown from "react-markdown";
+import { PriceWithDate } from "@/components/ui/PriceWithDate";
 import remarkGfm from "remark-gfm";
 
 const gfmOptions = { singleTilde: false };
@@ -166,14 +167,14 @@ interface Recommendation {
   securityId: number;
   ticker: string;
   securityName: string;
-  action: "BUY" | "SELL" | "HOLD";
-  confidence: "high" | "medium" | "low";
+  action: string;
+  confidence: string;
   rationale: string;
   bullCase: string | null;
   bearCase: string | null;
   targetPriceCents: number | null;
   status: string;
-  createdAt: string;
+  recommendedDate: string;
 }
 
 interface ResearchNote {
@@ -566,7 +567,9 @@ export default function SecurityDetailPage() {
         <div className="text-right md:text-right">
           {currentPrice != null && (
             <div className="text-2xl font-mono font-bold">
-              {formatCurrency(currentPrice, currency)}
+              <PriceWithDate date={fundamentals?.updatedAt}>
+                {formatCurrency(currentPrice, currency)}
+              </PriceWithDate>
             </div>
           )}
           {dayChange !== null && dayChangePct !== null && (
@@ -836,14 +839,14 @@ export default function SecurityDetailPage() {
                 <div className="flex items-center gap-3 mb-2">
                   <span
                     className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${
-                      rec.action === "BUY"
+                      rec.action.toUpperCase() === "BUY"
                         ? "bg-terminal-positive/20 text-terminal-positive"
-                        : rec.action === "SELL"
+                        : rec.action.toUpperCase() === "SELL"
                         ? "bg-terminal-negative/20 text-terminal-negative"
                         : "bg-terminal-warning/20 text-terminal-warning"
                     }`}
                   >
-                    {rec.action}
+                    {rec.action.toUpperCase()}
                   </span>
                   <span
                     className={`text-xs font-mono px-2 py-0.5 rounded ${
@@ -862,7 +865,7 @@ export default function SecurityDetailPage() {
                     </span>
                   )}
                   <span className="text-xs text-terminal-text-tertiary ml-auto">
-                    {formatDate(rec.createdAt)}
+                    {formatDate(rec.recommendedDate)}
                   </span>
                 </div>
                 <p className="text-sm text-terminal-text-primary">{rec.rationale}</p>

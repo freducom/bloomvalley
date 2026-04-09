@@ -6,6 +6,7 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import Link from "next/link";
 import { TickerLink } from "@/components/ui/TickerLink";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { PriceWithDate } from "@/components/ui/PriceWithDate";
 
 interface WatchlistSummary {
   id: number;
@@ -503,10 +504,12 @@ export default function WatchlistPage() {
                               </td>
                               <td className="px-4 py-2 text-right font-mono text-sm">
                                 {item.priceCents != null
-                                  ? formatCurrency(
-                                      item.priceCents,
-                                      item.currency
-                                    )
+                                  ? <PriceWithDate date={item.priceDate}>
+                                      {formatCurrency(
+                                        item.priceCents,
+                                        item.currency
+                                      )}
+                                    </PriceWithDate>
                                   : "--"}
                               </td>
                               <td
