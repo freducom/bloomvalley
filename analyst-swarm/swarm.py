@@ -1548,18 +1548,88 @@ def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
         except (json.JSONDecodeError, TypeError):
             pass
 
-    # ── Macro Snapshot ──
-    for ep_key in ["/macro/regime", "/macro/summary"]:
-        raw = data.get(ep_key, "")
-        if raw and not raw.startswith("ERROR"):
-            try:
-                m_data = json.loads(raw)
-                m = m_data.get("data", m_data) if isinstance(m_data, dict) else m_data
-                if isinstance(m, dict):
-                    label = "MACRO REGIME" if "regime" in ep_key else "MACRO SUMMARY"
-                    sections.append(f"## {label}\n```json\n{json.dumps(m, indent=2)[:3000]}\n```")
-            except (json.JSONDecodeError, TypeError):
-                pass
+    # ── Macro Regime ──
+    regime_raw = data.get("/macro/regime", "")
+    if regime_raw and not regime_raw.startswith("ERROR"):
+        try:
+            r_data = json.loads(regime_raw)
+            regime = r_data.get("data", r_data) if isinstance(r_data, dict) else r_data
+            if isinstance(regime, dict):
+                lines = ["## MACRO REGIME"]
+                lines.append(f"Regime: **{regime.get('regime', '?')}** (confidence: {regime.get('confidence', '?')}, score: {regime.get('compositeScore', '?')})")
+                for sig in regime.get("signals", []):
+                    lines.append(f"  - {sig.get('name')}: {sig.get('signal')} — {sig.get('detail', '')}")
+                sections.append("\n".join(lines))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # ── Macro Indicators (with staleness annotation) ──
+    summary_macro_raw = data.get("/macro/summary", "")
+    if summary_macro_raw and not summary_macro_raw.startswith("ERROR"):
+        try:
+            from datetime import datetime as dt
+            today = dt.strptime(date_str, "%Y-%m-%d")
+            sm_data = json.loads(summary_macro_raw)
+            regions = sm_data.get("data", sm_data) if isinstance(sm_data, dict) else sm_data
+            if isinstance(regions, list):
+                lines = ["## MACRO INDICATORS"]
+                lines.append("Each indicator includes its release date and staleness. Only flag as 'CHANGED' if the data point is ≤14 days old.")
+                lines.append("")
+                for region in regions:
+                    lines.append(f"### {region.get('regionLabel', '?')}")
+                    for cat in region.get("categories", []):
+                        for ind in cat.get("indicators", []):
+                            name = ind.get("name", "?")
+                            value = ind.get("value")
+                            unit = ind.get("unit", "")
+                            ind_date = ind.get("date", "")
+                            change = ind.get("change")
+                            freq = ind.get("frequency", "")
+
+                            # Compute staleness
+                            staleness = ""
+                            if ind_date:
+                                try:
+                                    d = dt.strptime(ind_date[:10], "%Y-%m-%d")
+                                    days_old = (today - d).days
+                                    if days_old <= 1:
+                                        staleness = "TODAY"
+                                    elif days_old <= 7:
+                                        staleness = f"CHANGED {days_old}d ago"
+                                    elif days_old <= 14:
+                                        staleness = f"recent ({days_old}d ago)"
+                                    else:
+                                        staleness = f"as of {ind_date[:10]} ({days_old}d ago)"
+                                except ValueError:
+                                    staleness = f"date: {ind_date}"
+
+                            # Format value
+                            if value is not None:
+                                if unit == "%":
+                                    val_str = f"{value}{unit}"
+                                elif unit and "EUR" in unit:
+                                    val_str = f"€{value:,.0f}{unit.replace('EUR','').replace('M',' M')}"
+                                else:
+                                    val_str = f"{value} {unit}".strip()
+                            else:
+                                val_str = "N/A"
+
+                            # Format change
+                            chg_str = ""
+                            if change is not None and change != 0:
+                                sign = "+" if change > 0 else ""
+                                if unit == "%":
+                                    chg_str = f" ({sign}{change}pp)"
+                                elif "bps" in str(unit).lower():
+                                    chg_str = f" ({sign}{change}bps)"
+                                else:
+                                    chg_str = f" ({sign}{change})"
+
+                            lines.append(f"  - {name}: **{val_str}**{chg_str} [{staleness}] ({freq})")
+                    lines.append("")
+                sections.append("\n".join(lines))
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     return "\n\n".join(sections)
 

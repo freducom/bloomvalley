@@ -124,6 +124,8 @@ Start the report with a section titled "## EXECUTIVE SUMMARY". Write 2-3 short p
 ### 1. MACRO paragraph
 Short, punchy macro summary for the current date. Include: key geopolitical events, rates (ECB, Fed, 10Y yields), oil/gold, major index levels, market sentiment. One paragraph, no fluff.
 
+**Staleness rule**: Each macro indicator in the data brief has a staleness label (TODAY, CHANGED Xd ago, recent, or as-of date). Only highlight an indicator as a *change* or *development* if it is tagged TODAY or CHANGED. For older data, state the level as background context (e.g. "ECB holding at 2.15%") without implying it just changed. Never present stale data as breaking news.
+
 ### 2. THIS WEEK section
 Upcoming dividends with record/ex-dates and EUR amounts. Earnings releases. Key economic data releases. Any 30-day no-trade windows expiring.
 
