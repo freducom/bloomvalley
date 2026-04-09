@@ -881,6 +881,52 @@ Write your analysis:
 Be specific with price levels from the data."""
 
 
+async def _post_single_research_note(
+    backend_url: str, ticker: str, name: str, report: str,
+    security_id: int | None, is_watchlist: bool,
+    date_str: str, llm_tag: str,
+):
+    """Post a single per-security research note immediately after LLM completes."""
+    # Resolve security ID if not provided
+    if not security_id:
+        async with httpx.AsyncClient(timeout=10, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+            resp = await client.get(f"/securities?ticker={ticker}&limit=1")
+            if resp.status_code == 200:
+                secs = resp.json().get("data", [])
+                if secs:
+                    security_id = secs[0]["id"]
+    if not security_id:
+        return
+
+    # Extract structured fields
+    bull = (_extract_field(report, r"### Bull [Cc]ase[^#\n]*\n(.+?)(?=\n###|\n## |\Z)")
+            or _extract_field(report, r"\*\*Bull [Cc]ase[^*]*\*\*[:\s—–-]*(.+?)(?:\n\n|\n\*\*|\Z)"))
+    bear = (_extract_field(report, r"### Bear [Cc]ase[^#\n]*\n(.+?)(?=\n###|\n## |\Z)")
+            or _extract_field(report, r"\*\*Bear [Cc]ase[^*]*\*\*[:\s—–-]*(.+?)(?:\n\n|\n\*\*|\Z)"))
+    base = (_extract_field(report, r"### Base [Cc]ase[^#\n]*\n(.+?)(?=\n###|\n## |\Z)")
+            or _extract_field(report, r"\*\*Base [Cc]ase[^*]*\*\*[:\s—–-]*(.+?)(?:\n\n|\n\*\*|\Z)"))
+    moat = _extract_moat(report)
+
+    title_prefix = "Watchlist Brief" if is_watchlist else "Research Analyst Report"
+    payload = {
+        "securityId": security_id,
+        "title": f"{title_prefix}: {name} ({ticker}) - {date_str}",
+        "thesis": report[:60000],
+        "bullCase": bull,
+        "bearCase": bear,
+        "baseCase": base,
+        "moatRating": moat,
+        "tags": ["research-analyst", "swarm",
+                 "watchlist" if is_watchlist else "held",
+                 llm_tag],
+    }
+
+    async with httpx.AsyncClient(timeout=15, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+        resp = await client.post("/research/notes", json=payload)
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"POST /research/notes returned {resp.status_code}")
+
+
 async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> str | None:
     """Run research-analyst or technical-analyst with per-security LLM calls.
 
@@ -1011,9 +1057,24 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                     # Strip stray fundamentals blocks for other tickers
                     # (LLM sometimes echoes data from context/training)
                     report = _strip_foreign_fundamentals(report, ticker)
+
+                    # Post per-security note immediately (don't wait for all to finish)
+                    if report and agent_name == "research-analyst":
+                        try:
+                            await _post_single_research_note(
+                                backend_url, ticker, name, report,
+                                sec.get("securityId"), sec["is_watchlist"],
+                                date_str, get_llm_tag(),
+                            )
+                            print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ✓ (posted)", flush=True)
+                        except Exception as e:
+                            print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ✓ (note post failed: {e})", flush=True)
+                    else:
+                        print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ✓", flush=True)
+
                     return report
                 except Exception as e:
-                    print(f"  [{agent_name}] Failed for {ticker}: {e}", flush=True)
+                    print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ✗ {e}", flush=True)
                     return None
 
         # Run all securities (batch_size controls how many in parallel)
@@ -1945,7 +2006,8 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
         report, llm_tag = result
         if not report:
             continue
-        if agent_name == "research-analyst":
+        if agent_name == "research-analyst" and not per_sec_enabled:
+            # Per-security mode posts notes inline; only bulk-extract from combined reports
             await extract_per_security_notes(report, backend_url, date_str, llm_tag)
         elif agent_name == "technical-analyst":
             await extract_technical_notes(report, backend_url, date_str, llm_tag)
@@ -1994,7 +2056,8 @@ async def run_research_only(cfg: dict):
     else:
         report = await run_agent("research-analyst", cfg, date_str)
     llm_tag = get_llm_tag()
-    if report:
+    if report and not per_sec_enabled:
+        # Per-security mode posts notes inline; only bulk-extract from combined reports
         await extract_per_security_notes(report, backend_url, date_str, llm_tag)
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle", completed=1, total=1,
