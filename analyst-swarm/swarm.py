@@ -1396,6 +1396,410 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
         print(f"  [pm] Failed to extract recommendations: {e}", flush=True)
 
 
+# ── Phased Portfolio Manager ──
+
+
+def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
+    """Phase 1: Deterministic extraction of factual data into clean text.
+
+    Extracts dividends, no-trade windows, position summaries, and macro data
+    from raw API responses using Python — no LLM needed.  This eliminates
+    the TBD/hallucination problem.
+    """
+    sections = []
+
+    # ── Dividend Calendar ──
+    div_raw = data.get("/dividends/upcoming", "")
+    if div_raw and not div_raw.startswith("ERROR"):
+        try:
+            div_data = json.loads(div_raw)
+            items = div_data.get("data", div_data) if isinstance(div_data, dict) else div_data
+            if items:
+                lines = ["## DIVIDEND CALENDAR"]
+                lines.append("| Ticker | Ex-Date | Amount/Share | Currency | Shares Held | Total (EUR) | Projected |")
+                lines.append("|--------|---------|-------------|----------|-------------|-------------|-----------|")
+                for d in items:
+                    per_share = d.get("amountPerShareCents")
+                    ps_str = f"{per_share / 100:.2f}" if per_share else "?"
+                    total_eur = d.get("totalEurCents")
+                    te_str = f"€{total_eur / 100:.2f}" if total_eur else "?"
+                    lines.append(
+                        f"| {d.get('ticker', '?')} | {d.get('exDate', '?')} | {ps_str} | "
+                        f"{d.get('currency', '?')} | {d.get('sharesHeld', '?')} | {te_str} | "
+                        f"{'Yes' if d.get('projected') else 'No'} |"
+                    )
+                sections.append("\n".join(lines))
+        except (json.JSONDecodeError, TypeError):
+            sections.append("## DIVIDEND CALENDAR\nData unavailable.")
+    else:
+        sections.append("## DIVIDEND CALENDAR\nData unavailable.")
+
+    # ── 30-Day No-Trade Windows (from buy transactions only) ──
+    buy_raw = data.get("/transactions?type=buy&limit=50", "")
+    if buy_raw and not buy_raw.startswith("ERROR"):
+        try:
+            buy_data = json.loads(buy_raw)
+            items = buy_data.get("data", buy_data) if isinstance(buy_data, dict) else buy_data
+            from datetime import datetime as dt, timedelta
+            cutoff = dt.strptime(date_str, "%Y-%m-%d") - timedelta(days=30)
+            recent_buys = {}
+            for t in items:
+                trade_date_str = t.get("tradeDate") or t.get("date")
+                if not trade_date_str:
+                    continue
+                trade_date = dt.strptime(trade_date_str[:10], "%Y-%m-%d")
+                if trade_date >= cutoff:
+                    ticker = t.get("ticker", "?")
+                    if ticker not in recent_buys or trade_date > dt.strptime(recent_buys[ticker]["date"], "%Y-%m-%d"):
+                        days_ago = (dt.strptime(date_str, "%Y-%m-%d") - trade_date).days
+                        recent_buys[ticker] = {"date": trade_date_str[:10], "days_ago": days_ago}
+            lines = ["## 30-DAY NO-TRADE WINDOWS"]
+            if recent_buys:
+                lines.append("These tickers have BUY transactions within the last 30 days — bias toward HOLD:")
+                for ticker, info in sorted(recent_buys.items()):
+                    remaining = 30 - info["days_ago"]
+                    lines.append(f"  - {ticker}: last buy {info['date']} ({info['days_ago']}d ago, {remaining}d remaining)")
+            else:
+                lines.append("No tickers have buy transactions within the last 30 days. All positions are clear for trading.")
+            sections.append("\n".join(lines))
+        except (json.JSONDecodeError, TypeError):
+            sections.append("## 30-DAY NO-TRADE WINDOWS\nBuy transaction data unavailable — cannot determine windows.")
+    else:
+        sections.append("## 30-DAY NO-TRADE WINDOWS\nBuy transaction data unavailable — cannot determine windows.")
+
+    # ── Position Summary (top holdings with key metrics) ──
+    holdings_raw = data.get("/portfolio/holdings", "")
+    fundamentals_raw = data.get("/fundamentals?limit=200", "")
+    if holdings_raw and not holdings_raw.startswith("ERROR"):
+        try:
+            h_data = json.loads(holdings_raw)
+            holdings = h_data.get("data", h_data) if isinstance(h_data, dict) else h_data
+            # Parse fundamentals for metrics
+            fund_map = {}
+            if fundamentals_raw and not fundamentals_raw.startswith("ERROR"):
+                f_data = json.loads(fundamentals_raw)
+                f_items = f_data.get("data", f_data) if isinstance(f_data, dict) else f_data
+                for f in f_items:
+                    sid = f.get("securityId")
+                    if sid:
+                        fund_map[sid] = f
+
+            # Deduplicate by ticker, sum values across accounts
+            by_ticker = {}
+            for h in holdings:
+                ticker = h.get("ticker", "?")
+                if ticker not in by_ticker:
+                    by_ticker[ticker] = {
+                        "name": h.get("name", "?"),
+                        "securityId": h.get("securityId"),
+                        "assetClass": h.get("assetClass", "?"),
+                        "sector": h.get("sector", ""),
+                        "valueCents": 0,
+                        "pnlPct": h.get("unrealizedPnlPct"),
+                    }
+                by_ticker[ticker]["valueCents"] += h.get("marketValueEurCents") or 0
+
+            # Sort by value descending
+            sorted_holdings = sorted(by_ticker.items(), key=lambda x: x[1]["valueCents"], reverse=True)
+            total_val = sum(v["valueCents"] for _, v in sorted_holdings) or 1
+
+            lines = ["## HELD POSITIONS"]
+            lines.append("| # | Ticker | Name | Weight | Value (EUR) | P&L | ROIC | P/E | Div Yield | Sector |")
+            lines.append("|---|--------|------|--------|-------------|-----|------|-----|-----------|--------|")
+            for i, (ticker, h) in enumerate(sorted_holdings, 1):
+                weight = h["valueCents"] / total_val * 100
+                value_str = f"€{h['valueCents'] / 100:,.0f}"
+                pnl_str = f"{h['pnlPct']:.1f}%" if h.get("pnlPct") is not None else "?"
+                f = fund_map.get(h["securityId"], {})
+                roic = f.get("roic")
+                roic_str = f"{float(roic)*100:.1f}%" if roic else "-"
+                pe = f.get("peRatio")
+                pe_str = f"{float(pe):.1f}" if pe else "-"
+                div_y = f.get("dividendYield")
+                div_str = f"{float(div_y)*100:.1f}%" if div_y else "-"
+                lines.append(
+                    f"| {i} | {ticker} | {h['name'][:25]} | {weight:.1f}% | {value_str} | "
+                    f"{pnl_str} | {roic_str} | {pe_str} | {div_str} | {h.get('sector', '-')[:15]} |"
+                )
+            sections.append("\n".join(lines))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # ── Portfolio Summary ──
+    summary_raw = data.get("/portfolio/summary", "")
+    if summary_raw and not summary_raw.startswith("ERROR"):
+        try:
+            s_data = json.loads(summary_raw)
+            s = s_data.get("data", s_data) if isinstance(s_data, dict) else s_data
+            lines = ["## PORTFOLIO SUMMARY"]
+            lines.append(f"- Total Value: €{s.get('totalValueEurCents', 0) / 100:,.2f}")
+            lines.append(f"- Cost Basis: €{s.get('totalCostEurCents', 0) / 100:,.2f}")
+            lines.append(f"- Cash: €{s.get('totalCashEurCents', 0) / 100:,.2f}")
+            lines.append(f"- Unrealized P&L: €{s.get('unrealizedPnlCents', 0) / 100:,.2f}"
+                         f" ({s.get('unrealizedPnlPct', 0):.1f}%)" if s.get("unrealizedPnlPct") else "")
+            lines.append(f"- Holdings: {s.get('holdingsCount', '?')}")
+            alloc = s.get("allocation", {})
+            if alloc:
+                total = sum(alloc.values()) or 1
+                lines.append("- Allocation: " + ", ".join(
+                    f"{k} {v/total*100:.0f}%" for k, v in sorted(alloc.items(), key=lambda x: -x[1])
+                ))
+            sections.append("\n".join(lines))
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # ── Macro Snapshot ──
+    for ep_key in ["/macro/regime", "/macro/summary"]:
+        raw = data.get(ep_key, "")
+        if raw and not raw.startswith("ERROR"):
+            try:
+                m_data = json.loads(raw)
+                m = m_data.get("data", m_data) if isinstance(m_data, dict) else m_data
+                if isinstance(m, dict):
+                    label = "MACRO REGIME" if "regime" in ep_key else "MACRO SUMMARY"
+                    sections.append(f"## {label}\n```json\n{json.dumps(m, indent=2)[:3000]}\n```")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    return "\n\n".join(sections)
+
+
+def _extract_analyst_verdicts(data: dict[str, str]) -> str:
+    """Extract per-security analyst verdicts from research notes."""
+    raw = data.get("/research/notes?tag=research-analyst&limit=100", "")
+    if not raw or raw.startswith("ERROR"):
+        return ""
+
+    try:
+        notes_data = json.loads(raw)
+        notes = notes_data.get("data", notes_data) if isinstance(notes_data, dict) else notes_data
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+    if not notes:
+        return ""
+
+    lines = ["## ANALYST VERDICTS (from research-analyst notes)"]
+    for note in notes[:60]:
+        title = note.get("title", "")
+        ticker = ""
+        # Extract ticker from title like "Research Analyst Report: KESKOB.HE - 2026-04-09"
+        if ":" in title:
+            parts = title.split(":")
+            if len(parts) >= 2:
+                ticker_part = parts[1].strip().split(" - ")[0].strip()
+                if ticker_part:
+                    ticker = ticker_part
+
+        # Extract verdict from thesis
+        thesis = note.get("thesis", "")[:500]
+        verdict_match = re.search(
+            r"\*\*(?:Verdict[:\s]*)?(?:\*\*)?\s*(BUY|SELL|HOLD|WAIT|AVOID|ACCUMULATE|TRIM)\b",
+            thesis, re.IGNORECASE,
+        )
+        verdict = verdict_match.group(1).upper() if verdict_match else "?"
+        moat = note.get("moatRating", "?")
+
+        # Get bull/bear one-liners
+        bull = (note.get("bullCase") or "")[:120]
+        bear = (note.get("bearCase") or "")[:120]
+
+        if ticker:
+            line = f"  - **{ticker}**: {verdict} (moat: {moat})"
+            if bull:
+                line += f" | Bull: {bull}"
+            if bear:
+                line += f" | Bear: {bear}"
+            lines.append(line)
+
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+async def run_portfolio_manager_phased(cfg: dict, date_str: str) -> str | None:
+    """Run the portfolio manager in structured phases.
+
+    Phase 1 (Python): Deterministic data extraction into clean text
+    Phase 2 (LLM): Holdings analysis — recommendations for held positions
+    Phase 3 (LLM): Watchlist opportunities — best buys from watchlists
+    Phase 4 (LLM): Final synthesis — combine into standard PM report format
+    """
+    backend_url = cfg["backend_url"]
+    print("  [portfolio-manager] Starting (phased mode)...", flush=True)
+    start = time.time()
+
+    try:
+        # Load agent definition
+        agent_def = load_agent_prompt("portfolio-manager")
+
+        # Fetch all PM data
+        endpoints = AGENT_DATA.get("portfolio-manager", [])
+        data = await fetch_data(backend_url, endpoints)
+
+        # Phase 1: Deterministic data extraction
+        print("  [pm] Phase 1: Extracting data brief...", flush=True)
+        data_brief = _build_pm_data_brief(data, date_str)
+        analyst_verdicts = _extract_analyst_verdicts(data)
+
+        # Build remaining data sections (digest non-factual data for LLM)
+        use_digest = cfg.get("digest_data", False)
+        factual_endpoints = {
+            "/dividends/upcoming", "/transactions?type=buy&limit=50",
+            "/portfolio/holdings", "/portfolio/summary", "/fundamentals?limit=200",
+            "/macro/regime", "/macro/summary",
+        }
+        remaining_data = {k: v for k, v in data.items() if k not in factual_endpoints}
+
+        if use_digest:
+            from data_digest import auto_digest
+            digested = auto_digest(remaining_data)
+            other_data_section = "\n\n".join(
+                f"### {label}\n{content}" for label, content in digested.items() if content
+            )
+        else:
+            other_data_section = "\n\n".join(
+                f"### Data from {ep}\n```json\n{content[:10000]}\n```"
+                if not content.startswith("ERROR")
+                else f"### Data from {ep}\n*Unavailable: {content}*"
+                for ep, content in remaining_data.items()
+            )
+
+        # Phase 2: Holdings analysis
+        print("  [pm] Phase 2: Analyzing held positions...", flush=True)
+        holdings_system = f"""You are the portfolio-manager for the Bloomvalley investment terminal.
+Today is {date_str}. Analyze each held position and provide a recommendation.
+ALL data has been pre-extracted below — do NOT attempt to make API calls."""
+
+        holdings_prompt = f"""# Task
+Analyze each held position and provide a BUY/HOLD/SELL/TRIM recommendation with rationale.
+
+# Pre-Extracted Data
+
+{data_brief}
+
+{analyst_verdicts}
+
+# Other Analyst Reports
+
+{other_data_section}
+
+# Instructions
+
+For EACH held position in the table above, provide:
+1. **Action** (BUY more / HOLD / SELL / TRIM) with confidence (high/medium/low)
+2. **One-line rationale** — why this action now
+3. **Key signals** — ROIC, valuation, insider activity, macro alignment
+4. Use the 30-DAY NO-TRADE WINDOWS section above — only flag tickers listed there. If a ticker is NOT listed, it has NO window.
+5. Use the DIVIDEND CALENDAR above — include exact EUR amounts from the table, never write TBD.
+6. Flag positions >10% weight as concentration risk.
+7. Flag positions <€200 as dust (do not recommend selling).
+
+Be concise — one paragraph per position. Output as a numbered list."""
+
+        holdings_analysis = await call_llm(holdings_prompt, holdings_system, cfg, timeout=600)
+
+        # Phase 3: Watchlist opportunities
+        print("  [pm] Phase 3: Evaluating watchlist opportunities...", flush=True)
+        watchlist_system = f"""You are the portfolio-manager for the Bloomvalley investment terminal.
+Today is {date_str}. Identify the best BUY opportunities from watchlist securities.
+ALL data has been pre-extracted below — do NOT attempt to make API calls."""
+
+        # Get watchlist data
+        wl_data_parts = []
+        for k, v in data.items():
+            if "watchlist" in k.lower() or "screener" in k.lower():
+                if not v.startswith("ERROR"):
+                    if use_digest:
+                        from data_digest import auto_digest
+                        d = auto_digest({k: v})
+                        for label, content in d.items():
+                            if content:
+                                wl_data_parts.append(f"### {label}\n{content}")
+                    else:
+                        wl_data_parts.append(f"### {k}\n```json\n{v[:10000]}\n```")
+
+        watchlist_prompt = f"""# Task
+Identify the top 5-10 BUY opportunities from watchlist securities that the investor does NOT currently own.
+
+# Watchlist Data
+
+{chr(10).join(wl_data_parts) if wl_data_parts else "No watchlist data available."}
+
+{analyst_verdicts}
+
+# Instructions
+
+For each recommendation:
+1. **Ticker + Name**
+2. **Why now** — catalyst, valuation, quality metrics
+3. **Position size** — suggested EUR amount and share count
+4. **Risk** — key downside risk
+5. Use "buy" for securities ready to purchase, "wait" for those to keep watching.
+6. Never use "hold" for securities the investor doesn't own.
+
+Output as a numbered list, ranked by conviction."""
+
+        watchlist_analysis = await call_llm(watchlist_prompt, watchlist_system, cfg, timeout=300)
+
+        # Phase 4: Final synthesis
+        print("  [pm] Phase 4: Synthesizing final report...", flush=True)
+        synthesis_system = f"""You are the portfolio-manager for the Bloomvalley investment terminal.
+Today is {date_str}. Synthesize the analysis below into your final report.
+ALL data and analysis has been provided — do NOT attempt to make API calls."""
+
+        synthesis_prompt = f"""# Agent Definition
+
+{agent_def}
+
+# Pre-Extracted Factual Data (use these numbers exactly — never write TBD)
+
+{data_brief}
+
+# Holdings Analysis (Phase 2)
+
+{holdings_analysis}
+
+# Watchlist Opportunities (Phase 3)
+
+{watchlist_analysis}
+
+# Remaining Data
+
+{other_data_section}
+
+# Instructions
+
+Produce your COMPLETE final report following the exact format in your agent definition:
+0. EXECUTIVE SUMMARY
+1. MACRO paragraph
+2. THIS WEEK section (use DIVIDEND CALENDAR data above — include exact EUR amounts)
+3. Rebalancing Recommendations (combine holdings + watchlist analysis)
+4. Risk Exposure Summary
+5. DEPLOYMENT PLAN STATUS
+
+Then output the structured JSON recommendations block.
+
+CRITICAL RULES:
+- Use the exact dividend amounts from the DIVIDEND CALENDAR table above. Never write "TBD".
+- Use the 30-DAY NO-TRADE WINDOWS section above. Only flag tickers listed there. If a ticker is NOT listed, there is NO window.
+- Use "hold" only for held positions, "wait" for watchlist securities not owned.
+- Include bull AND bear case for every BUY or SELL."""
+
+        final_report = await call_llm(synthesis_prompt, synthesis_system, cfg, timeout=900)
+
+        # Store the full report
+        await store_report(backend_url, "portfolio-manager", final_report)
+
+        elapsed = round(time.time() - start, 1)
+        print(f"  [portfolio-manager] Complete ({elapsed}s, {len(final_report)} chars, 4 phases)", flush=True)
+        return final_report
+
+    except Exception as e:
+        elapsed = round(time.time() - start, 1)
+        print(f"  [portfolio-manager] FAILED after {elapsed}s: {e}", flush=True)
+        traceback.print_exc()
+        return None
+
+
 # ── Main Swarm Run ──
 
 def _detect_brief_type() -> str:
@@ -1479,10 +1883,10 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
     # Step 4: Run portfolio manager last (needs analyst outputs + previous recommendations)
     # NOTE: old recs are closed AFTER PM runs so it can compare against them
     if "portfolio-manager" in agents:
-        print("\n[swarm] Running portfolio manager (final synthesis)...", flush=True)
+        print("\n[swarm] Running portfolio manager (phased synthesis)...", flush=True)
         await report_status(backend_url, "running", agent="portfolio-manager",
                             completed=completed_count, total=total_agents)
-        pm_report = await run_agent("portfolio-manager", cfg, date_str)
+        pm_report = await run_portfolio_manager_phased(cfg, date_str)
         completed_count += 1
 
         # Step 5: Close old recs, then post new ones from PM report

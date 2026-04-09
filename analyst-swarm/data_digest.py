@@ -444,9 +444,19 @@ def digest_dividends(json_str: str) -> str:
     for div in items[:20]:
         ticker = div.get("ticker", "?")
         ex_date = div.get("exDate", "?")
-        amount = div.get("amount") or div.get("amountCents")
         currency = div.get("currency", "EUR")
-        lines.append(f"  {ticker}: {amount} {currency} (ex-date: {ex_date})")
+        shares = div.get("sharesHeld", "?")
+        # Amount per share in cents → format as currency
+        per_share_cents = div.get("amountPerShareCents")
+        per_share = f"{per_share_cents / 100:.2f}" if per_share_cents else "?"
+        # Total expected in EUR cents
+        total_eur_cents = div.get("totalEurCents")
+        total_eur = f"€{total_eur_cents / 100:.2f}" if total_eur_cents else "?"
+        projected = " (projected)" if div.get("projected") else ""
+        lines.append(
+            f"  {ticker}: {per_share} {currency}/share × {shares} shares = {total_eur} EUR"
+            f" (ex-date: {ex_date}){projected}"
+        )
 
     return "\n".join(lines)
 
