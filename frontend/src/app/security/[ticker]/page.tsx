@@ -603,7 +603,10 @@ export default function SecurityDetailPage() {
                 </span>
               )}
               {latestResearch?.createdAt && (
-                <span className="text-xs text-terminal-text-muted">
+                <span
+                  className="text-xs text-terminal-text-muted cursor-default"
+                  title={new Date(latestResearch.createdAt).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" })}
+                >
                   {new Date(latestResearch.createdAt).toLocaleDateString("fi-FI")}
                 </span>
               )}
@@ -646,7 +649,10 @@ export default function SecurityDetailPage() {
           <div className="flex items-baseline justify-between mb-2">
             <h2 className="text-sm font-semibold text-terminal-text-secondary">Technical Analysis</h2>
             {latestTechnical.createdAt && (
-              <span className="text-xs text-terminal-text-muted">
+              <span
+                className="text-xs text-terminal-text-muted cursor-default"
+                title={new Date(latestTechnical.createdAt).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" })}
+              >
                 {new Date(latestTechnical.createdAt).toLocaleDateString("fi-FI")}
               </span>
             )}
@@ -864,7 +870,10 @@ export default function SecurityDetailPage() {
                       Target: {formatCurrency(rec.targetPriceCents, currency)}
                     </span>
                   )}
-                  <span className="text-xs text-terminal-text-tertiary ml-auto">
+                  <span
+                    className="text-xs text-terminal-text-tertiary ml-auto cursor-default"
+                    title={`Recommended: ${rec.recommendedDate}${rec.source ? ` by ${rec.source}` : ""}`}
+                  >
                     {formatDate(rec.recommendedDate)}
                   </span>
                 </div>
