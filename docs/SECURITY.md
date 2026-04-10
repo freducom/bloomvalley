@@ -1,6 +1,6 @@
 # Security Audit — Bloomvalley Terminal
 
-Last updated: 2026-03-26
+Last updated: 2026-04-10
 
 This document describes known security issues in the current deployment,
 why each matters, and how to fix it. Intended audience: anyone deploying
@@ -30,23 +30,19 @@ no multi-tenancy, and no public exposure by design. The threat model is:
 | **Status** | **Fixed (2026-03-26).** Static API key (`API_KEY` in `.env`) checked via `X-API-Key` header. Next.js middleware (`frontend/src/middleware.ts`) injects the header server-side on rewrite — the key never reaches the browser. Cron and analyst-swarm pass the key via env var. Health endpoint exempt for Docker healthchecks. Auth is optional — empty `API_KEY` disables it for local dev. |
 | **Traefik change** | All traffic now routes through the frontend (single router) so the middleware always injects the key. The separate `bloomvalley-api` Traefik router pointing directly to port 8000 was removed. |
 
-#### 2. Database exposed on host with weak default credentials
+#### 2. ~~Database exposed on host with weak default credentials~~ — REMEDIATED
 
 | | |
 |---|---|
-| **Where** | `docker-compose.yml:4-5` — `ports: "5432:5432"`; `.env` — `POSTGRES_USER=warren`, `POSTGRES_PASSWORD=warren` |
-| **Risk** | Any process on the host (or LAN, depending on firewall) can connect directly to PostgreSQL with trivially guessable credentials |
-| **Why it matters** | Direct DB access bypasses any future API-level auth. Full dump of portfolio, transactions, tax data |
-| **Fix** | Remove the host port mapping. Services communicate over the Docker network. Generate a strong random password. See [Remediation](#r2-close-database-ports) |
+| **Where** | `docker-compose.yml` — db service; `.env` — `POSTGRES_PASSWORD` |
+| **Status** | **Fixed (2026-04-10).** Host port mapping removed — PostgreSQL only reachable via Docker internal network. Password changed from `warren` to a 32-char random token. Existing data volume updated via `ALTER USER`. |
 
-#### 3. Redis exposed on host with no authentication
+#### 3. ~~Redis exposed on host with no authentication~~ — REMEDIATED
 
 | | |
 |---|---|
-| **Where** | `docker-compose.yml:23-24` — `ports: "6379:6379"`; line 27 — no `--requirepass` |
-| **Risk** | Unauthenticated Redis allows data theft, cache poisoning, and in some configurations arbitrary code execution via module loading |
-| **Why it matters** | Redis is a known target for automated scanners. Even on a LAN, an IoT device running a botnet could find it |
-| **Fix** | Remove the host port mapping. Add `--requirepass $(REDIS_PASSWORD)` to the command. See [Remediation](#r3-redis-authentication) |
+| **Where** | `docker-compose.yml` — redis service; `.env` — `REDIS_PASSWORD` |
+| **Status** | **Fixed (2026-04-10).** Host port mapping removed. `--requirepass` added to redis-server command. Password stored in `.env` as `REDIS_PASSWORD`. `REDIS_URL` updated with auth. |
 
 #### 4. API keys stored in plain-text `.env`
 
@@ -61,22 +57,20 @@ no multi-tenancy, and no public exposure by design. The threat model is:
 
 ### HIGH
 
-#### 5. Backend port 8000 exposed to host
+#### 5. ~~Backend port 8000 exposed to host~~ — REMEDIATED
 
 | | |
 |---|---|
-| **Where** | `docker-compose.yml:37-38` — `ports: "8000:8000"` |
-| **Risk** | Bypasses Traefik (and any future auth middleware on Traefik). Direct access to the raw API |
-| **Why it matters** | Traefik is the intended entry point. Exposing the backend port creates a second, unprotected path |
-| **Fix** | Remove the port mapping. Traefik reaches the backend via the Docker network. See [Remediation](#r4-remove-unnecessary-ports) |
+| **Where** | `docker-compose.yml` — backend service |
+| **Status** | **Fixed (2026-04-10).** Port bound to `127.0.0.1:8000` — only reachable from localhost, not from LAN. |
 
-#### 6. Frontend port 3000 exposed to host
+#### 6. Frontend port 3000 exposed to host — PARTIALLY MITIGATED
 
 | | |
 |---|---|
-| **Where** | `docker-compose.yml:54-55` — `ports: "3000:3000"` |
-| **Risk** | Same as above — bypasses Traefik |
-| **Fix** | Remove the port mapping if Traefik handles all external traffic |
+| **Where** | `docker-compose.yml` — frontend service, `ports: "3000:3000"` |
+| **Status** | Port remains open because Traefik routes to `172.17.0.1:3000` (host bridge IP). Cannot bind to `127.0.0.1` without moving both services to a shared Docker network. Risk is mitigated by API key auth — the frontend injects the key server-side, so direct port access sees the same protected API. |
+| **Future fix** | Join bloomvalley services to the `proxy` network and route via Docker DNS instead of host IP. |
 
 #### 7. Pipeline endpoints allow unauthenticated DoS
 

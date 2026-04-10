@@ -1,8 +1,7 @@
 services:
   db:
     image: timescale/timescaledb:latest-pg16
-    ports:
-      - "5432:5432"
+    # No host port — only reachable via Docker network (fixes SECURITY.md #2)
     env_file:
       - .env
     environment:
@@ -20,13 +19,12 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # No host port — only reachable via Docker network (fixes SECURITY.md #3)
     volumes:
       - ${REDIS_DATA_DIR:-./data/redis}:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -35,7 +33,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"  # Localhost only — not exposed to LAN (fixes SECURITY.md #5)
     depends_on:
       db:
         condition: service_healthy
@@ -60,7 +58,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
+      - "3000:3000"  # Traefik routes here via 172.17.0.1 — cannot remove without shared Docker network
     depends_on:
       - backend
     volumes:
