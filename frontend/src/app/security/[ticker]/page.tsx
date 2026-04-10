@@ -641,11 +641,15 @@ export default function SecurityDetailPage() {
         </div>
       )}
 
-      {/* ── AI Analysis ── */}
+      {/* ── Research Analyst ── */}
       {(latestResearch?.thesis || analystExcerpt) && (
         <div className="border border-terminal-accent/30 bg-terminal-accent/5 rounded-md p-4 mb-6">
           <div className="flex items-baseline justify-between mb-2">
-            <h2 className="text-sm font-semibold text-terminal-accent">AI Analysis</h2>
+            <h2 className="text-sm font-semibold text-terminal-accent">
+              {latestResearch?.tags?.includes("research-analyst") ? "Research Analyst"
+                : latestResearch?.tags?.includes("technical-analyst") ? "Technical Analyst"
+                : "Research Analyst"}
+            </h2>
             <div className="flex items-baseline gap-2">
               {latestResearch?.tags?.some((t: string) => t.startsWith("llm:")) && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono">
