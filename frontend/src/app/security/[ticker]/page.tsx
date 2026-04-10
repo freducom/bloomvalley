@@ -591,8 +591,58 @@ export default function SecurityDetailPage() {
         </div>
       </div>
 
+      {/* ── Portfolio Manager Recommendation ── */}
+      {latestRec && (
+        <div className={`border rounded-md p-4 mb-6 ${
+          latestRec.action.toLowerCase() === "buy" || latestRec.action.toLowerCase() === "accumulate"
+            ? "border-emerald-500/30 bg-emerald-500/5"
+            : latestRec.action.toLowerCase() === "sell" || latestRec.action.toLowerCase() === "trim" || latestRec.action.toLowerCase() === "avoid"
+            ? "border-red-500/30 bg-red-500/5"
+            : "border-yellow-500/30 bg-yellow-500/5"
+        }`}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-terminal-text-secondary">Portfolio Manager</h2>
+              <span className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${
+                latestRec.action.toLowerCase() === "buy" || latestRec.action.toLowerCase() === "accumulate"
+                  ? "bg-terminal-positive/20 text-terminal-positive"
+                  : latestRec.action.toLowerCase() === "sell" || latestRec.action.toLowerCase() === "trim" || latestRec.action.toLowerCase() === "avoid"
+                  ? "bg-terminal-negative/20 text-terminal-negative"
+                  : "bg-terminal-warning/20 text-terminal-warning"
+              }`}>{latestRec.action.toUpperCase()}</span>
+              <span className={`text-xs font-mono px-2 py-0.5 rounded ${
+                latestRec.confidence === "high"
+                  ? "bg-terminal-positive/20 text-terminal-positive"
+                  : latestRec.confidence === "medium"
+                  ? "bg-terminal-warning/20 text-terminal-warning"
+                  : "bg-terminal-bg-tertiary text-terminal-text-tertiary"
+              }`}>{latestRec.confidence}</span>
+            </div>
+            <span
+              className="text-xs text-terminal-text-muted cursor-default"
+              title={`Recommended: ${latestRec.recommendedDate}${latestRec.source ? ` by ${latestRec.source}` : ""}`}
+            >
+              {formatDate(latestRec.recommendedDate)}
+            </span>
+          </div>
+          <p className="text-sm text-terminal-text-primary">{latestRec.rationale}</p>
+          {latestRec.bullCase && (
+            <p className="text-xs text-terminal-text-secondary mt-2">
+              <span className="text-terminal-positive font-semibold">Bull:</span>{" "}
+              {latestRec.bullCase}
+            </p>
+          )}
+          {latestRec.bearCase && (
+            <p className="text-xs text-terminal-text-secondary mt-1">
+              <span className="text-terminal-negative font-semibold">Bear:</span>{" "}
+              {latestRec.bearCase}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* ── AI Analysis ── */}
-      {(latestResearch?.thesis || analystExcerpt || latestRec?.rationale) && (
+      {(latestResearch?.thesis || analystExcerpt) && (
         <div className="border border-terminal-accent/30 bg-terminal-accent/5 rounded-md p-4 mb-6">
           <div className="flex items-baseline justify-between mb-2">
             <h2 className="text-sm font-semibold text-terminal-accent">AI Analysis</h2>
@@ -612,34 +662,14 @@ export default function SecurityDetailPage() {
               )}
             </div>
           </div>
-          {(latestResearch?.thesis || analystExcerpt) ? (
-            <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
-              <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={analysisComponents}>
-                {(latestResearch?.thesis || analystExcerpt || "")
-                  .replace(/^#{2,3} (?:W-)?\d+\.\s+\S+\s*—[^\n]*\n*/m, "")
-                  .replace(/\n---\s*$/g, "")
-                  .trim()}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <>
-              {latestRec?.rationale && (
-                <p className="text-sm text-terminal-text-primary mb-2">{latestRec.rationale}</p>
-              )}
-              {latestRec?.bullCase && (
-                <div className="mt-2">
-                  <span className="text-xs font-semibold text-terminal-positive">Bull Case</span>
-                  <p className="text-sm text-terminal-text-secondary mt-0.5">{latestRec.bullCase}</p>
-                </div>
-              )}
-              {latestRec?.bearCase && (
-                <div className="mt-2">
-                  <span className="text-xs font-semibold text-terminal-negative">Bear Case</span>
-                  <p className="text-sm text-terminal-text-secondary mt-0.5">{latestRec.bearCase}</p>
-                </div>
-              )}
-            </>
-          )}
+          <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
+            <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={analysisComponents}>
+              {(latestResearch?.thesis || analystExcerpt || "")
+                .replace(/^#{2,3} (?:W-)?\S+\s*—[^\n]*\n*/m, "")
+                .replace(/\n---\s*$/g, "")
+                .trim()}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
 
