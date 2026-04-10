@@ -72,14 +72,12 @@ no multi-tenancy, and no public exposure by design. The threat model is:
 | **Status** | Port remains open because Traefik routes to `172.17.0.1:3000` (host bridge IP). Cannot bind to `127.0.0.1` without moving both services to a shared Docker network. Risk is mitigated by API key auth — the frontend injects the key server-side, so direct port access sees the same protected API. |
 | **Future fix** | Join bloomvalley services to the `proxy` network and route via Docker DNS instead of host IP. |
 
-#### 7. Pipeline endpoints allow unauthenticated DoS
+#### 7. ~~Pipeline endpoints allow unauthenticated DoS~~ — REMEDIATED
 
 | | |
 |---|---|
 | **Where** | `backend/app/api/v1/pipelines.py` — `POST /api/v1/pipelines/{name}/run` |
-| **Risk** | Anyone can trigger all data pipelines repeatedly, hammering external APIs and consuming resources |
-| **Why it matters** | Could exhaust API rate limits (Alpha Vantage has 25 calls/day on free tier), cause IP bans, or spike CPU/memory |
-| **Fix** | Solved by API authentication (#1). Additionally, add rate limiting via `slowapi` or a simple in-memory cooldown per pipeline |
+| **Status** | **Fixed by #1 (2026-03-26).** All `/api/*` routes require `X-API-Key` header. Pipeline endpoints return 401 without a valid key. Additionally, the pipeline runner prevents concurrent runs of the same pipeline (`_active_runs` set). |
 
 #### 8. Analyst-swarm mounts `~/.claude` credentials
 
