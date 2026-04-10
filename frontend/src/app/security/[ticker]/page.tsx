@@ -463,6 +463,14 @@ export default function SecurityDetailPage() {
   const latestResearch = latestResearchAnalyst || latestTechnical || (research.length > 0 ? research[0] : null);
   const latestRec = recommendations.length > 0 ? recommendations[0] : null;
 
+  // Extract LLM model tag from a note's tags array
+  const getLlmTag = (tags?: string[]) =>
+    tags?.find((t) => t.startsWith("llm:"))?.replace("llm:", "").toUpperCase() || null;
+
+  // Find PM's LLM tag from its stored analyst report
+  const pmNote = research.find((n) => n.tags?.includes("portfolio-manager"));
+  const pmLlmTag = getLlmTag(pmNote?.tags);
+
   const currentPrice = fundamentals?.currentPriceCents ?? null;
   const currency = security.currency || "EUR";
 
@@ -618,12 +626,19 @@ export default function SecurityDetailPage() {
                   : "bg-terminal-bg-tertiary text-terminal-text-tertiary"
               }`}>{latestRec.confidence}</span>
             </div>
-            <span
-              className="text-xs text-terminal-text-muted cursor-default"
-              title={`Recommended: ${latestRec.recommendedDate}${latestRec.source ? ` by ${latestRec.source}` : ""}`}
-            >
-              {formatDate(latestRec.recommendedDate)}
-            </span>
+            <div className="flex items-baseline gap-2">
+              {pmLlmTag && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono">
+                  {pmLlmTag}
+                </span>
+              )}
+              <span
+                className="text-xs text-terminal-text-muted cursor-default"
+                title={pmNote?.createdAt ? new Date(pmNote.createdAt).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" }) : latestRec.recommendedDate}
+              >
+                {formatDate(latestRec.recommendedDate)}
+              </span>
+            </div>
           </div>
           <p className="text-sm text-terminal-text-primary">{latestRec.rationale}</p>
           {latestRec.bullCase && (
@@ -681,15 +696,22 @@ export default function SecurityDetailPage() {
       {latestTechnical && latestTechnical !== latestResearch && latestTechnical.thesis && (
         <div className="border border-terminal-border bg-terminal-bg-secondary rounded-md p-4 mb-6">
           <div className="flex items-baseline justify-between mb-2">
-            <h2 className="text-sm font-semibold text-terminal-text-secondary">Technical Analysis</h2>
-            {latestTechnical.createdAt && (
-              <span
-                className="text-xs text-terminal-text-muted cursor-default"
-                title={new Date(latestTechnical.createdAt).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" })}
-              >
-                {new Date(latestTechnical.createdAt).toLocaleDateString("fi-FI")}
-              </span>
-            )}
+            <h2 className="text-sm font-semibold text-terminal-text-secondary">Technical Analyst</h2>
+            <div className="flex items-baseline gap-2">
+              {getLlmTag(latestTechnical.tags) && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono">
+                  {getLlmTag(latestTechnical.tags)}
+                </span>
+              )}
+              {latestTechnical.createdAt && (
+                <span
+                  className="text-xs text-terminal-text-muted cursor-default"
+                  title={new Date(latestTechnical.createdAt).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" })}
+                >
+                  {new Date(latestTechnical.createdAt).toLocaleDateString("fi-FI")}
+                </span>
+              )}
+            </div>
           </div>
           <div className="text-sm text-terminal-text-primary leading-relaxed prose prose-invert prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:text-terminal-text-primary prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-terminal-text-primary">
             <ReactMarkdown remarkPlugins={[[remarkGfm, gfmOptions]]} components={analysisComponents}>
@@ -867,9 +889,16 @@ export default function SecurityDetailPage() {
       {/* ── Recommendations ── */}
       {recommendations.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-terminal-text-secondary mb-3">
-            Active Recommendations
-          </h2>
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-sm font-semibold text-terminal-text-secondary">
+              Active Recommendations
+            </h2>
+            {pmLlmTag && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-terminal-accent/20 text-terminal-accent font-mono">
+                {pmLlmTag}
+              </span>
+            )}
+          </div>
           <div className="border border-terminal-border rounded-md divide-y divide-terminal-border">
             {recommendations.map((rec) => (
               <div
