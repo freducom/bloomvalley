@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
 from app.db.engine import async_session
@@ -22,11 +22,11 @@ router = APIRouter()
 
 class NoteCreate(BaseModel):
     securityId: int | None = None
-    title: str
-    thesis: str | None = None
-    bullCase: str | None = None
-    bearCase: str | None = None
-    baseCase: str | None = None
+    title: str = Field(..., max_length=500)
+    thesis: str | None = Field(None, max_length=65_000)
+    bullCase: str | None = Field(None, max_length=10_000)
+    bearCase: str | None = Field(None, max_length=10_000)
+    baseCase: str | None = Field(None, max_length=10_000)
     intrinsicValueCents: int | None = None
     intrinsicValueCurrency: str | None = None
     marginOfSafetyPct: float | None = None

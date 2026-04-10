@@ -31,7 +31,7 @@ design. The threat model is:
 | 7 | HIGH | Pipeline endpoints allow unauthenticated DoS | **REMEDIATED** by #1 |
 | 8 | HIGH | Analyst-swarm mounts `~/.claude` credentials | Accepted risk |
 | 9 | MEDIUM | CORS allows wildcard methods/headers | Open |
-| 10 | MEDIUM | No request size limits | Open |
+| 10 | MEDIUM | No request size limits | **REMEDIATED** (2026-04-10) |
 | 11 | MEDIUM | No container security hardening | Open |
 | 12 | MEDIUM | OpenInsider scraped over HTTP | Open |
 | 13 | LOW | No Content Security Policy headers | Open |
@@ -115,14 +115,11 @@ design. The threat model is:
 | **Status** | Open. Origin is correctly locked to `FRONTEND_URL` (not `*`). Low risk for single-origin deployment. |
 | **Fix** | Restrict to `allow_methods=["GET", "POST", "PUT", "DELETE"]` and `allow_headers=["Content-Type", "X-API-Key"]`. |
 
-#### 10. No request size limits
+#### 10. ~~No request size limits~~ — REMEDIATED
 
 | | |
 |---|---|
-| **Where** | `backend/app/main.py` — no body size limit; `backend/app/api/v1/imports.py` — paste import has no `max_length` on text field |
-| **Risk** | Large payloads could cause memory exhaustion. |
-| **Status** | Open. Low risk — API is behind auth and single-user. |
-| **Fix** | Add `max_length` to Pydantic fields. Configure body size limit in uvicorn or ASGI middleware. |
+| **Status** | **Fixed (2026-04-10).** Global 100KB body size limit via middleware (returns 413 for oversized requests). Pydantic `max_length` on largest fields: import paste text (50KB), research note thesis (65KB), bull/bear/base cases (10KB each), note title (500 chars). |
 
 #### 11. No container security hardening
 
@@ -177,6 +174,7 @@ is not applicable to the current architecture.
 - **Strong credentials**: Database and Redis use randomly generated passwords (32-char and 22-char)
 - **Backend localhost-only**: Port 8000 bound to `127.0.0.1`, not accessible from LAN
 - **Pipeline concurrency guard**: Same pipeline cannot run concurrently (`_active_runs` set)
+- **Request size limits**: Global 100KB body limit via middleware, field-level `max_length` on large text inputs
 
 ---
 
@@ -185,4 +183,4 @@ is not applicable to the current architecture.
 | Date | Items | Description |
 |------|-------|-------------|
 | 2026-03-26 | #1, #7 | API key middleware on all routes. Pipeline endpoints now require auth. |
-| 2026-04-10 | #2, #3, #5 | Closed DB/Redis ports, strong passwords, backend localhost-only. |
+| 2026-04-10 | #2, #3, #5, #10 | Closed DB/Redis ports, strong passwords, backend localhost-only, request size limits. |

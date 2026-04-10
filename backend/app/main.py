@@ -93,6 +93,22 @@ async def check_api_key(request: Request, call_next):
     return await call_next(request)
 
 
+# Request body size limit (100KB) — prevents memory exhaustion from large payloads
+MAX_BODY_SIZE = 100 * 1024  # 100KB
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH"):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_BODY_SIZE:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"Request body too large (max {MAX_BODY_SIZE // 1024}KB)"},
+            )
+    return await call_next(request)
+
+
 # Include v1 router
 from app.api.v1.router import router as v1_router  # noqa: E402
 

@@ -9,7 +9,7 @@ from decimal import Decimal
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func, literal_column, select
 
 from app.db.engine import async_session
@@ -151,7 +151,7 @@ async def _get_current_holdings(account_id: int) -> dict[int, Decimal]:
 # ── Request models ───────────────────────────────────────────────────────
 
 class ParseRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=50_000)  # Nordnet paste ~2-5KB, 50KB generous max
     account_type: str | None = None  # "regular", "osakesaastotili", etc.
     account_name: str | None = None
 
