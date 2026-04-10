@@ -1112,8 +1112,9 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
 async def update_deployment_progress(backend_url: str):
     """Compare buy transactions against active deployment plan and update progress.
 
-    Sums all buy transactions since the tranche's planned_date (or plan start)
-    and updates the in-progress tranche's executed amount.
+    Each tranche counts only buy transactions within its date window:
+    tranche start = its plannedDate (or plan startDate for the first tranche)
+    tranche end = next tranche's plannedDate (or plan endDate for the last)
     """
     async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
         try:
@@ -1130,19 +1131,6 @@ async def update_deployment_progress(backend_url: str):
             if not tranches:
                 return
 
-            # Find the current tranche (first non-completed one)
-            current = None
-            for t in tranches:
-                if t.get("status") != "completed":
-                    current = t
-                    break
-            if not current:
-                return
-
-            tranche_id = current["id"]
-            planned_date = current.get("plannedDate", plan.get("startDate", ""))
-            target_cents = current.get("amountCents", 0)
-
             # Get FX rates for currency conversion
             fx_resp = await client.get("/prices/fx-rates")
             fx_rates = {}
@@ -1150,55 +1138,82 @@ async def update_deployment_progress(backend_url: str):
                 for r in fx_resp.json().get("data", []):
                     fx_rates[r.get("currency", r.get("quoteCurrency", ""))] = r.get("rate", 1)
 
-            # Sum buy transactions since plan start date
-            # (deployment = new capital deployed, i.e. buys funded by ALYK redemption)
-            start = plan.get("startDate", planned_date)
-            tx_resp = await client.get(f"/transactions?limit=500")
+            # Fetch all buy transactions since plan start
+            tx_resp = await client.get("/transactions?type=buy&limit=500")
             if tx_resp.status_code != 200:
                 return
+            all_buys = tx_resp.json().get("data", [])
 
-            txns = tx_resp.json().get("data", [])
-            total_deployed = 0
-            notes_parts = []
+            plan_start = plan.get("startDate", "")
+            plan_end = plan.get("endDate", "9999-12-31")
 
-            for tx in txns:
-                if tx.get("tradeDate", "") < start:
-                    continue
-                if tx.get("type") != "buy":
-                    continue
+            # Sort tranches by planned date
+            sorted_tranches = sorted(tranches, key=lambda t: t.get("plannedDate", ""))
 
-                total_cents = tx.get("totalCents", 0)
-                currency = tx.get("currency", "EUR")
+            for i, tranche in enumerate(sorted_tranches):
+                tranche_id = tranche["id"]
+                target_cents = tranche.get("amountCents", 0)
 
-                if currency == "EUR":
-                    eur_cents = total_cents
+                # Determine this tranche's date window
+                # First tranche starts at plan start, others at their own planned date
+                window_start = plan_start if i == 0 else tranche.get("plannedDate", plan_start)
+
+                # Ends at next tranche's planned date, or plan end for the last
+                if i + 1 < len(sorted_tranches):
+                    window_end = sorted_tranches[i + 1].get("plannedDate", plan_end)
                 else:
-                    fx = fx_rates.get(currency, 1)
-                    eur_cents = int(total_cents / fx) if fx else total_cents
+                    window_end = plan_end
 
-                total_deployed += eur_cents
-                ticker = tx.get("ticker", "?")
-                dt = tx.get("tradeDate", "?")
-                notes_parts.append(f"{dt}: {ticker} {eur_cents/100:.0f}EUR")
+                # Sum buys within this tranche's window
+                tranche_deployed = 0
+                notes_parts = []
 
-            if total_deployed <= 0:
-                return
+                for tx in all_buys:
+                    trade_date = tx.get("tradeDate", "")
+                    if trade_date < window_start or trade_date >= window_end:
+                        continue
 
-            # Update the tranche
-            status = "completed" if total_deployed >= target_cents else "in_progress"
-            notes = "; ".join(notes_parts[-10:])  # keep last 10 entries
+                    total_cents = tx.get("totalCents", 0)
+                    currency = tx.get("currency", "EUR")
 
-            await client.put(
-                f"/deployment-plans/{plan_id}/tranches/{tranche_id}",
-                json={
-                    "status": status,
-                    "executedAmountCents": total_deployed,
-                    "executionNotes": notes,
-                },
-            )
-            print(f"  [deployment] Updated tranche {tranche_id}: "
-                  f"{total_deployed/100:,.0f}/{target_cents/100:,.0f} EUR ({status})",
-                  flush=True)
+                    if currency == "EUR":
+                        eur_cents = total_cents
+                    else:
+                        fx = fx_rates.get(currency, 1)
+                        eur_cents = int(total_cents / fx) if fx else total_cents
+
+                    tranche_deployed += eur_cents
+                    ticker = tx.get("ticker", "?")
+                    notes_parts.append(f"{trade_date}: {ticker} {eur_cents/100:.0f}EUR")
+
+                # Determine status
+                if tranche_deployed >= target_cents:
+                    status = "completed"
+                elif tranche_deployed > 0:
+                    status = "in_progress"
+                else:
+                    status = "pending"
+
+                notes = "; ".join(notes_parts[-10:]) if notes_parts else None
+
+                # Only update if there's a change
+                old_status = tranche.get("status")
+                old_amount = tranche.get("executedAmountCents", 0)
+                if status != old_status or tranche_deployed != old_amount:
+                    payload = {
+                        "status": status,
+                        "executedAmountCents": tranche_deployed,
+                    }
+                    if notes is not None:
+                        payload["executionNotes"] = notes
+
+                    await client.put(
+                        f"/deployment-plans/{plan_id}/tranches/{tranche_id}",
+                        json=payload,
+                    )
+                    print(f"  [deployment] Tranche {tranche['quarterLabel']}: "
+                          f"€{tranche_deployed/100:,.0f}/€{target_cents/100:,.0f} ({status})",
+                          flush=True)
 
         except Exception as e:
             print(f"  [deployment] Failed to update progress: {e}", flush=True)

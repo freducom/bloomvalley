@@ -3,10 +3,10 @@
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.engine import async_session
-from app.db.models.prices import Price
+from app.db.models.prices import FxRate, Price
 from app.db.models.securities import Security
 
 router = APIRouter()
@@ -89,8 +89,6 @@ async def latest_prices(
             ids = None
 
         # Subquery: max date per security
-        from sqlalchemy import func
-
         subq = (
             select(
                 Price.security_id,
@@ -135,4 +133,36 @@ async def latest_prices(
             "cacheAge": None,
             "stale": False,
         },
+    }
+
+
+@router.get("/fx-rates")
+async def fx_rates():
+    """Get latest ECB FX rates (quote currency per 1 EUR)."""
+    async with async_session() as session:
+        subq = (
+            select(
+                FxRate.quote_currency,
+                func.max(FxRate.date).label("max_date"),
+            )
+            .where(FxRate.base_currency == "EUR")
+            .group_by(FxRate.quote_currency)
+            .subquery()
+        )
+        result = await session.execute(
+            select(FxRate).join(
+                subq,
+                (FxRate.quote_currency == subq.c.quote_currency)
+                & (FxRate.date == subq.c.max_date)
+                & (FxRate.base_currency == "EUR"),
+            )
+        )
+        rates = result.scalars().all()
+
+    return {
+        "data": [
+            {"currency": r.quote_currency, "rate": float(r.rate), "date": r.date.isoformat()}
+            for r in rates
+        ],
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
