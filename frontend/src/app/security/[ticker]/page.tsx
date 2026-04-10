@@ -467,9 +467,11 @@ export default function SecurityDetailPage() {
   const getLlmTag = (tags?: string[]) =>
     tags?.find((t) => t.startsWith("llm:"))?.replace("llm:", "").toUpperCase() || null;
 
-  // Find PM's LLM tag from its stored analyst report
+  // Find LLM tag for the PM — PM doesn't store per-security notes, so derive
+  // from the latest research-analyst note (same swarm run uses the same LLM)
   const pmNote = research.find((n) => n.tags?.includes("portfolio-manager"));
-  const pmLlmTag = getLlmTag(pmNote?.tags);
+  const swarmLlmTag = getLlmTag(pmNote?.tags) || getLlmTag(latestResearchAnalyst?.tags);
+  const pmLlmTag = swarmLlmTag;
 
   const currentPrice = fundamentals?.currentPriceCents ?? null;
   const currency = security.currency || "EUR";
@@ -634,7 +636,10 @@ export default function SecurityDetailPage() {
               )}
               <span
                 className="text-xs text-terminal-text-muted cursor-default"
-                title={pmNote?.createdAt ? new Date(pmNote.createdAt).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" }) : latestRec.recommendedDate}
+                title={(() => {
+                  const ts = pmNote?.createdAt || latestResearchAnalyst?.createdAt;
+                  return ts ? new Date(ts).toLocaleString("fi-FI", { dateStyle: "short", timeStyle: "medium" }) : latestRec.recommendedDate;
+                })()}
               >
                 {formatDate(latestRec.recommendedDate)}
               </span>
