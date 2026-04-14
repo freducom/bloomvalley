@@ -22,6 +22,7 @@ class SecurityCreate(BaseModel):
     is_accumulating: Optional[bool] = None
     coingecko_id: Optional[str] = None
     openfigi: Optional[str] = None
+    company_group: Optional[str] = None
 
 
 class SecurityResponse(BaseModel):
@@ -46,6 +47,7 @@ class SecurityResponse(BaseModel):
     is_accumulating: Optional[bool] = None
     coingecko_id: Optional[str] = None
     openfigi: Optional[str] = None
+    company_group: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

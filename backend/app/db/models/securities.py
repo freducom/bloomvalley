@@ -42,6 +42,7 @@ class Security(Base):
     coingecko_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     openfigi: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
     morningstar_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    company_group: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )

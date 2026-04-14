@@ -13,7 +13,10 @@ from app.db.engine import async_session
 from app.db.models.prices import Price
 from app.db.models.securities import Security
 from app.pipelines import register_pipeline
-from app.pipelines.base import PipelineAdapter, RetryableError
+from app.pipelines.base import (
+    PipelineAdapter, RetryableError,
+    get_last_known_prices, check_price_spike,
+)
 
 logger = structlog.get_logger()
 
@@ -256,29 +259,6 @@ class YahooFinancePrices(PipelineAdapter):
         logger.info("yahoo_fetch_complete", records=len(raw_records))
         return raw_records
 
-    async def _get_last_known_prices(self, security_ids: set[int]) -> dict[int, int]:
-        """Get the most recent close_cents per security for spike detection."""
-        if not security_ids:
-            return {}
-        async with async_session() as session:
-            # Get latest price per security
-            from sqlalchemy import func
-            subq = (
-                select(
-                    Price.security_id,
-                    func.max(Price.date).label("max_date"),
-                )
-                .where(Price.security_id.in_(security_ids))
-                .group_by(Price.security_id)
-                .subquery()
-            )
-            result = await session.execute(
-                select(Price.security_id, Price.close_cents)
-                .join(subq, (Price.security_id == subq.c.security_id)
-                      & (Price.date == subq.c.max_date))
-            )
-            return {row.security_id: row.close_cents for row in result.all()}
-
     async def validate(
         self, raw_records: list[dict]
     ) -> tuple[list[dict], list[str]]:
@@ -289,7 +269,7 @@ class YahooFinancePrices(PipelineAdapter):
 
         # Fetch last known prices for spike detection (GBX/GBp unit switches)
         sec_ids = {r["security_id"] for r in raw_records if r.get("security_id")}
-        last_prices = await self._get_last_known_prices(sec_ids)
+        last_prices = await get_last_known_prices(sec_ids)
 
         for rec in raw_records:
             ticker = rec.get("ticker", "?")
@@ -305,20 +285,11 @@ class YahooFinancePrices(PipelineAdapter):
                 errors.append(f"{ticker} {rec_date}: close <= 0 ({close})")
                 continue
 
-            # Detect potential minor/major currency unit mismatch (e.g. GBX↔GBP)
-            # by comparing against last known DB price. Log warning only —
-            # don't auto-correct, as the DB itself may contain bad historical data.
+            # Detect and handle price spikes — e.g. GBX/GBP unit switches
             sec_id = rec.get("security_id")
             last_close = last_prices.get(sec_id)
-            if last_close and last_close > 0:
-                close_cents = round(close * 100)
-                ratio = close_cents / last_close
-                if ratio < 0.05 or ratio > 50:
-                    logger.warning("price_spike_detected",
-                                   ticker=ticker, date=str(rec_date),
-                                   raw_close=close, last_cents=last_close,
-                                   ratio=round(ratio, 4),
-                                   hint="possible GBX/GBP unit switch — verify manually")
+            if last_close and not check_price_spike(rec, last_close, errors):
+                continue
 
             # Date not in the future (1-day tolerance for timezone differences)
             if rec_date and rec_date > today + timedelta(days=1):

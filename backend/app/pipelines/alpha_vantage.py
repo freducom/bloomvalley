@@ -13,7 +13,10 @@ from app.config import settings
 from app.db.engine import async_session
 from app.db.models.securities import Security
 from app.pipelines import register_pipeline
-from app.pipelines.base import NonRetryableError, PipelineAdapter, RetryableError
+from app.pipelines.base import (
+    NonRetryableError, PipelineAdapter, RetryableError,
+    get_last_known_prices, check_price_spike,
+)
 
 logger = structlog.get_logger()
 
@@ -229,6 +232,11 @@ class AlphaVantagePrices(PipelineAdapter):
         errors = []
         today = date.today()
 
+        # Fetch last known prices for spike detection
+        price_sec_ids = {r["security_id"] for r in raw_records
+                         if r.get("type") == "price" and r.get("security_id")}
+        last_prices = await get_last_known_prices(price_sec_ids)
+
         for rec in raw_records:
             rec_date = rec["date"]
             label = rec.get("ticker") or f"{rec.get('base_currency')}/{rec.get('quote_currency')}"
@@ -245,6 +253,12 @@ class AlphaVantagePrices(PipelineAdapter):
                     continue
                 if close <= 0:
                     errors.append(f"{label} {rec_date}: close <= 0")
+                    continue
+
+                # Spike detection (auto-corrects GBp/GBX, rejects >10x moves)
+                sec_id = rec.get("security_id")
+                last_close = last_prices.get(sec_id)
+                if last_close and not check_price_spike(rec, last_close, errors):
                     continue
 
                 # Clean NaN values

@@ -180,6 +180,8 @@ CREATE TABLE securities (
     is_accumulating BOOLEAN,                         -- for ETFs: ACC vs DIST
     coingecko_id    VARCHAR(100),                    -- for crypto mapping
     openfigi        VARCHAR(12),                     -- FIGI identifier
+    morningstar_id  VARCHAR(20),                     -- Morningstar SecId
+    company_group   VARCHAR(100),                    -- groups share classes (e.g. 'Kesko' for A+B)
     is_active       BOOLEAN         NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
@@ -204,6 +206,8 @@ CREATE TABLE securities (
 | `is_accumulating` | `BOOLEAN` | YES | `NULL` | ETF distribution policy; NULL for non-ETFs |
 | `coingecko_id` | `VARCHAR(100)` | YES | `NULL` | CoinGecko API identifier |
 | `openfigi` | `VARCHAR(12)` | YES | `NULL` | OpenFIGI identifier |
+| `morningstar_id` | `VARCHAR(20)` | YES | `NULL` | Morningstar SecId for data lookups |
+| `company_group` | `VARCHAR(100)` | YES | `NULL` | Groups share classes as one company (e.g. Kesko A+B both have `"Kesko"`). Portfolio analysis aggregates by this field for weights/exposure. |
 | `is_active` | `BOOLEAN` | NO | `TRUE` | FALSE if delisted |
 | `created_at` | `TIMESTAMPTZ` | NO | `now()` | Row creation timestamp |
 | `updated_at` | `TIMESTAMPTZ` | NO | `now()` | Last modification timestamp |

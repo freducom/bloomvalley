@@ -239,6 +239,7 @@ async def get_holdings(
             "name": sec.name,
             "assetClass": sec.asset_class,
             "sector": sec.sector,
+            "companyGroup": sec.company_group,
             "quantity": str(net_qty),
             "avgCostCents": avg_cost_cents,
             "currentPriceCents": current_price_cents,
@@ -253,6 +254,24 @@ async def get_holdings(
             "unrealizedPnlPct": unrealized_pnl_pct,
             "currency": sec.currency,
         })
+
+    # Pre-compute weights so consumers don't need to calculate
+    total_mv = sum(h["marketValueEurCents"] or 0 for h in holdings)
+    # Company group totals for grouped weight
+    group_totals: dict[str, int] = {}
+    for h in holdings:
+        grp = h.get("companyGroup")
+        if grp:
+            group_totals[grp] = group_totals.get(grp, 0) + (h["marketValueEurCents"] or 0)
+
+    for h in holdings:
+        mv = h["marketValueEurCents"] or 0
+        h["weightPct"] = round(mv / total_mv * 100, 2) if total_mv > 0 else 0
+        grp = h.get("companyGroup")
+        if grp and grp in group_totals:
+            h["companyGroupWeightPct"] = round(group_totals[grp] / total_mv * 100, 2)
+        else:
+            h["companyGroupWeightPct"] = None
 
     return {
         "data": holdings,
