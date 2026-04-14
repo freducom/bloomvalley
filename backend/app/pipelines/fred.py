@@ -61,6 +61,8 @@ FRED_SERIES: list[tuple[str, str, str]] = [
     ("CLVMNACSCAB1GQEA19", "millions_eur", "ez_gdp"),
     # Germany 10Y bund yield (proxy for eurozone risk-free)
     ("IRLTLT01DEM156N", "percent", "ez_bond_yields"),
+    # U Michigan Consumer Sentiment (PMI proxy — monthly, >80 expansion, <80 contraction)
+    ("UMCSENT", "index", "us_sentiment"),
     # --- Finland ---
     # Finland unemployment
     ("LRHUTTTTFIM156S", "percent", "fi_labor"),

@@ -19,7 +19,8 @@ from app.pipelines.base import PipelineAdapter, RetryableError
 logger = structlog.get_logger()
 
 EDGAR_SEARCH_BASE = "https://efts.sec.gov/LATEST/search-index"
-SEC_USER_AGENT = "Bloomvalley/1.0 (personal use)"
+# SEC EDGAR requires: "Company Name AdminEmail" per https://www.sec.gov/os/accessing-edgar-data
+SEC_USER_AGENT = "Bloomvalley Terminal admin@bloomvalley.local"
 
 US_EXCHANGES = ("XNAS", "XNYS", "NYSE", "NASDAQ")
 
@@ -84,6 +85,8 @@ class SecEdgarFilings(PipelineAdapter):
 
                     if resp.status_code == 429:
                         raise RetryableError("SEC EDGAR rate limited (429)")
+                    if resp.status_code == 403:
+                        raise RetryableError("SEC EDGAR blocked request (403) — check User-Agent")
                     if resp.status_code == 404:
                         logger.warning(
                             "sec_edgar_not_found", ticker=sec.ticker

@@ -3,6 +3,8 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import math
+
 import numpy as np
 import structlog
 from fastapi import APIRouter, Query
@@ -252,6 +254,20 @@ async def get_risk_analysis(
         corr_matrix = {
             "tickers": tickers,
             "matrix": [[round(float(corr[i][j]), 3) for j in range(len(top_sids))] for i in range(len(top_sids))],
+        }
+
+    # Sanitize NaN/inf values that can't be JSON-serialized
+    def _clean(v):
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return None
+        return v
+
+    metrics = {k: _clean(v) for k, v in metrics.items()}
+
+    if corr_matrix is not None:
+        corr_matrix = {
+            k: [[_clean(c) for c in row] for row in v] if isinstance(v, list) else v
+            for k, v in corr_matrix.items()
         }
 
     # ── Concentration ──

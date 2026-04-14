@@ -56,6 +56,7 @@ class CoinGeckoPrices(PipelineAdapter):
         logger.info("coingecko_fetch_start", coins=len(coin_ids))
 
         raw_records: list[dict[str, Any]] = []
+        rate_limited = 0
 
         # Fetch OHLC data for each coin
         async with httpx.AsyncClient(timeout=30) as client:
@@ -74,7 +75,11 @@ class CoinGeckoPrices(PipelineAdapter):
                     )
 
                     if resp.status_code == 429:
-                        raise RetryableError("CoinGecko rate limited (429)")
+                        rate_limited += 1
+                        logger.warning("coingecko_rate_limited", coin=coin_id)
+                        # Wait longer before next request
+                        await asyncio.sleep(60)
+                        continue
                     if resp.status_code == 404:
                         logger.warning("coingecko_coin_not_found", coin=coin_id)
                         continue
@@ -109,16 +114,21 @@ class CoinGeckoPrices(PipelineAdapter):
                             "currency": sec.currency,
                         })
 
-                except RetryableError:
-                    raise
                 except httpx.TimeoutException as e:
-                    raise RetryableError(f"CoinGecko timeout: {e}") from e
+                    logger.warning("coingecko_timeout", coin=coin_id, error=str(e))
+                    continue
                 except Exception as e:
                     logger.warning("coingecko_fetch_error", coin=coin_id, error=str(e))
                     continue
 
-                # Rate limiting: 6 seconds between requests (free tier safe)
-                await asyncio.sleep(6)
+                # Rate limiting: 15 seconds between requests (free tier safe)
+                await asyncio.sleep(15)
+
+        if rate_limited > 0:
+            logger.warning("coingecko_rate_limited_summary",
+                           rate_limited=rate_limited, fetched=len(raw_records))
+        if not raw_records and rate_limited == len(coin_ids):
+            raise RetryableError(f"CoinGecko rate limited on all {rate_limited} coins")
 
         # Deduplicate: keep only the last candle per (security_id, date)
         seen: dict[tuple[int, date], dict] = {}

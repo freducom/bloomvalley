@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 interface MetricCardProps {
   label: ReactNode;
   value: ReactNode;
+  subValue?: string;
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   size?: "sm" | "md" | "lg";
@@ -14,6 +15,7 @@ interface MetricCardProps {
 export function MetricCard({
   label,
   value,
+  subValue,
   change,
   changeType = "neutral",
   size = "md",
@@ -59,6 +61,11 @@ export function MetricCard({
       <div className={`font-mono font-semibold text-terminal-text-primary ${valueSize}`}>
         {value}
       </div>
+      {subValue && (
+        <div className="font-mono text-xs text-terminal-text-tertiary mt-0.5">
+          {subValue}
+        </div>
+      )}
       {(size === "md" || size === "lg") && change && (
         <div className={`font-mono text-sm mt-1 ${changeColor}`}>
           {changePrefix}

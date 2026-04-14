@@ -40,6 +40,7 @@ ASSET_CLASS_MAP = {
     "stock": "equity",
     "etf": "equity",
     "bond": "fixed_income",
+    "fund": "fixed_income",
     "crypto": "crypto",
 }
 
@@ -860,7 +861,7 @@ def compute_metrics(daily_values: list[dict], risk_free_rate: float = 0.03) -> d
     # Sortino
     downside = excess[excess < 0]
     downside_std = float(np.std(downside, ddof=1)) * math.sqrt(ann_factor) if len(downside) > 1 else 0.0
-    sortino = (float(np.mean(excess)) * ann_factor) / downside_std if downside_std > 0 else 0.0
+    sortino = (float(np.mean(excess)) * ann_factor) / downside_std if downside_std > 1e-10 else 0.0
 
     # Max drawdown
     running_max = np.maximum.accumulate(values)

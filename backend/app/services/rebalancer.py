@@ -179,6 +179,11 @@ def _map_asset_class(asset_class: str, sector: str | None) -> str:
     """Map a security's asset_class to a glidepath category."""
     if asset_class == "etf" and sector and "fixed income" in sector.lower():
         return "fixed_income"
+    if asset_class == "fund":
+        # Equity funds → equity; everything else (bond, money market, mixed) → fixed_income
+        if sector and "equity" in sector.lower():
+            return "equity"
+        return "fixed_income"
     return ASSET_CLASS_MAP.get(asset_class, "equity")
 
 

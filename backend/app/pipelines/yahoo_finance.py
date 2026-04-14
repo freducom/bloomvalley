@@ -49,16 +49,24 @@ YAHOO_TO_MIC = {
 # MIC → Yahoo ticker suffix
 MIC_TO_SUFFIX = {
     "XHEL": ".HE",
+    "FNFI": ".HE",   # Finnish funds trade on Helsinki
     "XSTO": ".ST",
     "XFRA": ".DE",
+    "XETR": ".DE",
+    "GER": ".DE",     # Germany alternate code
+    "XOSL": ".OL",
     "XLON": ".L",
     "XPAR": ".PA",
     "XAMS": ".AS",
+    "XBRU": ".BR",
     "XCSE": ".CO",
     "XSWX": ".SW",
     # US exchanges have no suffix
     "XNAS": "",
     "XNYS": "",
+    "NMS": "",        # NASDAQ Global Select Market
+    "NYSE": "",
+    "NASDAQ": "",
 }
 
 

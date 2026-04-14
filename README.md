@@ -204,6 +204,11 @@ docker compose up -d --build
 docker compose exec backend alembic upgrade head
 ```
 
+> **Frontend changes require a rebuild:** The frontend runs a production build inside Docker (not dev mode). After editing frontend code, run:
+> ```bash
+> docker compose build frontend && docker compose up -d frontend
+> ```
+
 Open http://localhost:3000. Trigger initial data fetch (include the API key from `.env`):
 
 ```bash
@@ -218,7 +223,7 @@ curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coi
 
 | Service | Port | Description |
 |---------|------|-------------|
-| `frontend` | 3000 | Next.js PWA |
+| `frontend` | 3000 | Next.js PWA (production build) |
 | `backend` | 8000 | FastAPI REST API |
 | `db` | 5432 | TimescaleDB (PostgreSQL 16) |
 | `redis` | 6379 | Redis 7 with AOF persistence |
@@ -325,6 +330,8 @@ npm run dev
 ```
 
 Open http://localhost:3000.
+
+> **Note:** Docker runs the production build (`next build` + `next start`). Local development uses `npm run dev` for hot reload.
 
 </details>
 
@@ -449,6 +456,46 @@ Note: iOS Safari does not support background fetch. Data is cached when you visi
 </details>
 
 <details>
+<summary><strong>Testing</strong></summary>
+
+### Unit tests
+
+148 tests covering financial calculation correctness — runs in ~1.5 seconds with no database required:
+
+```bash
+docker compose exec backend python -m pytest tests/unit/ -v
+```
+
+**Test coverage:**
+
+| Module | Tests | What's tested |
+|--------|-------|---------------|
+| `test_money.py` | 17 | Cents ↔ Decimal conversion, EUR formatting, rounding |
+| `test_finnish_tax.py` | 14 | 30/34% brackets, OST exemption, deemed cost (20%/40%), loss handling |
+| `test_dcf_roic.py` | 22 | ROIC formula + fallbacks, DCF growth/discount tiering, hand-calculated valuations |
+| `test_bond_calculator.py` | 21 | YTM (Newton-Raphson), current yield, accrued interest (30/360), income projections |
+| `test_optimizer.py` | 22 | Ledoit-Wolf shrinkage, efficient frontier, constraints, glidepath constants |
+| `test_monte_carlo.py` | 18 | Glidepath interpolation, GBM simulation, percentile ordering, reproducibility |
+| `test_backtester_metrics.py` | 15 | Sharpe, Sortino, CAGR, max drawdown, win rate, Calmar ratio |
+| `test_data_integrity.py` | 23 | Asset class mapping completeness, exchange suffix coverage, fund classification, NaN sanitization, CoinGecko 429 handling, SEC EDGAR compliance, regime indicator pipeline coverage |
+
+### Production health check
+
+After every swarm run, an automated health check verifies:
+- Pipeline staleness (>48h since last success)
+- Holdings with missing prices
+- Risk metrics availability
+- Analyst report data gaps ("unavailable", "no data", "API error")
+
+Issues are sent to Telegram. See `run_health_check()` in `analyst-swarm/swarm.py`.
+
+### Integration tests
+
+Database-dependent tests use a separate `warren_test` database. Configure in `tests/conftest.py`.
+
+</details>
+
+<details>
 <summary><strong>Project Structure</strong></summary>
 
 ```
@@ -467,6 +514,7 @@ bloomvalley/
 │   │   ├── pipelines/          # 20 data source adapters (adapter pattern)
 │   │   └── services/           # Optimizer, backtester, screener, Monte Carlo, etc.
 │   ├── alembic/                # Database migrations
+│   ├── tests/unit/             # 148 unit tests (tax, DCF, bonds, optimizer, Monte Carlo)
 │   └── cron_scheduler.py       # 20 scheduled pipeline jobs
 └── frontend/
     ├── public/                 # PWA manifest, service worker, icons

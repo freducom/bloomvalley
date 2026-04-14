@@ -45,6 +45,7 @@ ASSET_CLASS_MAP = {
     "stock": "equity",
     "etf": "equity",  # Default; refined by sector for fixed income ETFs
     "bond": "fixed_income",
+    "fund": "fixed_income",  # Default for funds; refined by sector in _map_asset_class
     "crypto": "crypto",
 }
 

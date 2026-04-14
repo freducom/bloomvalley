@@ -395,7 +395,7 @@ _ASSET_IMPLICATIONS: dict[str, dict[str, str]] = {
 
 # Indicator codes used by the regime model (DB codes)
 _REGIME_INDICATORS = {
-    "pmi": "EZ_PMI_COMPOSITE",
+    "pmi": "UMCSENT",  # U Michigan Consumer Sentiment (>80 = expansion, <80 = contraction)
     "treasury_10y": "DGS10",
     "treasury_2y": "DGS2",
     "hy_oas": "BAMLH0A0HYM2",
@@ -434,16 +434,29 @@ def _latest_and_3m_avg(
 
 
 def _classify_pmi(latest: float, avg_3m: float) -> tuple[str, str]:
-    """PMI regime signal and detail text."""
+    """Consumer sentiment / PMI regime signal.
+
+    Auto-detects scale:
+    - PMI: threshold 50 (values typically 30-70)
+    - OECD CLI: threshold 100 (values typically 95-105)
+    - U Michigan Consumer Sentiment: threshold 80 (values typically 50-110)
+    """
+    if latest > 80:
+        threshold = 100.0  # OECD CLI scale
+    elif latest > 60:
+        threshold = 80.0   # Consumer sentiment scale
+    else:
+        threshold = 50.0   # PMI scale
+
     rising = latest > avg_3m
-    if latest > 50:
+    if latest > threshold:
         if rising:
-            return "expansion", f"Above 50 ({latest:.1f}) and rising"
-        return "slowdown", f"Above 50 ({latest:.1f}) but falling"
+            return "expansion", f"Above {threshold:.0f} ({latest:.1f}) and rising"
+        return "slowdown", f"Above {threshold:.0f} ({latest:.1f}) but falling"
     else:
         if rising:
-            return "recovery", f"Below 50 ({latest:.1f}) but rising"
-        return "recession", f"Below 50 ({latest:.1f}) and falling"
+            return "recovery", f"Below {threshold:.0f} ({latest:.1f}) but rising"
+        return "recession", f"Below {threshold:.0f} ({latest:.1f}) and falling"
 
 
 def _classify_yield_curve(spread_bps: float) -> tuple[str, str]:
@@ -513,7 +526,7 @@ async def macro_regime():
     if pmi_latest is not None and pmi_avg is not None:
         sig, detail = _classify_pmi(pmi_latest, pmi_avg)
         signals.append({
-            "name": "PMI",
+            "name": "Sentiment/PMI",
             "weight": 0.30,
             "signal": sig,
             "value": round(pmi_latest, 1),
@@ -522,11 +535,11 @@ async def macro_regime():
         signal_scores.append((0.30, _REGIME_SCORES[sig]))
     else:
         signals.append({
-            "name": "PMI",
+            "name": "Sentiment/PMI",
             "weight": 0.30,
             "signal": "unavailable",
             "value": None,
-            "detail": "No PMI data available (EZ_PMI_COMPOSITE not in database)",
+            "detail": "No PMI/CLI data available — run fred_macro_indicators pipeline",
         })
 
     # 2. Yield Curve (25%)

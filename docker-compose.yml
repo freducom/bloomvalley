@@ -61,9 +61,6 @@ services:
       - "3000:3000"  # Traefik routes here via 172.17.0.1 — cannot remove without shared Docker network
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       - NEXT_PUBLIC_API_URL=
       - API_KEY=${API_KEY:-}

@@ -683,7 +683,7 @@ export default function FullscreenDashboard() {
                       const totalVal = summary.totalValueEurCents || 1;
                       const weight = ((h.marketValueEurCents / totalVal) * 100);
                       return (
-                        <div key={`${h.accountId}-${h.securityId}`} className="flex justify-between text-xs py-0.5">
+                        <div key={h.securityId} className="flex justify-between text-xs py-0.5">
                           <TickerLink ticker={h.ticker} className="font-mono text-terminal-accent hover:underline text-xs" />
                           <div className="flex gap-3">
                             <span className={`font-mono ${h.unrealizedPnlPct >= 0 ? "text-terminal-positive" : "text-terminal-negative"}`}>

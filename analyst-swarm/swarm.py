@@ -261,6 +261,115 @@ async def report_status(backend_url: str, status: str, agent: str | None = None,
         pass  # Non-critical — don't fail the swarm over status reporting
 
 
+# ── Post-Swarm Health Check ──
+
+
+async def run_health_check(backend_url: str) -> None:
+    """Check data quality after swarm run and send Telegram alert if issues found.
+
+    Checks:
+    1. Pipeline staleness — any pipeline that hasn't succeeded in >24h
+    2. Holdings with null prices — securities we own but can't value
+    3. Risk metrics — should be computable if we have price history
+    4. Analyst report quality — flag reports with "no data" / "unavailable"
+    """
+    issues: list[str] = []
+
+    try:
+        async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+            # 1. Pipeline staleness
+            try:
+                resp = await client.get("/pipelines")
+                if resp.status_code == 200:
+                    pipelines = resp.json().get("data", [])
+                    now = datetime.now(timezone.utc)
+                    for p in pipelines:
+                        name = p.get("name", "?")
+                        last_success = p.get("lastSuccessAt")
+                        last_failure = p.get("lastFailureAt")
+                        if last_failure and not last_success:
+                            issues.append(f"⚠️ <b>{name}</b>: never succeeded, last failure exists")
+                        elif last_success:
+                            try:
+                                success_dt = datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+                                hours_ago = (now - success_dt).total_seconds() / 3600
+                                if hours_ago > 48:
+                                    issues.append(
+                                        f"⚠️ <b>{name}</b>: stale ({int(hours_ago)}h since last success)"
+                                    )
+                            except (ValueError, TypeError):
+                                pass
+            except Exception as e:
+                issues.append(f"❌ Pipeline check failed: {e}")
+
+            # 2. Holdings with null prices
+            try:
+                resp = await client.get("/portfolio/holdings")
+                if resp.status_code == 200:
+                    holdings = resp.json().get("data", [])
+                    null_price = [
+                        h["ticker"] for h in holdings
+                        if h.get("currentPriceCents") is None and float(h.get("quantity", 0)) > 0
+                    ]
+                    if null_price:
+                        issues.append(
+                            f"⚠️ <b>Missing prices</b>: {', '.join(null_price[:10])}"
+                            + (f" (+{len(null_price)-10} more)" if len(null_price) > 10 else "")
+                        )
+            except Exception as e:
+                issues.append(f"❌ Holdings check failed: {e}")
+
+            # 3. Risk metrics
+            try:
+                resp = await client.get("/risk")
+                if resp.status_code == 200:
+                    data = resp.json().get("data", {})
+                    metrics = data.get("metrics")
+                    if not metrics:
+                        issues.append("⚠️ <b>Risk metrics</b>: unavailable (no price history?)")
+                elif resp.status_code == 500:
+                    issues.append("❌ <b>Risk endpoint</b>: 500 error")
+            except Exception as e:
+                issues.append(f"❌ Risk check failed: {e}")
+
+            # 4. Latest analyst reports quality
+            try:
+                resp = await client.get("/swarm/reports?limit=20")
+                if resp.status_code == 200:
+                    reports = resp.json().get("data", [])
+                    bad_keywords = ["unavailable", "no data", "api error", "endpoint returned no",
+                                    "fabricated", "don't have access", "cannot perform"]
+                    flagged = []
+                    for r in reports:
+                        content = (r.get("content") or "").lower()
+                        agent = r.get("agentName", "?")
+                        for kw in bad_keywords:
+                            if kw in content:
+                                flagged.append(agent)
+                                break
+                    if flagged:
+                        unique = sorted(set(flagged))
+                        issues.append(
+                            f"⚠️ <b>Analyst data gaps</b>: {', '.join(unique)} "
+                            f"reported missing/unavailable data"
+                        )
+            except Exception:
+                pass  # Reports endpoint may not exist — non-critical
+
+    except Exception as e:
+        issues.append(f"❌ Health check failed: {e}")
+
+    # Send Telegram summary
+    if issues:
+        msg = "🔍 <b>Post-Swarm Health Check</b>\n\n"
+        msg += "\n".join(issues)
+        msg += f"\n\n<i>{len(issues)} issue(s) found</i>"
+        await send_telegram(msg)
+        print(f"[health] {len(issues)} issues found, Telegram alert sent", flush=True)
+    else:
+        print("[health] All checks passed", flush=True)
+
+
 # ── Watchlist Rotation ──
 
 _OFFSET_FILE = Path(__file__).parent / ".watchlist_offset"
@@ -326,6 +435,26 @@ async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
                     results[ep] = f"ERROR {resp.status_code}"
             except Exception as e:
                 results[ep] = f"ERROR: {e}"
+    # Split the unified /risk response into labelled sub-sections
+    # so agents see /risk/metrics, /risk/stress-tests, etc. as separate data
+    if "/risk" in results and not results["/risk"].startswith("ERROR"):
+        try:
+            risk_data = json.loads(results["/risk"]).get("data", {})
+            for key, label in [
+                ("metrics", "/risk/metrics"),
+                ("stressTests", "/risk/stress-tests"),
+                ("glidepath", "/risk/glidepath"),
+                ("correlation", "/risk/correlation"),
+                ("concentration", "/risk/concentration"),
+            ]:
+                val = risk_data.get(key)
+                if val is not None:
+                    results[label] = json.dumps({"data": val})
+                else:
+                    results[label] = "No data available"
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return results
 
 
@@ -339,11 +468,11 @@ AGENT_DATA = {
         "/watchlists/",
     ],
     "risk-manager": [
-        "/portfolio/holdings", "/portfolio/summary", "/risk/metrics",
-        "/risk/stress-tests", "/risk/glidepath", "/macro/regime",
+        "/portfolio/holdings", "/portfolio/summary", "/risk",
+        "/macro/regime",
     ],
     "quant-analyst": [
-        "/portfolio/holdings", "/portfolio/summary", "/risk/metrics",
+        "/portfolio/holdings", "/portfolio/summary", "/risk",
         "/fundamentals?limit=200", "/screener/munger", "/macro/regime",
     ],
     "macro-strategist": [
@@ -357,6 +486,7 @@ AGENT_DATA = {
     "tax-strategist": [
         "/portfolio/holdings", "/portfolio/summary",
         "/transactions?limit=50", "/tax/lots", "/tax/gains",
+        "/tax/osakesaastotili",
     ],
     "technical-analyst": [
         "/portfolio/holdings", "/screener/munger",
@@ -366,13 +496,14 @@ AGENT_DATA = {
     "compliance-officer": [
         "/portfolio/holdings", "/portfolio/summary", "/insiders/signals",
         "/news?limit=10", "/alerts?status=active", "/transactions?limit=50",
-        "/risk/glidepath", "/macro/regime", "/pipelines",
+        "/risk", "/macro/regime", "/pipelines",
+        "/tax/lots", "/tax/osakesaastotili",
     ],
     "portfolio-manager": [
         "/deployment-plans/current",
         "/portfolio/holdings", "/portfolio/summary",
         "/transactions?type=buy&limit=50", "/transactions?limit=50",
-        "/dividends/upcoming", "/risk/metrics", "/risk/stress-tests",
+        "/dividends/upcoming", "/risk",
         "/watchlists/", "/screener/munger", "/insiders/signals",
         "/news?limit=20", "/macro/summary", "/macro/regime",
         "/fundamentals?limit=200", "/recommendations?status=active&limit=50",
@@ -1019,11 +1150,19 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
         insiders_raw = data.get("/insiders/signals", "")
         news_raw = data.get("/news?limit=30", "")
 
+        # Report initial status
+        total_sec = len(securities)
+        completed_sec = 0
+        await report_status(backend_url, "running", agent=agent_name,
+                            completed=0, total=total_sec,
+                            message=f"Analyzing {total_sec} securities")
+
         # Process securities
         semaphore = asyncio.Semaphore(max_concurrent)
         all_reports = []
 
         async def analyze_security(n: int, sec: dict) -> str | None:
+            nonlocal completed_sec
             ticker = sec["ticker"]
             name = sec["name"]
             prefix = "W-" if sec["is_watchlist"] else ""
@@ -1072,8 +1211,16 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                     else:
                         print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ✓", flush=True)
 
+                    completed_sec += 1
+                    await report_status(backend_url, "running", agent=agent_name,
+                                        completed=completed_sec, total=total_sec,
+                                        message=f"{ticker} done ({completed_sec}/{total_sec})")
                     return report
                 except Exception as e:
+                    completed_sec += 1
+                    await report_status(backend_url, "running", agent=agent_name,
+                                        completed=completed_sec, total=total_sec,
+                                        message=f"{ticker} failed ({completed_sec}/{total_sec})")
                     print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ✗ {e}", flush=True)
                     return None
 
@@ -2045,6 +2192,9 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
     # Step 6: Update deployment plan progress from transactions
     await update_deployment_progress(backend_url)
 
+    # Step 7: Post-swarm health check (pipeline staleness, data gaps, etc.)
+    await run_health_check(backend_url)
+
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle",
                         completed=completed_count, total=total_agents,
@@ -2074,6 +2224,9 @@ async def run_research_only(cfg: dict):
     if report and not per_sec_enabled:
         # Per-security mode posts notes inline; only bulk-extract from combined reports
         await extract_per_security_notes(report, backend_url, date_str, llm_tag)
+    # Health check after research run
+    await run_health_check(backend_url)
+
     elapsed = round(time.time() - start, 1)
     await report_status(backend_url, "idle", completed=1, total=1,
                         message=f"Research complete in {elapsed}s")

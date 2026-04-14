@@ -7,7 +7,7 @@ function isStandalone() {
   if (typeof window === "undefined") return false;
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as Record<string, unknown>).standalone === true
+    (navigator as unknown as Record<string, unknown>).standalone === true
   );
 }
 

@@ -308,8 +308,8 @@ export default function HoldingsPage() {
 
   const sortedSold = [...soldHoldings].sort((a, b) => {
     if (soldSortKey === "ticker" || soldSortKey === "name" || soldSortKey === "accountName" || soldSortKey === "assetClass") {
-      const av = ((a as Record<string, unknown>)[soldSortKey] as string || "").toLowerCase();
-      const bv = ((b as Record<string, unknown>)[soldSortKey] as string || "").toLowerCase();
+      const av = ((a as unknown as Record<string, unknown>)[soldSortKey] as string || "").toLowerCase();
+      const bv = ((b as unknown as Record<string, unknown>)[soldSortKey] as string || "").toLowerCase();
       return soldSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
     }
     if (soldSortKey === "lastSellDate") {

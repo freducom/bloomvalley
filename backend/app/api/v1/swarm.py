@@ -50,6 +50,8 @@ async def update_swarm_status(request: Request, update: SwarmStatusUpdate):
         "message": update.message or "",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     })
-    # Auto-expire after 10 minutes (in case swarm crashes mid-run)
-    await redis.expire(REDIS_KEY, 600)
+    # Auto-expire: running status gets 4 hours (per-security runs are long),
+    # idle status gets 10 minutes (stale crash detection)
+    ttl = 14400 if update.status == "running" else 600
+    await redis.expire(REDIS_KEY, ttl)
     return {"ok": True}

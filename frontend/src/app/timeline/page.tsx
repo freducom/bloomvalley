@@ -326,7 +326,7 @@ function TrancheCard({ tranche, recs }: { tranche: Tranche; recs: Recommendation
             {(tranche.executedAmountCents ?? 0) > 0 && (
               <div className="text-xs text-terminal-text-secondary mt-0.5">
                 <span className="text-emerald-400 font-semibold">
-                  {formatCurrency(tranche.executedAmountCents)}
+                  {formatCurrency(tranche.executedAmountCents ?? 0)}
                 </span>
                 {" deployed "}
                 <span className="text-terminal-text-tertiary">

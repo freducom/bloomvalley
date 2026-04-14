@@ -175,6 +175,7 @@ interface Recommendation {
   targetPriceCents: number | null;
   status: string;
   recommendedDate: string;
+  source: string | null;
 }
 
 interface ResearchNote {
@@ -748,63 +749,65 @@ export default function SecurityDetailPage() {
               label="ROIC"
               value={fundamentals.roic !== null ? formatPercent(fundamentals.roic * 100) : "-"}
               colorClass={roicColor(fundamentals.roic)}
-              tooltip="Return on Invested Capital. Measures profit generation efficiency relative to total capital invested. Above 15% suggests a durable competitive advantage."
+              tooltip="Return on Invested Capital. Measures profit generation efficiency relative to total capital invested. Above 15% suggests a durable competitive advantage. Source: Morningstar (preferred) or Yahoo Finance. Formula: EBIT × (1 − 20% tax) / (financial debt + equity − cash). IFRS 16 leases excluded from debt."
             />
             <MetricCell
               label="P/B"
               value={fundamentals.priceToBook !== null ? fundamentals.priceToBook.toFixed(2) : "-"}
-              tooltip="Price-to-Book ratio. Market price vs. net asset value. Core valuation metric for banks and asset-heavy businesses."
+              tooltip="Price-to-Book ratio. Market price vs. net asset value. Core valuation metric for banks and asset-heavy businesses. Source: Yahoo Finance (priceToBook)."
             />
             <MetricCell
               label="PE Ratio"
               value={fundamentals.peRatio !== null ? fundamentals.peRatio.toFixed(1) : "-"}
-              tooltip="Price-to-Earnings ratio. Share price divided by earnings per share. Compare within the same sector for meaningful benchmarks."
+              tooltip="Price-to-Earnings ratio. Share price divided by earnings per share. Compare within the same sector for meaningful benchmarks. Source: Yahoo Finance (trailingPE)."
             />
             <MetricCell
               label="FCF Yield"
               value={fundamentals.fcfYield !== null ? formatPercent(fundamentals.fcfYield * 100) : "-"}
               colorClass={fcfYieldColor(fundamentals.fcfYield)}
-              tooltip="Free Cash Flow yield. Cash generated after capital expenditures relative to market cap. Higher = more cash available for shareholders."
+              tooltip="Free Cash Flow yield. Cash generated after capital expenditures relative to market cap. Higher = more cash available for shareholders. Formula: Free Cash Flow / Market Cap. Source: Yahoo Finance."
             />
             <MetricCell
               label="Net Debt / EBITDA"
               value={fundamentals.netDebtEbitda !== null ? `${fundamentals.netDebtEbitda.toFixed(1)}x` : "-"}
               colorClass={debtColor(fundamentals.netDebtEbitda)}
-              tooltip="Leverage ratio. Years of operating earnings needed to repay net debt. Below 2x is conservative; above 4x is risky."
+              tooltip="Leverage ratio. Years of operating earnings needed to repay net debt. Below 2x is conservative; above 4x is risky. Formula: (Financial Debt − Cash) / EBITDA. IFRS 16 leases excluded. Source: Yahoo Finance."
             />
             <MetricCell
               label="Dividend Yield"
               value={fundamentals.dividendYield !== null ? formatPercent(fundamentals.dividendYield * 100) : "-"}
-              tooltip="Annual dividend payment divided by share price. The income component of total return."
+              tooltip="Annual dividend payment divided by share price. The income component of total return. Source: Yahoo Finance (trailingAnnualDividendYield)."
             />
             <MetricCell
               label="Gross Margin"
               value={fundamentals.grossMargin !== null ? formatPercent(fundamentals.grossMargin * 100) : "-"}
-              tooltip="Revenue minus cost of goods sold as a percentage of revenue. Indicates pricing power."
+              tooltip="Revenue minus cost of goods sold as a percentage of revenue. Indicates pricing power. Formula: (Revenue − COGS) / Revenue. Source: Yahoo Finance (grossMargins)."
             />
             <MetricCell
               label="Operating Margin"
               value={fundamentals.operatingMargin !== null ? formatPercent(fundamentals.operatingMargin * 100) : "-"}
-              tooltip="Operating profit as a percentage of revenue. Core business profitability before interest and taxes."
+              tooltip="Operating profit as a percentage of revenue. Core business profitability before interest and taxes. Formula: Operating Income / Revenue. Source: Yahoo Finance (operatingMargins)."
             />
             <MetricCell
               label="DCF Value"
               value={fundamentals.dcfValueCents !== null ? formatLargeNumber(fundamentals.dcfValueCents, currency) : "-"}
-              tooltip="Discounted Cash Flow intrinsic value. Estimated fair value based on projected future cash flows discounted to present value."
+              tooltip="Discounted Cash Flow intrinsic value. 2-stage model: 5-year growth (rate tiered by ROIC quality) then terminal value at 2.5% perpetuity growth. Discount rate: WACC if available, else tiered by ROIC. Calculated from Yahoo Finance FCF data."
             />
             <MetricCell
               label="DCF Upside"
               value={fundamentals.dcfUpsidePct !== null ? formatPercent(fundamentals.dcfUpsidePct, true) : "-"}
               colorClass={dcfColor(fundamentals.dcfUpsidePct)}
+              tooltip="Difference between DCF intrinsic value and current market cap. Formula: (DCF Value − Market Cap) / Market Cap × 100. Positive = undervalued. Calculated."
             />
             <MetricCell
               label="Market Cap"
               value={fundamentals.marketCapCents !== null ? formatLargeNumber(fundamentals.marketCapCents, currency) : "-"}
+              tooltip="Total market capitalization. Share price × total shares outstanding. Source: Yahoo Finance (marketCap)."
             />
             <MetricCell
               label="Short Interest"
               value={fundamentals.shortInterestPct !== null ? `${fundamentals.shortInterestPct.toFixed(2)}%` : "-"}
-              tooltip="Percentage of shares currently sold short. High levels signal bearish sentiment or potential short squeeze."
+              tooltip="Percentage of shares currently sold short. High levels signal bearish sentiment or potential short squeeze. Source: Yahoo Finance (shortPercentOfFloat)."
             />
           </div>
           {fundamentals.updatedAt && (
