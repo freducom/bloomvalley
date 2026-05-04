@@ -5,7 +5,7 @@
 #   claude     = Claude API (requires ANTHROPIC_API_KEY, you pay per token)
 #   claude_cli = Claude Code CLI (uses your company subscription, no API credits needed)
 #   ollama     = Local LLM via Ollama
-llm_provider: "claude_cli"
+llm_provider: "ollama"
 
 # Claude API settings (used when llm_provider: "claude")
 claude:
@@ -22,8 +22,12 @@ claude_cli:
 # Ollama settings (used when llm_provider: "ollama")
 ollama:
   base_url: "http://192.168.1.160:11434"  # Ollama server URL
-  model: "qwen3:32b"  # Best balance of quality and speed for financial analysis
+  model: "qwen3.5:latest"  # Default model
   max_tokens: 8192
+
+# Ollama fallback model (used when primary ollama model fails)
+ollama_fallback:
+  model: "gemma4"  # Fallback before claude_cli
 
 # Backend API
 backend_url: "http://backend:8000/api/v1"

@@ -9,7 +9,10 @@ import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bloomvalley Terminal",
+  title: {
+    default: "Bloomvalley Terminal",
+    template: "%s | Bloomvalley",
+  },
   description: "Personal Bloomberg-style Investment Terminal",
   manifest: "/manifest.json",
   appleWebApp: {

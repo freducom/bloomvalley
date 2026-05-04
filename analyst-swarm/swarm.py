@@ -37,6 +37,7 @@ _TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # Track whether we've already notified about CLI auth failure (avoid spam)
 _cli_fallback_notified = False
+_ollama_fallback_notified = False
 
 
 async def send_telegram(text: str) -> bool:
@@ -200,14 +201,72 @@ def get_llm_tag() -> str:
     return f"llm:{_effective_provider}"
 
 
+async def _call_ollama_with_model(prompt: str, system: str, cfg: dict, model: str) -> str:
+    """Call Ollama with a specific model override."""
+    patched_cfg = dict(cfg)
+    patched_cfg["ollama"] = {**cfg.get("ollama", {}), "model": model}
+    return await call_ollama(prompt, system, patched_cfg)
+
+
 async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> str:
-    """Route to the configured LLM backend. Falls back to Ollama if claude_cli fails."""
-    global _cli_fallback_notified, _effective_provider
+    """Route to the configured LLM backend.
+
+    Fallback chain for ollama provider:
+      1. Primary ollama model (e.g. qwen3.5:latest)
+      2. ollama_fallback model (e.g. gemma4) — if configured
+      3. claude_cli — if configured
+    """
+    global _cli_fallback_notified, _ollama_fallback_notified, _effective_provider
     provider = cfg.get("llm_provider", "claude")
 
     if provider == "claude":
         _effective_provider = "claude"
         return await call_claude(prompt, system, cfg)
+
+    elif provider == "ollama":
+        primary_model = cfg.get("ollama", {}).get("model", "?")
+
+        # Step 1: Try primary Ollama model
+        try:
+            _effective_provider = f"ollama/{primary_model}"
+            return await call_ollama(prompt, system, cfg)
+        except Exception as e1:
+            print(f"  [llm] Ollama ({primary_model}) failed: {str(e1)[:200]}", flush=True)
+
+        # Step 2: Try fallback Ollama model
+        fallback_cfg = cfg.get("ollama_fallback", {})
+        fallback_model = fallback_cfg.get("model")
+        if fallback_model:
+            try:
+                print(f"  [llm] Falling back to Ollama ({fallback_model})...", flush=True)
+                if not _ollama_fallback_notified:
+                    _ollama_fallback_notified = True
+                    await send_telegram(
+                        f"<b>⚠ Ollama Primary Model Failed</b>\n\n"
+                        f"Model <code>{primary_model}</code> unavailable.\n"
+                        f"Falling back to <code>{fallback_model}</code>."
+                    )
+                _effective_provider = f"ollama/{fallback_model}"
+                return await _call_ollama_with_model(prompt, system, cfg, fallback_model)
+            except Exception as e2:
+                print(f"  [llm] Ollama fallback ({fallback_model}) failed: {str(e2)[:200]}", flush=True)
+
+        # Step 3: Try Claude CLI as last resort
+        cli_cfg = cfg.get("claude_cli", {})
+        if cli_cfg.get("binary"):
+            print("  [llm] Falling back to Claude CLI...", flush=True)
+            if not _cli_fallback_notified:
+                _cli_fallback_notified = True
+                await send_telegram(
+                    "<b>⚠ Ollama Fully Unavailable</b>\n\n"
+                    f"Both <code>{primary_model}</code> and <code>{fallback_model or 'N/A'}</code> failed.\n"
+                    "Falling back to Claude CLI."
+                )
+            _effective_provider = "claude"
+            return await call_claude_cli(prompt, system, cfg, timeout=timeout)
+
+        raise RuntimeError(f"All LLM providers failed. Primary: {primary_model}, Fallback: {fallback_model or 'none'}")
+
     elif provider == "claude_cli":
         try:
             result = await call_claude_cli(prompt, system, cfg, timeout=timeout)
@@ -224,7 +283,6 @@ async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> s
 
             print(f"  [llm] Falling back to Ollama ({ollama_cfg['model']})...", flush=True)
 
-            # Send Telegram alert (once per session to avoid spam)
             if not _cli_fallback_notified:
                 _cli_fallback_notified = True
                 await send_telegram(
@@ -236,9 +294,6 @@ async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> s
 
             _effective_provider = "ollama"
             return await call_ollama(prompt, system, cfg)
-    elif provider == "ollama":
-        _effective_provider = "ollama"
-        return await call_ollama(prompt, system, cfg)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
@@ -303,13 +358,17 @@ async def run_health_check(backend_url: str) -> None:
                 issues.append(f"❌ Pipeline check failed: {e}")
 
             # 2. Holdings with null prices
+            # Skip tokens with no price source (e.g. Crypto.com rewards)
+            _NO_PRICE_TICKERS = {"MOON"}
             try:
                 resp = await client.get("/portfolio/holdings")
                 if resp.status_code == 200:
                     holdings = resp.json().get("data", [])
                     null_price = [
                         h["ticker"] for h in holdings
-                        if h.get("currentPriceCents") is None and float(h.get("quantity", 0)) > 0
+                        if h.get("currentPriceCents") is None
+                        and float(h.get("quantity", 0)) > 0
+                        and h["ticker"] not in _NO_PRICE_TICKERS
                     ]
                     if null_price:
                         issues.append(
