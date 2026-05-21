@@ -18,11 +18,22 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Bloomvalley backend")
 
-    # Verify DB engine is connectable
-    async with engine.begin() as conn:
-        await conn.execute(
-            __import__("sqlalchemy").text("SELECT 1")
-        )
+    # Verify DB engine is connectable, with retry-with-backoff so a slow DB
+    # boot doesn't crash the app (see SECURITY.md / ops notes).
+    from sqlalchemy import text
+    last_err: Exception | None = None
+    for attempt in range(1, 13):  # ~60s total: 1+2+3+...+12 = 78s capped at 10s
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            break
+        except Exception as e:
+            last_err = e
+            delay = min(attempt, 10)
+            logger.warning("db_connect_retry", attempt=attempt, delay_s=delay, error=str(e))
+            await asyncio.sleep(delay)
+    else:
+        raise RuntimeError(f"Database unreachable after retries: {last_err}")
     logger.info("Database connected")
 
     # Connect Redis
