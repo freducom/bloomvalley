@@ -620,7 +620,12 @@ function BrinsonAttribution() {
   const [hasFetched, setHasFetched] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
-  const [fromDate, setFromDate] = useState(today);
+  const threeMonthsAgo = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    return d.toISOString().split("T")[0];
+  })();
+  const [fromDate, setFromDate] = useState(threeMonthsAgo);
   const [toDate, setToDate] = useState(today);
 
   const fetchAttribution = useCallback(async () => {
@@ -673,7 +678,7 @@ function BrinsonAttribution() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Return Attribution (Brinson)</h2>
-          <InfoTip text="Brinson-Fachler attribution decomposes your portfolio's return vs. a benchmark into three effects: Allocation (over/underweighting sectors), Selection (picking better/worse securities within sectors), and Interaction (the combined effect of both decisions)." />
+          <InfoTip text="Brinson-Fachler attribution explains WHY your portfolio outperformed or underperformed a benchmark. It breaks down the excess return into three causes: Allocation (did you overweight the right sectors?), Selection (did you pick better stocks within each sector?), and Interaction (the combined effect). Positive values = helped performance, negative = hurt it. Typical date ranges: 3 months (recent), 6 months, or 1 year. You must take a Snapshot first to record starting holdings." />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
@@ -698,8 +703,21 @@ function BrinsonAttribution() {
       </div>
 
       {!hasFetched && !loading && !data && !error && (
-        <div className="text-sm text-terminal-text-tertiary bg-terminal-bg-secondary border border-terminal-border rounded p-4">
-          Select a date range and click Run. Take a Snapshot first to capture today&apos;s holdings.
+        <div className="text-sm text-terminal-text-secondary bg-terminal-bg-secondary border border-terminal-border rounded p-4 space-y-2">
+          <p className="font-medium text-terminal-text-primary">How to use Return Attribution</p>
+          <ol className="list-decimal list-inside space-y-1 text-terminal-text-tertiary">
+            <li><strong>Snapshot</strong> — Click &quot;Snapshot&quot; to save today&apos;s holdings as a starting point. You only need to do this once per day; past snapshots are kept.</li>
+            <li><strong>Pick a date range</strong> — &quot;From&quot; is when you want to start measuring, &quot;To&quot; is the end. Common ranges: 3 months, 6 months, or 1 year. The &quot;from&quot; date must have a snapshot on or before it.</li>
+            <li><strong>Run</strong> — Compares your portfolio&apos;s return over that period against a benchmark (MSCI World ETF) and breaks down <em>why</em> you beat or trailed it.</li>
+          </ol>
+          <p className="text-terminal-text-tertiary text-xs mt-2">
+            <strong>Reading the results:</strong> &quot;Allocation&quot; shows the effect of your sector bets (overweighting tech, underweighting energy, etc.).
+            &quot;Selection&quot; shows whether you picked better or worse stocks <em>within</em> each sector compared to the benchmark.
+            &quot;Interaction&quot; captures the combined effect. Green = helped your return, red = hurt it. The three effects sum to your total Active Return (excess over the benchmark).
+          </p>
+          <p className="text-terminal-text-tertiary text-xs">
+            Note: The benchmark uses simplified equal sector weights. This means Allocation effect reflects your deviation from equal-weighting, not from actual MSCI World sector weights.
+          </p>
         </div>
       )}
 
@@ -716,27 +734,27 @@ function BrinsonAttribution() {
           {/* Summary cards */}
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
             <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
-              <div className="text-xs text-terminal-text-tertiary">Portfolio</div>
+              <div className="text-xs text-terminal-text-tertiary">Portfolio <InfoTip text="Your portfolio's total return over the selected period, calculated from price changes of all holdings weighted by their starting position sizes." /></div>
               <div className={`text-sm font-mono font-bold ${colorPct(data.summary.portfolioReturn)}`}>{fmtPct(data.summary.portfolioReturn)}</div>
             </div>
             <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
-              <div className="text-xs text-terminal-text-tertiary">Benchmark{data.benchmark.ticker ? ` (${data.benchmark.ticker})` : ""}</div>
+              <div className="text-xs text-terminal-text-tertiary">Benchmark{data.benchmark.ticker ? ` (${data.benchmark.ticker})` : ""} <InfoTip text="Return of the benchmark (MSCI World ETF) over the same period. This is what you would have earned by holding the index instead. If no benchmark ETF is found in your securities, this defaults to 0%." /></div>
               <div className={`text-sm font-mono font-bold ${colorPct(data.summary.benchmarkReturn)}`}>{fmtPct(data.summary.benchmarkReturn)}</div>
             </div>
             <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
-              <div className="text-xs text-terminal-text-tertiary">Active Return</div>
+              <div className="text-xs text-terminal-text-tertiary">Active Return <InfoTip text="Portfolio return minus benchmark return. Positive = you beat the index, negative = the index beat you. This is the total excess return that the three effects below explain." /></div>
               <div className={`text-sm font-mono font-bold ${colorPct(data.summary.activeReturn)}`}>{fmtPct(data.summary.activeReturn)}</div>
             </div>
             <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
-              <div className="text-xs text-terminal-text-tertiary">Allocation</div>
+              <div className="text-xs text-terminal-text-tertiary">Allocation <InfoTip text="Did you overweight the right sectors? Positive means your sector bets (being overweight winning sectors or underweight losing ones) added value. Formula: (your sector weight - benchmark weight) x (benchmark sector return - benchmark total return)." /></div>
               <div className={`text-sm font-mono font-bold ${colorPct(data.summary.allocationEffect)}`}>{fmtPct(data.summary.allocationEffect)}</div>
             </div>
             <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
-              <div className="text-xs text-terminal-text-tertiary">Selection</div>
+              <div className="text-xs text-terminal-text-tertiary">Selection <InfoTip text="Did you pick better stocks within each sector? Positive means your stock picks outperformed the benchmark within the same sectors. Formula: benchmark weight x (your sector return - benchmark sector return)." /></div>
               <div className={`text-sm font-mono font-bold ${colorPct(data.summary.selectionEffect)}`}>{fmtPct(data.summary.selectionEffect)}</div>
             </div>
             <div className="bg-terminal-bg-secondary border border-terminal-border rounded p-2">
-              <div className="text-xs text-terminal-text-tertiary">Interaction</div>
+              <div className="text-xs text-terminal-text-tertiary">Interaction <InfoTip text="The combined effect of allocation and selection together. Positive means you were overweight in sectors where you also picked winners (a double benefit). Usually the smallest of the three effects. Formula: (your weight - benchmark weight) x (your return - benchmark return)." /></div>
               <div className={`text-sm font-mono font-bold ${colorPct(data.summary.interactionEffect)}`}>{fmtPct(data.summary.interactionEffect)}</div>
             </div>
           </div>
@@ -747,15 +765,15 @@ function BrinsonAttribution() {
               <thead>
                 <tr className="bg-terminal-bg-secondary text-terminal-text-secondary text-xs">
                   <th className="text-left px-3 py-2 font-medium">{groupBy === "sector" ? "Sector" : "Asset Class"}</th>
-                  <th className="text-right px-3 py-2 font-medium">Wt (P)</th>
-                  <th className="text-right px-3 py-2 font-medium">Wt (B)</th>
-                  <th className="text-right px-3 py-2 font-medium">Ret (P)</th>
-                  <th className="text-right px-3 py-2 font-medium">Ret (B)</th>
-                  <th className="text-right px-3 py-2 font-medium">Allocation</th>
-                  <th className="text-right px-3 py-2 font-medium">Selection</th>
-                  <th className="text-right px-3 py-2 font-medium">Interaction</th>
-                  <th className="text-right px-3 py-2 font-medium">Active</th>
-                  <th className="text-right px-3 py-2 font-medium">#</th>
+                  <th className="text-right px-3 py-2 font-medium">Wt (P) <InfoTip text="Portfolio Weight — your allocation to this sector as a percentage of total portfolio value at the start of the period." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Wt (B) <InfoTip text="Benchmark Weight — the benchmark's allocation to this sector. Currently simplified as equal weight (1/N sectors) since actual MSCI World sector weights are not available." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Ret (P) <InfoTip text="Portfolio Return — the return your holdings in this sector achieved over the period, weighted by each holding's share within the sector." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Ret (B) <InfoTip text="Benchmark Return — the benchmark's return for this sector. Currently uses the benchmark's total return uniformly across sectors (simplified)." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Allocation <InfoTip text="Allocation Effect — measures the impact of your sector weighting decisions. Positive = you benefited from overweighting this sector (or underweighting an underperforming one)." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Selection <InfoTip text="Selection Effect — measures whether your stock picks in this sector beat the benchmark. Positive = your stocks outperformed what the benchmark earned in this sector." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Interaction <InfoTip text="Interaction Effect — the cross-term between allocation and selection. Positive = you were overweight in a sector where you also picked winners." /></th>
+                  <th className="text-right px-3 py-2 font-medium">Active <InfoTip text="Active Return — total excess return from this sector (Allocation + Selection + Interaction). The sum of all sectors' Active Return equals your total excess return over the benchmark." /></th>
+                  <th className="text-right px-3 py-2 font-medium"># <InfoTip text="Number of holdings in this sector." /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-terminal-border">
@@ -776,6 +794,11 @@ function BrinsonAttribution() {
               </tbody>
             </table>
           </div>
+          <p className="text-xs text-terminal-text-tertiary mt-2">
+            Benchmark uses simplified equal sector weights and uniform returns across sectors.
+            {!data.benchmark.found && " No benchmark ETF (IWDA, EUNL, URTH, VWCE) found in your securities — benchmark return defaults to 0%."}
+            {" "}Sorted by absolute Active Return (most impactful sector first).
+          </p>
         </>
       ) : null}
     </div>
