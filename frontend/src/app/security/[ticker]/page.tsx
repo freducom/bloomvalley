@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiGet, apiGetRaw } from "@/lib/api";
@@ -10,6 +10,7 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import ReactMarkdown from "react-markdown";
 import { PriceWithDate } from "@/components/ui/PriceWithDate";
 import remarkGfm from "remark-gfm";
+import { createChart, type IChartApi, ColorType } from "lightweight-charts";
 
 const gfmOptions = { singleTilde: false };
 
@@ -102,12 +103,18 @@ interface Security {
 }
 
 interface OhlcPoint {
-  date: string;
+  time: string;
   open: number;
   high: number;
   low: number;
   close: number;
-  volume: number;
+  volume: number | null;
+}
+
+interface OhlcResponse {
+  security: { id: number; ticker: string; name: string; currency: string };
+  candles: OhlcPoint[];
+  indicators: Record<string, unknown>;
 }
 
 interface Fundamentals {
@@ -270,50 +277,124 @@ function dcfColor(v: number | null): string {
   return v >= 0 ? "text-terminal-positive" : "text-terminal-negative";
 }
 
-/* ── Price Sparkline ── */
+/* ── Price Chart ── */
 
-function PriceSparkline({ data }: { data: OhlcPoint[] }) {
-  // Take last 60 trading days
-  const points = data.slice(-60);
-  if (points.length === 0) return null;
+const CHART_COLORS = {
+  bg: "#0A0E17",
+  text: "#9CA3AF",
+  border: "#1F2937",
+  accent: "#8B5CF6",
+  positive: "#22C55E",
+  negative: "#EF4444",
+};
 
-  const closes = points.map((p) => p.close);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const range = max - min || 1;
+const CHART_PERIODS = ["1M", "3M", "6M", "1Y", "2Y", "5Y", "MAX"] as const;
+type ChartPeriod = (typeof CHART_PERIODS)[number];
 
-  const width = 100;
-  const height = 40;
-  const stepX = width / (closes.length - 1 || 1);
+function PriceChart({ securityId, currency }: { securityId: number; currency: string }) {
+  const [period, setPeriod] = useState<ChartPeriod>("1Y");
+  const [data, setData] = useState<OhlcPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
 
-  const pathPoints = closes
-    .map((c, i) => {
-      const x = i * stepX;
-      const y = height - ((c - min) / range) * height;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiGetRaw<{ data: OhlcResponse }>(`/charts/${securityId}/ohlc?period=${period}`)
+      .then((res) => {
+        if (!cancelled) setData(res?.data?.candles || []);
+      })
+      .catch(() => {
+        if (!cancelled) setData([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [securityId, period]);
 
-  const isUp = closes[closes.length - 1] >= closes[0];
+  useEffect(() => {
+    if (!containerRef.current || data.length === 0) return;
+
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: CHART_COLORS.bg },
+        textColor: CHART_COLORS.text,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: CHART_COLORS.border },
+        horzLines: { color: CHART_COLORS.border },
+      },
+      rightPriceScale: { borderColor: CHART_COLORS.border },
+      timeScale: { borderColor: CHART_COLORS.border, timeVisible: false },
+      width: containerRef.current.clientWidth,
+      height: 300,
+    });
+    chartRef.current = chart;
+
+    const closes = data.map((p) => p.close);
+    const isUp = closes[closes.length - 1] >= closes[0];
+    const lineSeries = chart.addLineSeries({
+      color: isUp ? CHART_COLORS.positive : CHART_COLORS.negative,
+      lineWidth: 2,
+      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+    });
+    lineSeries.setData(
+      data.map((p) => ({ time: p.time, value: p.close })) as Parameters<typeof lineSeries.setData>[0]
+    );
+
+    chart.timeScale().fitContent();
+
+    const handleResize = () => {
+      if (containerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+      chartRef.current = null;
+    };
+  }, [data]);
 
   return (
-    <div className="w-full">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="w-full h-20"
-      >
-        <polyline
-          fill="none"
-          stroke={isUp ? "var(--color-terminal-positive, #22c55e)" : "var(--color-terminal-negative, #ef4444)"}
-          strokeWidth="1"
-          points={pathPoints}
-        />
-      </svg>
-      <div className="flex justify-between text-xs text-terminal-text-tertiary font-mono mt-1">
-        <span>{points[0]?.date}</span>
-        <span>{points[points.length - 1]?.date}</span>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-terminal-text-secondary">
+          Price History{" "}
+          <span className="text-terminal-text-tertiary font-mono">({currency})</span>
+        </h2>
+        <div className="flex gap-1">
+          {CHART_PERIODS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`px-2.5 py-1 text-xs font-mono rounded ${
+                period === p
+                  ? "bg-terminal-accent/20 text-terminal-accent"
+                  : "text-terminal-text-secondary hover:text-terminal-text-primary"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
+      {loading && data.length === 0 ? (
+        <div className="animate-pulse h-[300px] bg-terminal-bg-tertiary rounded" />
+      ) : data.length === 0 ? (
+        <div className="h-[300px] flex items-center justify-center text-terminal-text-secondary text-sm">
+          No price data available for this period.
+        </div>
+      ) : (
+        <div ref={containerRef} />
+      )}
     </div>
   );
 }
@@ -369,7 +450,7 @@ export default function SecurityDetailPage() {
           newsRes,
           divRes,
         ] = await Promise.all([
-          apiGetRaw<{ data: OhlcPoint[] }>(`/charts/${id}/ohlc?period=1Y`).catch(() => null),
+          apiGetRaw<{ data: OhlcResponse }>(`/charts/${id}/ohlc?period=1Y`).catch(() => null),
           apiGetRaw<{ data: Fundamentals[] }>(`/fundamentals?securityId=${id}`).catch(() => null),
           apiGet<Holding[]>("/portfolio/holdings").catch(() => null),
           apiGetRaw<{ data: Recommendation[] }>("/recommendations?status=active&limit=50").catch(() => null),
@@ -379,7 +460,7 @@ export default function SecurityDetailPage() {
           apiGetRaw<{ data: DividendEvent[] }>(`/dividends/history?securityId=${id}`).catch(() => null),
         ]);
 
-        if (ohlcRes?.data) setOhlc(ohlcRes.data);
+        if (ohlcRes?.data?.candles) setOhlc(ohlcRes.data.candles);
         if (fundRes?.data && fundRes.data.length > 0) setFundamentals(fundRes.data[0]);
         if (holdRes) setHoldings(holdRes.filter((h) => h.securityId === id));
         if (recRes?.data) setRecommendations(recRes.data.filter((r) => r.ticker === ticker));
@@ -733,10 +814,15 @@ export default function SecurityDetailPage() {
       {/* ── Price Chart ── */}
       {ohlc && ohlc.length > 0 && (
         <div className="bg-terminal-bg-secondary border border-terminal-border rounded-md p-4 mb-6">
-          <h2 className="text-sm font-semibold text-terminal-text-secondary mb-3">
-            Price History (1Y)
-          </h2>
-          <PriceSparkline data={ohlc} />
+          <PriceChart securityId={security.id} currency={currency} />
+          <div className="mt-2 text-right">
+            <Link
+              href={`/charts?security=${security.id}`}
+              className="text-xs text-terminal-accent hover:underline font-mono"
+            >
+              Open in Charts →
+            </Link>
+          </div>
         </div>
       )}
 
