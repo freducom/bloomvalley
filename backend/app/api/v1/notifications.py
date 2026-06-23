@@ -1,10 +1,11 @@
-"""Telegram notification endpoints."""
+"""Notification endpoints (provider-agnostic)."""
 
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
+from fastapi.responses import PlainTextResponse
 
-from app.services import telegram
+from app.services import notifier, telegram
 from app.services.insider_alerts import check_and_notify as check_insider_alerts
 from app.services.weekly_digest import compose_and_send_digest
 
@@ -17,16 +18,17 @@ _BRIEF_TTL = 86400  # 24 hours
 
 @router.post("/test")
 async def test_notification():
-    """Send a test message to verify Telegram setup."""
-    if not telegram.is_configured():
+    """Send a test message to verify notification setup."""
+    provider = notifier.get_provider()
+    if not notifier.is_configured():
         return {
-            "data": {"sent": False, "reason": "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"},
+            "data": {"sent": False, "provider": provider, "reason": f"provider={provider!r} is not configured"},
             "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
         }
 
-    ok = await telegram.send("<b>Bloomvalley</b> — test notification", force=True)
+    ok = await notifier.send("<b>Bloomvalley</b> — test notification", force=True)
     return {
-        "data": {"sent": ok},
+        "data": {"sent": ok, "provider": provider},
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
 
@@ -102,9 +104,9 @@ async def send_notification(body: dict, request: Request):
 @router.post("/check-insider-alerts")
 async def trigger_insider_alert_check():
     """Manually trigger insider alert detection and Telegram notifications."""
-    if not telegram.is_configured():
+    if not notifier.is_configured():
         return {
-            "data": {"sent": False, "reason": "Telegram not configured"},
+            "data": {"sent": False, "reason": f"notification provider {notifier.get_provider()!r} is not configured"},
             "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
         }
 
@@ -115,12 +117,30 @@ async def trigger_insider_alert_check():
     }
 
 
+@router.post("/signal-webhook")
+async def signal_webhook(body: dict, request: Request):
+    """Inbound endpoint hit by signal-gateway's router.
+
+    Body is `{"message": "..."}` — the user's Signal Note-to-Self message
+    with the prefix already stripped. Authenticated via the global
+    X-API-Key middleware; signal-gateway is registered at startup to
+    forward the API key on every dispatch.
+    """
+    text = (body.get("message") or "").strip()
+
+    from app.services import signal_bot
+    from app.config import settings
+
+    response = await signal_bot.process_message(text, request.app.state.redis, settings.API_KEY)
+    return PlainTextResponse(response or "")
+
+
 @router.post("/weekly-digest")
 async def trigger_weekly_digest():
-    """Manually trigger weekly digest Telegram notification."""
-    if not telegram.is_configured():
+    """Manually trigger weekly digest notification."""
+    if not notifier.is_configured():
         return {
-            "data": {"sent": False, "reason": "Telegram not configured"},
+            "data": {"sent": False, "reason": f"notification provider {notifier.get_provider()!r} is not configured"},
             "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
         }
 

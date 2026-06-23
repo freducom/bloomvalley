@@ -1,26 +1,50 @@
-# F22: Telegram Notification System
+# F22: Notification System
 
-**Status: Implemented (Phase 1 + Insider Alerts) — 2026-03-26**
+**Status: Implemented (Signal default, Telegram alternative) — updated 2026-06-18**
 **Created: 2026-03-26**
 
-Personal Telegram bot for push notifications from the Bloomvalley investment terminal.
+Push notifications and a bidirectional chat bot for the Bloomvalley investment terminal. Two backends are supported and selected via `NOTIFICATION_PROVIDER`:
+
+- **Signal** (default) — outbound and inbound via the self-hosted [signal-gateway](https://github.com/freducom/signal-gateway). Linked-device pattern, no third-party servers, messages flow through your own Signal account ("Note to Self").
+- **Telegram** — outbound via the Telegram Bot API; inbound via Bot long-polling.
+
+The event taxonomy, privacy model, and message templates below are provider-agnostic. Where wire format matters, both options are documented.
 
 ---
 
 ## 1. Architecture
 
-### Telegram Bot API
+### Provider abstraction
 
-- **Bot Token**: Created via `@BotFather` on Telegram
-- **Chat ID**: Numeric ID of the private chat between user and bot
-- **Endpoint**: `POST https://api.telegram.org/bot<TOKEN>/sendMessage`
-- **Send-only**: No webhook needed — the bot never receives commands
+All outbound notifications pass through `backend/app/services/notifier.py`. Callers produce Telegram-HTML; the dispatcher routes to the configured backend and strips HTML to plain text when needed (Signal).
+
+```
+notify_recommendations(html) ─┐
+notify_insider_*(html)        ├─► notifier.send(html) ──┬─► telegram._send_via_telegram(html)
+notifier.send(html)           ─┘                        └─► signal.send(html-stripped-to-plain)
+```
+
+### Signal backend (default)
+
+- **Outbound:** `signal-gateway-notify:8090/notify` over the shared `signal` docker network. `X-Token: $SIGNAL_NOTIFY_TOKEN`.
+- **Inbound:** The signal-gateway router receives messages from your phone in "Note to Self", strips the `bv` prefix, and POSTs to `POST /api/v1/notifications/signal-webhook`. The body is `{"message": "..."}`. The router includes `X-API-Key` so the existing API-key middleware authenticates the call. The `signal-register` compose service self-registers the prefix at startup.
+- **No new phone number** — bloomvalley uses your existing Signal account as a linked device via signal-gateway.
+
+### Telegram backend
+
+- **Outbound:** `POST https://api.telegram.org/bot<TOKEN>/sendMessage` with `parse_mode=HTML`.
+- **Inbound:** Long-polling via `getUpdates` in a background task started by `app/main.py` lifespan when `NOTIFICATION_PROVIDER=telegram`. Handled by `backend/app/services/telegram_bot.py`.
 
 ### Service Location
 
-New module inside the backend: `backend/app/services/telegram.py`
+- `backend/app/services/notifier.py` — provider dispatcher
+- `backend/app/services/telegram.py` — Telegram low-level send + Telegram-specific formatted notify helpers
+- `backend/app/services/telegram_bot.py` — Telegram long-poll bot
+- `backend/app/services/signal.py` — Signal low-level send + HTML-to-plain
+- `backend/app/services/signal_bot.py` — Signal inbound command/chat handler
+- `backend/app/api/v1/notifications.py` — REST endpoints (test/send/signal-webhook)
 
-Rationale: the backend already has DB access, Redis, httpx, and all data needed to compose messages. No additional Docker service needed. The swarm and cron containers trigger notifications by calling `POST /api/v1/notifications/send` on the backend (same pattern as existing API calls).
+The swarm and cron containers trigger notifications by calling `POST /api/v1/notifications/send` on the backend; the backend abstraction picks the right provider.
 
 ### Integration Points
 
@@ -285,21 +309,37 @@ Create:
 
 ## 7. Risks
 
-- **Telegram API downtime**: Silent failure, logged. Retry once after 30s.
-- **Message formatting**: Use HTML mode (simpler than MarkdownV2 escaping)
-- **Message length**: Truncate at 4096 chars, split if needed
-- **Outbound HTTPS**: Backend container needs access to `api.telegram.org`
-- **No new dependencies**: Just httpx (already available)
+- **Provider downtime**: Silent failure, logged. Caller decides whether to retry.
+- **Message formatting**: HTML is the canonical wire format internally; Signal strips it (Signal renders plain text only).
+- **Message length**: Telegram chunks at 4096 chars at line boundaries; Signal truncates at 4000 chars with `[...truncated]` suffix.
+- **Outbound network**: Telegram needs HTTPS to `api.telegram.org`; Signal needs the shared `signal` docker network with `signal-gateway` running.
+- **Auth on inbound Signal webhook**: protected by the existing `X-API-Key` middleware. The `signal-register` sidecar registers with signal-gateway router using `auth_header: {name: "X-API-Key", value: $API_KEY}`. Without that, any other container on the `signal` network could spoof commands.
+- **No new dependencies**: just httpx (already available); signal-gateway is a separate compose stack.
 
 ---
 
-## 8. Bot Setup Instructions
+## 8. Setup Instructions
+
+### Signal (default)
+
+1. Set up the signal-gateway stack: <https://github.com/freducom/signal-gateway>. One-time QR-link via your existing Signal account, ≈5 min.
+2. Copy `NOTIFY_TOKEN` and `ROUTER_TOKEN` from `signal-gateway/.env` into bloomvalley `.env`:
+   ```
+   NOTIFICATION_PROVIDER=signal
+   SIGNAL_NOTIFY_TOKEN=<NOTIFY_TOKEN from signal-gateway>
+   SIGNAL_ROUTER_TOKEN=<ROUTER_TOKEN from signal-gateway>
+   ```
+3. `docker compose up -d` — the `signal-register` sidecar registers the `bv` prefix with signal-gateway's router (idempotent, retries until ready).
+4. Verify outbound: `curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/notifications/test` → "Bloomvalley — test notification" lands in Signal Note-to-Self.
+5. Verify inbound: on your phone in Note-to-Self, type `bv help` — bot replies in the same chat.
+
+### Telegram (alternative)
 
 1. Open Telegram, search `@BotFather`, send `/newbot`
-2. Choose name ("Bloomvalley Terminal") and username (e.g., `bloomvalley_alerts_bot`)
+2. Choose name ("Bloomvalley Terminal") and username
 3. Copy bot token to `.env` as `TELEGRAM_BOT_TOKEN`
-4. Message your bot (search username, click Start)
+4. Message your bot (search username, tap Start)
 5. Get chat ID: visit `https://api.telegram.org/bot<TOKEN>/getUpdates`
-6. Copy chat ID to `.env` as `TELEGRAM_CHAT_ID`
+6. Copy chat ID to `.env` as `TELEGRAM_CHAT_ID` and set `NOTIFICATION_PROVIDER=telegram`
 7. `docker compose up -d backend`
 8. Test: `POST /api/v1/notifications/test`

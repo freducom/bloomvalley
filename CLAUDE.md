@@ -28,6 +28,7 @@ The Investment Team defines strategy and analysis needs. The Development Team bu
 
 ## Key Conventions
 
+- **Notifications go through `backend/app/services/notifier.py`** — the provider dispatcher. Call sites produce Telegram-HTML; the dispatcher picks Signal (default) or Telegram based on `NOTIFICATION_PROVIDER` and strips HTML for Signal. Don't call `telegram.send()` or `telegram._send_via_telegram()` directly from new code — go via `notifier.send()`. See [`specs/04-features/F22-notifications.md`](specs/04-features/F22-notifications.md).
 - All monetary values stored as integers (cents) with currency code — no floats
 - All financial calculations happen server-side in Python
 - Frontend is display-only — no business logic in the UI

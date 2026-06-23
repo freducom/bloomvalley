@@ -53,6 +53,7 @@ services:
       - CLAUDE_CLI_MODEL=${CLAUDE_CLI_MODEL:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://192.168.1.160:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+    networks: [ default, signal ]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -108,6 +109,10 @@ services:
       - MAX_PARALLEL=${MAX_PARALLEL:-1}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - NOTIFICATION_PROVIDER=${NOTIFICATION_PROVIDER:-signal}
+      - SIGNAL_NOTIFY_URL=${SIGNAL_NOTIFY_URL:-http://signal-gateway-notify:8090/notify}
+      - SIGNAL_NOTIFY_TOKEN=${SIGNAL_NOTIFY_TOKEN:-}
+    networks: [ default, signal ]
     volumes:
       - ./.claude/agents:/app/agents:ro
       - ./analyst-swarm/config.local.yaml:/app/config.local.yaml:ro
@@ -115,3 +120,48 @@ services:
       - ${HOME}/.claude:/root/.claude
       - ${HOME}/.claude.json:/root/.claude.json
     restart: unless-stopped
+
+  # One-shot registration: tells the local signal-gateway router that
+  # incoming Signal messages prefixed with SIGNAL_PREFIX (default `bv`)
+  # should be POSTed to bloomvalley's /signal-webhook. Retries until the
+  # backend and signal-gateway router are both up. Exits on success;
+  # restart: on-failure relaunches on transient errors.
+  signal-register:
+    image: curlimages/curl
+    restart: on-failure
+    networks: [ signal ]
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      - NOTIFICATION_PROVIDER=${NOTIFICATION_PROVIDER:-signal}
+      - SIGNAL_ROUTER_TOKEN=${SIGNAL_ROUTER_TOKEN:-}
+      - SIGNAL_PREFIX=${SIGNAL_PREFIX:-bv}
+      - API_KEY=${API_KEY:-}
+    command:
+      - sh
+      - -c
+      - |
+        if [ "$$NOTIFICATION_PROVIDER" != "signal" ]; then
+          echo "signal-register: NOTIFICATION_PROVIDER=$$NOTIFICATION_PROVIDER, nothing to do"; exit 0;
+        fi
+        if [ -z "$$SIGNAL_ROUTER_TOKEN" ] || [ -z "$$API_KEY" ]; then
+          echo "signal-register: missing SIGNAL_ROUTER_TOKEN or API_KEY — skipping"; exit 0;
+        fi
+        until curl -sf \
+                -H "X-Token: $$SIGNAL_ROUTER_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"prefix\":\"$$SIGNAL_PREFIX\",\"webhook\":\"http://backend:8000/api/v1/notifications/signal-webhook\",\"auth_header\":{\"name\":\"X-API-Key\",\"value\":\"$$API_KEY\"},\"timeout_seconds\":300}" \
+                http://signal-gateway-router:8091/register
+        do
+          echo "signal-register: router not ready yet, retrying..."
+          sleep 5
+        done
+        echo "signal-register: registered prefix '$$SIGNAL_PREFIX'"
+
+networks:
+  default:
+  # Joined as external: signal-gateway creates and owns it. Bring
+  # signal-gateway up first (it publishes the network) before this stack.
+  signal:
+    external: true

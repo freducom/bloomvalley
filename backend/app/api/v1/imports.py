@@ -18,6 +18,7 @@ from app.db.models.imports import Import, ImportRow
 from app.db.models.securities import Security
 from app.db.models.transactions import Transaction
 from app.services.nordnet_parser import ACCOUNT_TYPE_MAP, parse_nordnet_export
+from app.services.tax_lots import apply_transaction as apply_tax_lot
 
 logger = structlog.get_logger()
 
@@ -589,6 +590,11 @@ async def confirm_import(import_id: int):
                 external_ref=f"nordnet_import_{import_record.id}",
             )
             session.add(tx)
+            await session.flush()
+            try:
+                await apply_tax_lot(session, tx)
+            except Exception as e:
+                logger.warning("tax_lot_apply_failed", txn_id=tx.id, error=str(e))
             transactions_created += 1
 
         import_record.status = "confirmed"

@@ -15,7 +15,7 @@ from app.db.models.dividends import DividendEvent
 from app.db.models.insider import InsiderTrade
 from app.db.models.recommendations import Recommendation
 from app.db.models.securities import Security
-from app.services import telegram
+from app.services import notifier, telegram
 
 logger = structlog.get_logger()
 
@@ -56,7 +56,7 @@ async def compose_and_send_digest():
         sections.append("<i>No notable activity this week.</i>")
 
     text = "\n".join(sections)
-    ok = await telegram.send(text, force=True)
+    ok = await notifier.send(text, force=True)
     logger.info("weekly_digest.complete", sent=ok)
     return ok
 

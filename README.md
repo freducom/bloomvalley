@@ -129,7 +129,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Privacy Mode** (`Cmd+Shift+P`) — blur all monetary amounts
 - **PWA** — installable on mobile, offline access to dashboard, recommendations, holdings
 - **Status Bar** — live pipeline indicators, market hours for Nordic/EU/London/US/Crypto
-- **Telegram Alerts** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities, weekly Monday digest
+- **Notifications & Bot** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities, weekly Monday digest. Default provider is **Signal** (via [signal-gateway](https://github.com/freducom/signal-gateway)); **Telegram** also supported. The bot is bidirectional — message it on your phone for portfolio summary, latest brief, system status, or free-form LLM chat backed by the same model the web app uses.
 
 ## Architecture
 
@@ -229,6 +229,7 @@ curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coi
 | `redis` | 6379 | Redis 7 with AOF persistence |
 | `cron` | — | 20 scheduled data pipeline jobs |
 | `analyst-swarm` | — | 9 AI analyst agents (4 daily + 3 nighttime runs) |
+| `signal-register` | — | One-shot sidecar; registers the `bv` command prefix with signal-gateway when Signal is the notification provider |
 
 ### API Keys
 
@@ -240,6 +241,37 @@ curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/pipelines/coi
 | `FINNHUB_API_KEY` | Optional | Yes (limited) | [finnhub.io](https://finnhub.io/) |
 
 **No API key needed for:** Yahoo Finance, ECB, CoinGecko, Google News, OpenInsider, Nasdaq Nordic, Swedish FI, SEC EDGAR, Quiver Quantitative, Morningstar, justETF, Kenneth French, GDELT, regional RSS feeds.
+
+### Notifications
+
+Bloomvalley ships with a provider abstraction for push notifications and a bidirectional chat bot. Pick one in `.env` via `NOTIFICATION_PROVIDER` (default: `signal`).
+
+**Signal (default).** Self-hosted bridge — your messages go through your own Signal account, no third-party servers. Setup:
+
+1. Bring up the [signal-gateway](https://github.com/freducom/signal-gateway) stack (its README has the one-time QR-link setup, ≈5 min).
+2. Copy `NOTIFY_TOKEN` and `ROUTER_TOKEN` from `signal-gateway/.env` into bloomvalley's `.env`:
+   ```
+   NOTIFICATION_PROVIDER=signal
+   SIGNAL_NOTIFY_TOKEN=<NOTIFY_TOKEN from signal-gateway>
+   SIGNAL_ROUTER_TOKEN=<ROUTER_TOKEN from signal-gateway>
+   ```
+3. `docker compose up -d` — the `signal-register` sidecar registers the `bv` prefix with signal-gateway's router automatically.
+4. Test outbound: `curl -H "X-API-Key: $API_KEY" -X POST http://localhost:8000/api/v1/notifications/test`.
+5. From Signal on your phone, in **Note to Self**: type `bv portfolio`, `bv brief`, `bv status`, or just ask a question.
+
+**Telegram (alternative).** Set:
+
+```
+NOTIFICATION_PROVIDER=telegram
+TELEGRAM_BOT_TOKEN=<from @BotFather>
+TELEGRAM_CHAT_ID=<your chat id>
+```
+
+(Get the chat ID by messaging the bot once, then visiting `https://api.telegram.org/bot<TOKEN>/getUpdates`.)
+
+**None.** Set `NOTIFICATION_PROVIDER=none` to disable all notifications.
+
+See [`specs/04-features/F22-notifications.md`](specs/04-features/F22-notifications.md) for full event taxonomy, privacy mode, and message format details.
 
 ---
 
@@ -487,7 +519,7 @@ After every swarm run, an automated health check verifies:
 - Risk metrics availability
 - Analyst report data gaps ("unavailable", "no data", "API error")
 
-Issues are sent to Telegram. See `run_health_check()` in `analyst-swarm/swarm.py`.
+Issues are sent through whichever notification provider is configured (Signal by default, Telegram alternative). See `run_health_check()` in `analyst-swarm/swarm.py`.
 
 ### Integration tests
 

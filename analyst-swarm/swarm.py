@@ -31,9 +31,18 @@ from data_digest import (
 _API_KEY = os.environ.get("API_KEY", "")
 _AUTH_HEADERS = {"X-API-Key": _API_KEY} if _API_KEY else {}
 
-# Telegram notifications (for fallback alerts)
+# Notification provider for fallback alerts the swarm sends directly
+# (claude_cli auth failure, ollama unreachable, etc.). Mirrors the
+# bloomvalley backend's provider selection.
+_NOTIF_PROVIDER = os.environ.get("NOTIFICATION_PROVIDER", "signal").lower()
+
+# Telegram notifications (used when NOTIFICATION_PROVIDER=telegram)
 _TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _TG_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# Signal notifications (used when NOTIFICATION_PROVIDER=signal)
+_SIGNAL_NOTIFY_URL = os.environ.get("SIGNAL_NOTIFY_URL", "http://signal-gateway-notify:8090/notify")
+_SIGNAL_NOTIFY_TOKEN = os.environ.get("SIGNAL_NOTIFY_TOKEN", "")
 
 # Track whether we've already notified about CLI auth failure (avoid spam)
 _cli_fallback_notified = False
@@ -58,6 +67,46 @@ async def send_telegram(text: str) -> bool:
             return resp.status_code == 200
     except Exception:
         return False
+
+
+import html as _html_lib
+
+
+_HTML_TAG_RE = re.compile(r'<[^>]+>')
+
+
+def _html_to_plain(text: str) -> str:
+    """Strip Telegram-HTML tags for Signal which renders plain text only."""
+    return _html_lib.unescape(_HTML_TAG_RE.sub('', text))
+
+
+async def send_signal(text: str) -> bool:
+    """Send a message via the local signal-gateway notify endpoint."""
+    if not _SIGNAL_NOTIFY_URL or not _SIGNAL_NOTIFY_TOKEN:
+        return False
+    try:
+        plain = _html_to_plain(text).strip()
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                _SIGNAL_NOTIFY_URL,
+                headers={"X-Token": _SIGNAL_NOTIFY_TOKEN},
+                content=plain.encode("utf-8"),
+            )
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
+async def send_alert(text: str) -> bool:
+    """Send a fallback alert through whichever provider is configured.
+
+    Text comes in Telegram-HTML; Signal strips tags before sending.
+    """
+    if _NOTIF_PROVIDER == "signal":
+        return await send_signal(text)
+    if _NOTIF_PROVIDER == "telegram":
+        return await send_alert(text)
+    return False
 
 # ── Config ──
 
@@ -241,7 +290,7 @@ async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> s
                 print(f"  [llm] Falling back to Ollama ({fallback_model})...", flush=True)
                 if not _ollama_fallback_notified:
                     _ollama_fallback_notified = True
-                    await send_telegram(
+                    await send_alert(
                         f"<b>⚠ Ollama Primary Model Failed</b>\n\n"
                         f"Model <code>{primary_model}</code> unavailable.\n"
                         f"Falling back to <code>{fallback_model}</code>."
@@ -257,7 +306,7 @@ async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> s
             print("  [llm] Falling back to Claude CLI...", flush=True)
             if not _cli_fallback_notified:
                 _cli_fallback_notified = True
-                await send_telegram(
+                await send_alert(
                     "<b>⚠ Ollama Fully Unavailable</b>\n\n"
                     f"Both <code>{primary_model}</code> and <code>{fallback_model or 'N/A'}</code> failed.\n"
                     "Falling back to Claude CLI."
@@ -285,7 +334,7 @@ async def call_llm(prompt: str, system: str, cfg: dict, timeout: int = 600) -> s
 
             if not _cli_fallback_notified:
                 _cli_fallback_notified = True
-                await send_telegram(
+                await send_alert(
                     "<b>⚠ Claude CLI Auth Failed</b>\n\n"
                     f"Error: <code>{err_msg[:300]}</code>\n\n"
                     f"Falling back to Ollama ({ollama_cfg['model']}). "
@@ -423,7 +472,7 @@ async def run_health_check(backend_url: str) -> None:
         msg = "🔍 <b>Post-Swarm Health Check</b>\n\n"
         msg += "\n".join(issues)
         msg += f"\n\n<i>{len(issues)} issue(s) found</i>"
-        await send_telegram(msg)
+        await send_alert(msg)
         print(f"[health] {len(issues)} issues found, Telegram alert sent", flush=True)
     else:
         print("[health] All checks passed", flush=True)

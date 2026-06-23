@@ -31,14 +31,14 @@ def _is_quiet_hours() -> bool:
     return hour >= QUIET_START or hour < QUIET_END
 
 
-async def send(text: str, force: bool = False) -> bool:
-    """Send a message to the configured Telegram chat.
+async def _send_via_telegram(text: str, force: bool = False) -> bool:
+    """Send a message to the configured Telegram chat (low-level provider impl).
+
+    Called by app.services.notifier when NOTIFICATION_PROVIDER=telegram.
 
     Args:
         text: Message text (HTML parse mode).
         force: If True, send even during quiet hours.
-
-    Returns True if sent, False if skipped or failed.
     """
     if not is_configured():
         return False
@@ -70,6 +70,12 @@ async def send(text: str, force: bool = False) -> bool:
     except Exception as e:
         logger.error("telegram_send_error", error=str(e))
         return False
+
+
+async def send(text: str, force: bool = False) -> bool:
+    """Provider-agnostic send. Delegates to whichever provider is configured."""
+    from app.services import notifier
+    return await notifier.send(text, force=force)
 
 
 def _split_message(text: str, limit: int = 4096) -> list[str]:
@@ -112,13 +118,14 @@ _BRIEF_EMOJIS = {
 
 async def notify_recommendations(summary: str, date_str: str, brief_type: str = "morning"):
     """Send PM recommendations summary via Telegram."""
-    if not is_configured() or not summary:
+    from app.services import notifier
+    if not notifier.is_configured() or not summary:
         return
 
     header = _BRIEF_HEADERS.get(brief_type, "PM Report")
     emoji = _BRIEF_EMOJIS.get(brief_type, "\U0001f4ca")
     text = f"{emoji} <b>{header} — {_escape(date_str)}</b>\n\n{_escape(summary)}"
-    await send(text)
+    await notifier.send(text)
 
 
 def _fmt_eur(cents: int | None) -> str:
@@ -139,7 +146,8 @@ async def notify_insider_cluster_buying(clusters: list[dict]):
     Each cluster dict: {ticker, securityName, insiderCount, insiders, jurisdiction,
                         totalValueCents, currency, pctOfMarketCap}
     """
-    if not is_configured() or not clusters:
+    from app.services import notifier
+    if not notifier.is_configured() or not clusters:
         return
 
     lines = ["<b>Insider Cluster Buying Detected</b>", ""]
@@ -179,7 +187,7 @@ async def notify_insider_cluster_buying(clusters: list[dict]):
 
     lines.append(f"<i>{len(clusters)} cluster signal{'s' if len(clusters) != 1 else ''}</i>")
 
-    await send("\n".join(lines))
+    await notifier.send("\n".join(lines))
 
 
 async def notify_insider_held_trades(trades: list[dict]):
@@ -188,7 +196,8 @@ async def notify_insider_held_trades(trades: list[dict]):
     Each trade dict: {ticker, securityName, insiderName, role, tradeType,
                       shares, valueCents, currency, source}
     """
-    if not is_configured() or not trades:
+    from app.services import notifier
+    if not notifier.is_configured() or not trades:
         return
 
     buys = [t for t in trades if t.get("tradeType") == "buy"]
@@ -219,12 +228,13 @@ async def notify_insider_held_trades(trades: list[dict]):
 
     lines.append(f"<i>{len(trades)} trade{'s' if len(trades) != 1 else ''} on held securities</i>")
 
-    await send("\n".join(lines))
+    await notifier.send("\n".join(lines))
 
 
 async def notify_macro_regime_change(previous: str, current: str, confidence: str):
     """Send notification about macro regime change."""
-    if not is_configured():
+    from app.services import notifier
+    if not notifier.is_configured():
         return
 
     text = (
@@ -235,7 +245,7 @@ async def notify_macro_regime_change(previous: str, current: str, confidence: st
         f"<i>Review allocation</i>"
     )
 
-    await send(text)
+    await notifier.send(text)
 
 
 # ── Bidirectional Chat Helpers ──

@@ -13,6 +13,7 @@ from app.db.models.securities import Security
 from app.db.models.tax_lots import TaxLot
 from app.db.models.transactions import Transaction
 from app.api.v1.portfolio import _get_fx_rates, _get_latest_prices
+from app.services.tax_lots import apply_transaction as apply_tax_lot
 
 logger = structlog.get_logger()
 
@@ -493,105 +494,60 @@ async def loss_harvesting():
 
 
 @router.get("/generate-lots")
-async def generate_tax_lots():
-    """Generate tax lots from transactions (FIFO matching). Idempotent — skips existing."""
+async def generate_tax_lots(reset: bool = Query(False)):
+    """Generate tax lots from transactions in chronological order.
+
+    Delegates to `services.tax_lots.apply_transaction`, which is the same
+    helper that runs on each transaction insert — so lots produced here
+    match production behavior. `?reset=true` wipes all existing lots first
+    (use when the matching logic changes and you want a clean rebuild).
+    """
+    from sqlalchemy import delete
+
     async with async_session() as session:
-        # Get all buy/transfer_in transactions that don't have a tax lot yet
-        existing_open_ids = select(TaxLot.open_transaction_id)
+        if reset:
+            await session.execute(delete(TaxLot))
+            await session.flush()
+
         result = await session.execute(
             select(Transaction)
             .where(
-                Transaction.type.in_(["buy", "transfer_in"]),
+                Transaction.type.in_(["buy", "sell", "transfer_in", "transfer_out"]),
                 Transaction.security_id.isnot(None),
                 Transaction.quantity > 0,
-                ~Transaction.id.in_(existing_open_ids),
             )
-            .order_by(Transaction.trade_date)
+            .order_by(Transaction.trade_date, Transaction.id)
         )
-        new_buys = result.scalars().all()
+        txns = result.scalars().all()
 
         created = 0
-        for txn in new_buys:
-            lot = TaxLot(
-                account_id=txn.account_id,
-                security_id=txn.security_id,
-                open_transaction_id=txn.id,
-                state="open",
-                acquired_date=txn.trade_date,
-                original_quantity=txn.quantity,
-                remaining_quantity=txn.quantity,
-                cost_basis_cents=txn.total_cents + txn.fee_cents,
-                cost_basis_currency=txn.currency,
-                fx_rate_at_open=txn.fx_rate,
-            )
-            session.add(lot)
-            created += 1
-
-        await session.commit()
-
-    # Now match sells using FIFO
-    async with async_session() as session:
-        sell_result = await session.execute(
-            select(Transaction)
-            .where(
-                Transaction.type.in_(["sell", "transfer_out"]),
-                Transaction.security_id.isnot(None),
-                Transaction.quantity > 0,
-            )
-            .order_by(Transaction.trade_date)
-        )
-        sells = sell_result.scalars().all()
-
         matched = 0
-        for sell in sells:
-            remaining_to_sell = sell.quantity
-
-            # Find open lots for this security+account, FIFO order
-            lots_result = await session.execute(
-                select(TaxLot)
-                .where(
-                    TaxLot.account_id == sell.account_id,
-                    TaxLot.security_id == sell.security_id,
-                    TaxLot.state.in_(["open", "partially_closed"]),
-                    TaxLot.remaining_quantity > 0,
+        for txn in txns:
+            before_lot_ids = set()
+            if txn.type in ("buy", "transfer_in"):
+                existing = await session.execute(
+                    select(TaxLot.id).where(TaxLot.open_transaction_id == txn.id).limit(1)
                 )
-                .order_by(TaxLot.acquired_date)
-            )
-            open_lots = lots_result.scalars().all()
-
-            for lot in open_lots:
-                if remaining_to_sell <= 0:
-                    break
-
-                if lot.remaining_quantity <= remaining_to_sell:
-                    # Fully close this lot
-                    qty_closed = lot.remaining_quantity
-                    proportion = float(qty_closed) / float(lot.original_quantity)
-                    cost = int(lot.cost_basis_cents * proportion)
-                    proceeds_proportion = float(qty_closed) / float(sell.quantity)
-                    proceeds = int((sell.total_cents - sell.fee_cents) * proceeds_proportion)
-
-                    lot.remaining_quantity = Decimal("0")
-                    lot.state = "closed"
-                    lot.closed_date = sell.trade_date
-                    lot.close_transaction_id = sell.id
-                    lot.proceeds_cents = proceeds
-                    lot.realized_pnl_cents = proceeds - cost
-                    lot.fx_rate_at_close = sell.fx_rate
-
-                    remaining_to_sell -= qty_closed
-                    matched += 1
-                else:
-                    # Partially close
-                    qty_closed = remaining_to_sell
-                    lot.remaining_quantity -= qty_closed
-                    lot.state = "partially_closed"
-                    matched += 1
-                    remaining_to_sell = Decimal("0")
+                if existing.scalar_one_or_none() is None:
+                    await apply_tax_lot(session, txn)
+                    created += 1
+            elif txn.type in ("sell", "transfer_out"):
+                existing = await session.execute(
+                    select(TaxLot.id).where(TaxLot.close_transaction_id == txn.id).limit(1)
+                )
+                if existing.scalar_one_or_none() is None:
+                    await apply_tax_lot(session, txn)
+                    # Count lots now closed by this sell
+                    closed_q = await session.execute(
+                        select(func.count())
+                        .select_from(TaxLot)
+                        .where(TaxLot.close_transaction_id == txn.id)
+                    )
+                    matched += closed_q.scalar_one()
 
         await session.commit()
 
     return {
-        "data": {"lotsCreated": created, "lotsMatched": matched},
+        "data": {"lotsCreated": created, "lotsMatched": matched, "reset": reset},
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }

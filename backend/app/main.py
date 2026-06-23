@@ -45,13 +45,21 @@ async def lifespan(app: FastAPI):
     await app.state.redis.ping()
     logger.info("Redis connected")
 
-    # Start Telegram bot polling (if configured)
+    # Start the inbound bot for the configured notification provider.
+    # - signal: inbound arrives via /api/v1/notifications/signal-webhook (push),
+    #   no background task needed.
+    # - telegram: long-poll Telegram's getUpdates in a background task.
     tg_task = None
-    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+    provider = (settings.NOTIFICATION_PROVIDER or "").lower()
+    if provider == "telegram" and settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
         from app.services.telegram_bot import TelegramBot
         bot = TelegramBot(settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID, app.state.redis)
         tg_task = asyncio.create_task(bot.start_polling())
         logger.info("Telegram bot polling started")
+    elif provider == "signal":
+        logger.info("Signal mode — inbound handled via signal-webhook, no polling task")
+    else:
+        logger.info("notification_provider", provider=provider or "(unset)")
 
     yield
 

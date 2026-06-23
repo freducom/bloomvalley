@@ -14,6 +14,7 @@ from app.db.engine import async_session
 from app.db.models.accounts import Account
 from app.db.models.securities import Security
 from app.db.models.transactions import Transaction
+from app.services.tax_lots import apply_transaction as apply_tax_lot
 
 logger = structlog.get_logger()
 
@@ -58,6 +59,11 @@ async def create_transaction(body: TransactionCreate):
             external_ref=body.external_ref,
         )
         session.add(tx)
+        await session.flush()
+        try:
+            await apply_tax_lot(session, tx)
+        except Exception as e:
+            logger.warning("tax_lot_apply_failed", txn_id=tx.id, error=str(e))
         await session.commit()
         await session.refresh(tx)
 
