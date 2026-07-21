@@ -52,7 +52,7 @@ const BUCKET_INFO: Record<string, string> = {
   dividend:
     "Net dividends (after withholding tax) with pay_date inside the period. Reads dividends.net_amount_eur_cents.",
   unrealizedGain:
-    "For each security still held, the value change during the period attributable to price movement alone: V_end − V_start − net_cash_flows_in_period. Only securities where this is positive contribute here.",
+    "Price movement during the period on shares still held at period end. Split into two parts: shares held throughout the period contribute shares × (price_end − price_start); shares bought during the period and still held contribute shares × (price_end − avg_buy_price_in_period). Fully-closed positions contribute 0. Note: this is the change during the window only — not the full gap from your cost basis (see the portfolio page for that). Only securities where this is positive contribute here.",
   unrealizedLoss:
     "Same math as Unrealized gains, but only securities where the period-attributed price change is negative.",
   net:
