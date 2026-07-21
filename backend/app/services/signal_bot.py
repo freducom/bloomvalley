@@ -24,6 +24,7 @@ HELP_TEXT = (
     "Bloomvalley Signal Bot\n\n"
     "  help            This message.\n"
     "  portfolio       Current holdings + allocation.\n"
+    "  chart [DAYS]    Portfolio value chart, DAYS window (default 90).\n"
     "  gains [YEAR]    Realized gains + dividends for YEAR (default: YTD).\n"
     "  brief           Latest analyst brief for today.\n"
     "  status          Swarm + pipeline health.\n"
@@ -57,6 +58,14 @@ async def process_message(text: str, redis, api_key: str) -> str:
             return "History cleared."
         if cmd == "portfolio":
             return await _portfolio_summary(headers)
+        if cmd == "chart":
+            days = 90
+            if args:
+                try:
+                    days = int(args.split()[0])
+                except ValueError:
+                    return "Usage: chart [DAYS]"
+            return await _portfolio_chart(headers, days)
         if cmd == "gains":
             year = None
             if args:
@@ -237,8 +246,109 @@ async def _analyze(ticker: str) -> str:
     return await get_full_response([msg], security_context=ctx)
 
 
+_WATCHLIST_KEYWORDS = (
+    "watchlist", "watch list", "watchable",
+    "munger", "buffett", "graham",
+    "moat", "compounder", "compounding",
+    "value investing", "value stock", "value stocks", "value pick", "value picks",
+    "quality stock", "quality stocks", "quality pick", "quality picks",
+    "undervalued", "intrinsic value", "fair value",
+    "p/b", "p/e", "roic", "roe", "fcf yield", "fundamental", "fundamentals",
+)
+
+
+async def _portfolio_chart(headers: dict, days: int) -> str:
+    """Fetch /portfolio/value-history for DAYS, render a line chart, send via
+    signal-gateway-notify as an image attachment. Returns a short ack.
+    """
+    days = max(7, min(days, 730))
+    async with httpx.AsyncClient(timeout=30, base_url=_BASE_URL, headers=headers) as client:
+        resp = await client.get(f"/portfolio/value-history?days={days}")
+    if resp.status_code != 200:
+        return f"Chart failed (value-history HTTP {resp.status_code})."
+    body = resp.json()
+    points = body.get("data") or []
+    if not points:
+        return "Chart failed (no history returned)."
+
+    # Points shape: [{"date": "YYYY-MM-DD", "valueCents": int, ...}]
+    try:
+        dates = [datetime.strptime(p["date"], "%Y-%m-%d") for p in points]
+        values_eur = [float(p.get("valueCents", 0)) / 100 for p in points]
+    except (KeyError, ValueError) as e:
+        return f"Chart failed (bad history shape: {e})."
+
+    png = _render_value_history_png(dates, values_eur, days)
+    if png is None:
+        return "Chart failed (matplotlib unavailable)."
+
+    from app.services import signal as signal_provider
+    latest = values_eur[-1]
+    first = values_eur[0]
+    delta = latest - first
+    delta_pct = (delta / first * 100) if first else 0
+    caption = (
+        f"**Portfolio value — last {days} days**\n"
+        f"{latest:,.0f} EUR ({delta:+,.0f} EUR, {delta_pct:+.1f}%)"
+    )
+    ok = await signal_provider.send_image(caption, png, force=True)
+    return "chart sent" if ok else "chart render OK but Signal send failed"
+
+
+def _render_value_history_png(dates, values_eur, days: int):
+    """Line chart of portfolio value. Returns PNG bytes or None if matplotlib
+    isn't installed.
+    """
+    import io
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+    except ImportError:
+        return None
+
+    fig, ax = plt.subplots(figsize=(8, 4.5), constrained_layout=True)
+    fig.patch.set_facecolor("#1a1a1a")
+    ax.set_facecolor("#222")
+
+    ax.plot(dates, values_eur, color="#6cc26c", linewidth=1.4)
+    ax.fill_between(dates, values_eur, alpha=0.15, color="#6cc26c")
+
+    ax.set_title(
+        f"Portfolio value — last {days} days",
+        color="#eee",
+        fontsize=11,
+        loc="left",
+        pad=6,
+    )
+    ax.tick_params(colors="#aaa", labelsize=8)
+    for s in ax.spines.values():
+        s.set_color("#444")
+    ax.grid(True, color="#333", linewidth=0.5, alpha=0.5)
+    ax.yaxis.set_major_formatter(
+        matplotlib.ticker.FuncFormatter(lambda x, _: f"{x/1000:,.0f}k€")
+    )
+    if days > 60:
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO, interval=max(1, days // 14)))
+    else:
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    fig.autofmt_xdate(rotation=30, ha="right")
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def _wants_watchlist_context(text: str) -> bool:
+    lo = (text or "").lower()
+    return any(kw in lo for kw in _WATCHLIST_KEYWORDS)
+
+
 async def _chat(text: str, redis) -> str:
-    from app.api.v1.chat import ChatMessage, get_full_response
+    from app.api.v1.chat import ChatMessage, _fetch_watchlist_context, get_full_response
 
     raw = await redis.get(_REDIS_HISTORY_KEY)
     history = json.loads(raw) if raw else []
@@ -246,7 +356,15 @@ async def _chat(text: str, redis) -> str:
     history = history[-_HISTORY_MAX:]
 
     messages = [ChatMessage(role=m["role"], content=m["content"]) for m in history]
-    response = await get_full_response(messages)
+
+    security_context = ""
+    if _wants_watchlist_context(text):
+        try:
+            security_context = await _fetch_watchlist_context()
+        except Exception as e:
+            logger.warning("watchlist_context_failed", error=str(e))
+
+    response = await get_full_response(messages, security_context=security_context)
 
     history.append({"role": "assistant", "content": response})
     await redis.set(_REDIS_HISTORY_KEY, json.dumps(history), ex=_HISTORY_TTL)

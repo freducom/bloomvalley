@@ -23,6 +23,7 @@ dependencies = [
     "beautifulsoup4",
     "lxml",
     "exchange_calendars",
+    "matplotlib",
 ]
 
 [project.optional-dependencies]

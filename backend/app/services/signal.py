@@ -87,3 +87,44 @@ async def send(text_html: str, force: bool = False) -> bool:
     except Exception as e:
         logger.error("signal_send_error", error=str(e))
         return False
+
+
+async def send_image(caption: str, png_bytes: bytes, force: bool = False) -> bool:
+    """Send an image with a styled caption via signal-gateway-notify (JSON body,
+    text_mode=styled, base64 attachment). Respects quiet hours the same way
+    as send() unless force=True.
+    """
+    import base64
+    if not is_configured():
+        return False
+    if not force and _is_quiet_hours():
+        logger.info("signal_skipped_quiet_hours", kind="image")
+        return False
+    b64 = base64.b64encode(png_bytes).decode()
+    try:
+        async with send_lock:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    settings.SIGNAL_NOTIFY_URL,
+                    headers={
+                        "X-Token": settings.SIGNAL_NOTIFY_TOKEN,
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "message": caption,
+                        "attachments_base64": [f"data:image/png;base64,{b64}"],
+                        "text_mode": "styled",
+                    },
+                )
+                if resp.status_code != 200:
+                    logger.warning(
+                        "signal_send_image_failed",
+                        status=resp.status_code,
+                        body=resp.text[:200],
+                    )
+                    return False
+                logger.info("signal_sent_image", bytes=len(png_bytes))
+                return True
+    except Exception as e:
+        logger.error("signal_send_image_error", error=str(e))
+        return False
