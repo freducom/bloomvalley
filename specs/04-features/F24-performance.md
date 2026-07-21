@@ -22,24 +22,28 @@ All values in EUR cents.
 
 ## 2. Unrealized period-attribution math
 
-For a security with position at end of period, the period-attributed unrealized change is:
+The unrealized bucket counts **only shares still held at period end**. A position that was fully closed during the period contributes exactly zero to this bucket — its entire P&L is captured by the realized bucket (and dividends). This avoids double-counting closed round-trips.
+
+For each security still held at period end, split the still-held shares into two cohorts and sum:
 
 ```
-V_end   = shares_end   × price_end    (EUR-converted)
-V_start = shares_start × price_start  (EUR-converted)
-flows   = buy_cash_in_period − sell_cash_in_period   (EUR at txn date)
+shares_kept_from_before   = min(shares_start, shares_end)   ← held throughout the period
+shares_new_still_held     = max(0, shares_end − shares_start) ← bought during period, not yet sold
 
-unrealized_change = V_end − V_start − flows
+unrealized_change  =
+     shares_kept_from_before × (price_end − price_start)         (EUR per share)
+   + shares_new_still_held  × (price_end − avg_period_buy_price) (EUR per share)
 ```
 
 Where:
-- `shares_end` = shares held at period end (from live holdings if period end = today, else back-computed).
-- `shares_start` = `shares_end − net_shares_added_in_period` (buys and transfers-in minus sells and transfers-out during period).
-- `price_start` = last daily close on or before period start; `price_end` = last daily close on or before period end.
-- If a security was entered mid-period (shares_start = 0), `V_start = 0` — the unrealized change reflects only the movement since the first buy.
-- If a security was fully sold mid-period (shares_end = 0), it contributes nothing to unrealized (its P&L is captured in the realized bucket).
+- `shares_end` = position at period end (from transaction walk).
+- `shares_start` = position at period start (net txns dated before `fromDate`).
+- `price_start` / `price_end` = last daily close on or before period-start / period-end, converted to EUR at that date's FX rate.
+- `avg_period_buy_price` = total EUR paid for period buys ÷ total shares bought during the period. Approximates FIFO/specific-ID for the "still-held bought-in-period" cohort.
 
-**Sign for the gain/loss split**: bucket by whether `unrealized_change` for the security is positive or negative — i.e., what happened during the period, not what happened against original cost basis.
+**Sign for the gain/loss split**: bucket by whether `unrealized_change` for the security is positive (unrealized gains) or negative (unrealized losses). Fully-closed positions have `shares_end = 0` → `unrealized_change = 0` → no contribution.
+
+**Why not `V_end − V_start − flows`?** That formula sums to the total portfolio period return, but for positions bought and sold entirely inside the period it collapses `V_end = V_start = 0` and reports `-(buys − sells) = realized_pnl` in the unrealized bucket, double-counting the realized gain. Restricting the bucket to still-held shares removes the double-count at the cost of not summing perfectly to portfolio-level return (the difference is pre-period accrual on shares sold during the period).
 
 ## 3. Currency
 

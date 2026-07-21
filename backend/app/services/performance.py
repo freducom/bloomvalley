@@ -139,26 +139,24 @@ async def compute_performance(from_date: date, to_date: date) -> dict:
                 continue
             txns = txns_by_sid.get(sid, [])
 
-            # Aggregate share/cash flows across the whole life, then split by period.
+            # Walk transactions to compute share balances and period-only cash flows.
             shares_end = Decimal(0)
             shares_start = Decimal(0)
-            buys_in_period_eur = 0  # cash out of investor
-            sells_in_period_eur = 0  # cash in to investor
+            shares_bought_in_period = Decimal(0)  # gross buy shares in period (for avg-cost calc)
+            buys_in_period_eur = 0  # gross cash paid for buys in period
 
             for t in txns:
                 q = Decimal(t.quantity or 0)
-                sign = 1 if t.type in _BUY_LIKE else -1  # +q for buy/transfer_in, -q for sell/transfer_out
+                sign = 1 if t.type in _BUY_LIKE else -1
                 shares_end += sign * q
                 if t.trade_date < from_date:
                     shares_start += sign * q
                 elif t.trade_date <= to_date:
-                    total_eur = await _txn_total_to_eur_cents(session, t)
                     if t.type in _BUY_LIKE:
-                        buys_in_period_eur += total_eur
-                    else:
-                        sells_in_period_eur += total_eur
+                        shares_bought_in_period += q
+                        buys_in_period_eur += await _txn_total_to_eur_cents(session, t)
 
-            # If neither end nor start position, and no realized/dividend, skip.
+            # Skip securities with no exposure and no realized/dividend activity.
             if (
                 shares_end == 0
                 and shares_start == 0
@@ -167,19 +165,23 @@ async def compute_performance(from_date: date, to_date: date) -> dict:
             ):
                 continue
 
-            # Price and FX at each anchor
-            v_end_eur = 0
-            v_start_eur = 0
+            # Price anchors (only fetched when needed).
             price_end_cents: Optional[int] = None
             price_start_cents: Optional[int] = None
+            price_end_eur_per_share: Optional[Decimal] = None
+            price_start_eur_per_share: Optional[Decimal] = None
+            v_end_eur = 0
 
             if shares_end != 0:
                 p_end = await _price_on_or_before(session, sid, to_date)
                 if p_end:
                     close_cents, cur, _ = p_end
                     price_end_cents = close_cents
-                    v_end_eur = await _shares_at_price_to_eur(
-                        session, shares_end, close_cents, cur, to_date
+                    price_end_eur_per_share = await _price_to_eur_per_share(
+                        session, close_cents, cur, to_date
+                    )
+                    v_end_eur = int(
+                        (Decimal(shares_end) * price_end_eur_per_share).to_integral_value()
                     )
 
             if shares_start != 0:
@@ -187,12 +189,32 @@ async def compute_performance(from_date: date, to_date: date) -> dict:
                 if p_start:
                     close_cents, cur, _ = p_start
                     price_start_cents = close_cents
-                    v_start_eur = await _shares_at_price_to_eur(
-                        session, shares_start, close_cents, cur, period_start_price_date
+                    price_start_eur_per_share = await _price_to_eur_per_share(
+                        session, close_cents, cur, period_start_price_date
                     )
 
-            flows_eur = buys_in_period_eur - sells_in_period_eur
-            unrealized_change = v_end_eur - v_start_eur - flows_eur
+            # Unrealized bucket: only price movement on shares STILL HELD at period end.
+            # Splits into "held throughout" (period-start → period-end price change) and
+            # "bought during period, still held" (avg-buy → period-end price change).
+            unrealized_change = 0
+
+            shares_kept_from_before = min(max(shares_start, Decimal(0)), max(shares_end, Decimal(0)))
+            shares_new_still_held = max(Decimal(0), shares_end - shares_kept_from_before)
+
+            if shares_kept_from_before > 0 and price_end_eur_per_share is not None and price_start_eur_per_share is not None:
+                unrealized_change += int(
+                    (shares_kept_from_before * (price_end_eur_per_share - price_start_eur_per_share)).to_integral_value()
+                )
+
+            if shares_new_still_held > 0 and shares_bought_in_period > 0 and price_end_eur_per_share is not None:
+                avg_buy_per_share_eur = Decimal(buys_in_period_eur) / shares_bought_in_period
+                unrealized_change += int(
+                    (shares_new_still_held * (price_end_eur_per_share - avg_buy_per_share_eur)).to_integral_value()
+                )
+
+            v_start_eur = int(
+                (shares_start * price_start_eur_per_share).to_integral_value()
+            ) if (shares_start != 0 and price_start_eur_per_share is not None) else 0
 
             realized_cents = realized_by_security.get(sid, 0)
             dividend_cents = dividend_by_security.get(sid, 0)
@@ -266,19 +288,20 @@ async def _txn_total_to_eur_cents(session: AsyncSession, txn: Transaction) -> in
     return _to_eur_cents(int(txn.total_cents), txn.currency, txn_fx, table_rate)
 
 
-async def _shares_at_price_to_eur(
+async def _price_to_eur_per_share(
     session: AsyncSession,
-    shares: Decimal,
     price_cents: int,
     price_currency: str,
     on_date: date,
-) -> int:
-    """Value shares * price in EUR cents. Uses FxRate on `on_date`."""
-    native_value_cents = int((shares * Decimal(price_cents)).to_integral_value())
+) -> Decimal:
+    """Convert one share's price (native cents) to EUR cents per share.
+    Uses FxRate on `on_date`; returns Decimal for downstream arithmetic."""
     if not price_currency or price_currency == "EUR":
-        return native_value_cents
+        return Decimal(price_cents)
     table_rate = await _lookup_fx_table_rate(session, price_currency, on_date)
-    return _to_eur_cents(native_value_cents, price_currency, None, table_rate)
+    if table_rate and table_rate > 0:
+        return Decimal(price_cents) / Decimal(table_rate)
+    return Decimal(price_cents)
 
 
 def _empty_response(from_date: date, to_date: date) -> dict:
