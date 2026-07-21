@@ -53,7 +53,24 @@ All aggregates are EUR. FX-conversion helpers already exist in `backend/app/serv
 
 Realized P&L and dividends are stored pre-normalized in EUR cents, so no conversion is needed for those buckets. Unrealized computation converts spot prices and transaction cash-flows to EUR using FxRate on the relevant date.
 
-## 4. API
+## 4. Return %
+
+Each per-security row includes a period return computed server-side:
+
+```
+baseline_eur       = |value_at_period_start_eur| + eur_spent_on_buys_during_period
+return_pct         = net_cents / baseline_eur   (or null if baseline_eur == 0)
+```
+
+Rationale:
+- **Uses `|value_start|` (absolute)** so short positions are treated as capital-at-risk with the same sign as longs.
+- **Adds gross buys in period** — captures capital deployed inside the window even when the position was opened during the period.
+- **Does not subtract sells** — sells return capital together with realized P&L, which the numerator already reflects. Subtracting them would double-count.
+- **Null when `baseline_eur == 0`**: legitimate "no capital deployed" case (no shares at start, no in-period buys — e.g. a dividend-only row from a transferred-in position with missing price history).
+
+This deliberately isn't a true TWR/MWR — those would require timestamped daily flows. Capital-at-risk baseline is a stable, defensible denominator that behaves correctly for round-trips, fresh purchases, and mixed positions.
+
+## 5. API
 
 ### `GET /api/v1/performance`
 
@@ -92,7 +109,10 @@ Response:
         "priceStartCents": 18500,
         "priceEndCents": 22300,
         "valueEndEurCents": 240000,
-        "valueStartEurCents": 195000
+        "valueStartEurCents": 195000,
+        "costOfBuysInPeriodEurCents": 0,
+        "baselineEurCents": 195000,
+        "returnPct": 0.2406
       }
     ]
   },
@@ -102,7 +122,7 @@ Response:
 
 Rows in `bySecurity` include every security that contributed to any bucket in the period (had a closed lot, a paid dividend, or non-zero unrealized change). Sorted by `abs(netCents)` desc so the biggest movers surface first.
 
-## 5. Frontend
+## 6. Frontend
 
 Route: `/performance`. Sidebar link under **Portfolio** labeled "Performance" (ChartLine icon).
 
@@ -114,7 +134,7 @@ Route: `/performance`. Sidebar link under **Portfolio** labeled "Performance" (C
 
 Additionally, a compact **5-card strip** on the portfolio dashboard (`/portfolio`) shows YTD numbers with a link to `/performance`. Uses the same endpoint, hard-coded YTD range.
 
-## 6. Non-goals (deferred)
+## 7. Non-goals (deferred)
 
 - Per-account breakdown (currently aggregated across all accounts).
 - Withholding-tax breakdown per country (already visible on the tax page).

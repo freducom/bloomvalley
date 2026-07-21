@@ -35,6 +35,9 @@ interface SecurityRow {
   priceEndCents: number | null;
   valueEndEurCents: number;
   valueStartEurCents: number;
+  costOfBuysInPeriodEurCents: number;
+  baselineEurCents: number;
+  returnPct: number | null;
 }
 
 interface Payload {
@@ -44,7 +47,7 @@ interface Payload {
   bySecurity: SecurityRow[];
 }
 
-type SortKey = "netCents" | "realizedCents" | "dividendCents" | "unrealizedChangeCents" | "ticker";
+type SortKey = "netCents" | "realizedCents" | "dividendCents" | "unrealizedChangeCents" | "returnPct" | "ticker";
 
 const BUCKET_INFO: Record<string, string> = {
   realized:
@@ -206,28 +209,29 @@ export default function PerformancePage() {
                       <th className="text-right p-2 cursor-pointer hover:text-terminal-text-primary" onClick={() => toggleSort("dividendCents")}>Dividends</th>
                       <th className="text-right p-2 cursor-pointer hover:text-terminal-text-primary" onClick={() => toggleSort("unrealizedChangeCents")}>Unrealized Δ</th>
                       <th className="text-right p-2 cursor-pointer hover:text-terminal-text-primary" onClick={() => toggleSort("netCents")}>Net</th>
-                      <th className="text-right p-2">Return</th>
+                      <th className="text-right p-2 cursor-pointer hover:text-terminal-text-primary" onClick={() => toggleSort("returnPct")}>
+                        <span className="inline-flex items-center gap-1">
+                          Return
+                          <InfoTip text="Net P&L ÷ capital-at-risk baseline. Baseline = |value at period start| + EUR spent on buys during the period. Sells are not subtracted from the baseline (returned capital + P&L is already in the numerator). Shows '—' when no capital was deployed to this position in the window (e.g. security had no starting position AND no new buys)." />
+                        </span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedRows.map((r) => {
-                      const baseline = r.valueStartEurCents + Math.max(0, r.netCents - r.unrealizedChangeCents);
-                      const returnPct = baseline > 0 ? r.netCents / baseline : null;
-                      return (
-                        <tr key={r.securityId} className="border-b border-terminal-border/60 hover:bg-terminal-bg-hover/30">
-                          <td className="p-2"><TickerLink ticker={r.ticker} /></td>
-                          <td className="p-2 text-terminal-text-secondary truncate max-w-xs">{r.name}</td>
-                          <td className="p-2 text-terminal-text-muted">{r.sector || "—"}</td>
-                          <td className="p-2 text-right"><ColoredAmount cents={r.realizedCents} /></td>
-                          <td className="p-2 text-right"><ColoredAmount cents={r.dividendCents} /></td>
-                          <td className="p-2 text-right"><ColoredAmount cents={r.unrealizedChangeCents} /></td>
-                          <td className="p-2 text-right font-semibold"><ColoredAmount cents={r.netCents} /></td>
-                          <td className="p-2 text-right text-terminal-text-secondary">
-                            {returnPct !== null ? formatPercent(returnPct * 100, true) : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {sortedRows.map((r) => (
+                      <tr key={r.securityId} className="border-b border-terminal-border/60 hover:bg-terminal-bg-hover/30">
+                        <td className="p-2"><TickerLink ticker={r.ticker} /></td>
+                        <td className="p-2 text-terminal-text-secondary truncate max-w-xs">{r.name}</td>
+                        <td className="p-2 text-terminal-text-muted">{r.sector || "—"}</td>
+                        <td className="p-2 text-right"><ColoredAmount cents={r.realizedCents} /></td>
+                        <td className="p-2 text-right"><ColoredAmount cents={r.dividendCents} /></td>
+                        <td className="p-2 text-right"><ColoredAmount cents={r.unrealizedChangeCents} /></td>
+                        <td className="p-2 text-right font-semibold"><ColoredAmount cents={r.netCents} /></td>
+                        <td className="p-2 text-right text-terminal-text-secondary">
+                          {r.returnPct !== null ? formatPercent(r.returnPct * 100, true) : "—"}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

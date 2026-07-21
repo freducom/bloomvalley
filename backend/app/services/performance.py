@@ -220,6 +220,15 @@ async def compute_performance(from_date: date, to_date: date) -> dict:
             dividend_cents = dividend_by_security.get(sid, 0)
             net_cents = realized_cents + dividend_cents + unrealized_change
 
+            # Capital-at-risk baseline for return %: absolute market value of the
+            # position held at period start (shorts count as positive at-risk capital)
+            # + gross EUR spent on buys during the period. Sells are NOT subtracted:
+            # they return capital together with realized P&L, which is already in the
+            # numerator. Rows with no start position AND no in-period buys yield
+            # baseline == 0 and returnPct == null (legitimate "no capital deployed").
+            baseline_eur = abs(v_start_eur) + buys_in_period_eur
+            return_pct = (net_cents / baseline_eur) if baseline_eur > 0 else None
+
             if realized_cents > 0:
                 totals["realizedGainCents"] += realized_cents
             elif realized_cents < 0:
@@ -247,6 +256,9 @@ async def compute_performance(from_date: date, to_date: date) -> dict:
                     "priceEndCents": price_end_cents,
                     "valueEndEurCents": v_end_eur,
                     "valueStartEurCents": v_start_eur,
+                    "costOfBuysInPeriodEurCents": buys_in_period_eur,
+                    "baselineEurCents": baseline_eur,
+                    "returnPct": return_pct,
                 }
             )
 
