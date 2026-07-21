@@ -84,6 +84,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 ### Portfolio & Trading
 - **Portfolio Dashboard** — real-time holdings, P&L, portfolio value chart, allocation by asset class and account
 - **AI Recommendations** — buy/sell/hold signals from the analyst swarm with bull/bear cases, confidence levels, target prices, and retrospective accuracy tracking
+- **Performance** — period-scoped P&L (MTD / YTD / 1Y / custom) split into 5 buckets: realized gains, realized losses, dividends paid, unrealized gains, unrealized losses. Uses period-attributed math (`V_end − V_start − net_flows`) so cash deposits and withdrawals don't distort investment returns. Compact YTD strip on the dashboard, full breakdown with per-security table on `/performance`
 - **Holdings** — current positions across accounts with cost basis, unrealized P&L, live quotes, dividend income
 - **Transactions** — filterable transaction log with type/account filters, search, pagination, and summary stats
 - **Nordnet Import** — paste Nordnet portfolio exports (Finnish CSV), automatic security matching and reconciliation
@@ -100,6 +101,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Research Coverage** — dashboard showing which securities have stale or missing analyst coverage, with staleness badges and filters
 - **Analyst Consensus** — view how the 9 AI agents agree or disagree per security, with conflict detection between Research Analyst and Portfolio Manager
 - **Recommendation Accuracy** — mark-to-market tracking of PM recommendations at 30/90/180 day checkpoints with win rates, avg returns, and best/worst calls
+- **Sector Rotation (RRG)** — 14-week Relative Rotation Graph of the 11 GICS sectors vs SPY, plotting each sector by RS-Ratio and RS-Momentum on a 4-quadrant chart (Leading / Weakening / Lagging / Improving). Flags BUY signals (Improving→Leading) and SELL signals (Weakening→Lagging), and lists the top ETFs by dollar-volume and top stocks by market cap from your watchlist in each mover sector
 - **Fundamentals** — P/B, FCF, DCF valuation, ROIC, margins, short interest
 - **Earnings** — calendar with estimates, actual EPS, revenue surprises
 - **Retirement Projections** — Monte Carlo simulation (10,000 paths) with fan chart, survival probabilities, safe withdrawal rate, and sensitivity analysis

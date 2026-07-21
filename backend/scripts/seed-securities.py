@@ -51,6 +51,20 @@ SEED_SECURITIES = [
     {"ticker": "VUSA", "name": "Vanguard S&P 500 UCITS ETF", "asset_class": "etf", "currency": "USD", "exchange": "XLON", "is_accumulating": False, "isin": "IE00B3XXRP09"},
     {"ticker": "IEGA", "name": "iShares Core Euro Government Bond UCITS ETF", "asset_class": "etf", "currency": "EUR", "exchange": "XAMS", "is_accumulating": True, "isin": "IE00B4WXJJ64"},
 
+    # US sector ETFs — used for Relative Rotation Graph (F23). SPY is the RRG benchmark.
+    {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "isin": "US78462F1030", "is_accumulating": False},
+    {"ticker": "XLK", "name": "Technology Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Information Technology", "is_accumulating": False},
+    {"ticker": "XLF", "name": "Financial Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Financials", "is_accumulating": False},
+    {"ticker": "XLE", "name": "Energy Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Energy", "is_accumulating": False},
+    {"ticker": "XLV", "name": "Health Care Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Health Care", "is_accumulating": False},
+    {"ticker": "XLY", "name": "Consumer Discretionary Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Consumer Discretionary", "is_accumulating": False},
+    {"ticker": "XLP", "name": "Consumer Staples Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Consumer Staples", "is_accumulating": False},
+    {"ticker": "XLI", "name": "Industrial Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Industrials", "is_accumulating": False},
+    {"ticker": "XLB", "name": "Materials Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Materials", "is_accumulating": False},
+    {"ticker": "XLU", "name": "Utilities Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Utilities", "is_accumulating": False},
+    {"ticker": "XLRE", "name": "Real Estate Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Real Estate", "is_accumulating": False},
+    {"ticker": "XLC", "name": "Communication Services Select Sector SPDR Fund", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "sector": "Communication Services", "is_accumulating": False},
+
     # Norwegian stocks
     {"ticker": "TEL.OL", "name": "Telenor ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Communication Services", "country": "NO"},
     {"ticker": "GJF.OL", "name": "Gjensidige Forsikring ASA", "asset_class": "stock", "currency": "NOK", "exchange": "XOSL", "sector": "Financials", "country": "NO"},

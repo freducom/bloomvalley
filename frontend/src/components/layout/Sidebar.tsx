@@ -40,6 +40,8 @@ import {
   Banknote,
   FlaskConical,
   Milestone,
+  Compass,
+  LineChart,
   type LucideIcon,
 } from "lucide-react";
 import { usePrivacy } from "@/lib/privacy";
@@ -60,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Portfolio",
     items: [
       { label: "Dashboard", href: "/portfolio", icon: LayoutDashboard },
+      { label: "Performance", href: "/performance", icon: LineChart },
       { label: "Recommendations", href: "/recommendations", icon: ThumbsUp },
       { label: "Timeline", href: "/timeline", icon: Milestone },
       { label: "Holdings", href: "/holdings", icon: Briefcase },
@@ -84,6 +87,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Coverage", href: "/coverage", icon: ScanSearch },
       { label: "Consensus", href: "/consensus", icon: Users },
       { label: "Accuracy", href: "/accuracy", icon: Target },
+      { label: "Sector Rotation", href: "/rrg", icon: Compass },
       { label: "Fundamentals", href: "/fundamentals", icon: BarChart3 },
       { label: "Earnings", href: "/earnings", icon: CalendarClock },
       { label: "Projections", href: "/projections", icon: TrendingUp },

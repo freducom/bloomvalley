@@ -8,6 +8,7 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Private } from "@/lib/privacy";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { PerformanceStrip } from "@/components/portfolio/PerformanceStrip";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceDot,
 } from "recharts";
@@ -154,6 +155,12 @@ export default function PortfolioPage() {
           changeType="neutral"
         />
       </div>
+
+      {!isEmpty && (
+        <div className="mb-8">
+          <PerformanceStrip />
+        </div>
+      )}
 
       {isEmpty ? (
         <div className="flex items-center justify-center h-64 border border-terminal-border rounded-md bg-terminal-bg-secondary">
