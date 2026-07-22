@@ -477,8 +477,12 @@ async def get_value_history(
             for row in sec_result.all():
                 sec_currencies[row.id] = row.currency or "EUR"
 
-    # 2. Fetch historical prices for all securities that were ever held
+    # 2. Fetch historical prices for all securities that were ever held.
+    # Also seed each security's last-known price from before the window so
+    # stale-priced securities (e.g. quarterly-priced funds) don't get dropped
+    # from the chart just because their latest price predates from_date.
     price_rows = []
+    seed_prices: dict[int, tuple[int, str]] = {}
     if all_security_ids:
         async with async_session() as session:
             result = await session.execute(
@@ -489,9 +493,30 @@ async def get_value_history(
             )
             price_rows = result.all()
 
-    # 3. Fetch FX rate history
+            seed_subq = (
+                select(
+                    Price.security_id,
+                    func.max(Price.date).label("max_date"),
+                )
+                .where(Price.security_id.in_(list(all_security_ids)))
+                .where(Price.date < from_date)
+                .group_by(Price.security_id)
+                .subquery()
+            )
+            seed_result = await session.execute(
+                select(Price.security_id, Price.close_cents, Price.currency).join(
+                    seed_subq,
+                    (Price.security_id == seed_subq.c.security_id)
+                    & (Price.date == seed_subq.c.max_date),
+                )
+            )
+            for row in seed_result.all():
+                seed_prices[row.security_id] = (row.close_cents, row.currency)
+
+    # 3. Fetch FX rate history, seeding pre-window rates the same way.
     needed_currencies = {c for c in sec_currencies.values() if c != "EUR"}
     fx_history: dict[str, dict[date, float]] = {}
+    seed_fx: dict[str, float] = {}
     if needed_currencies:
         async with async_session() as session:
             fx_result = await session.execute(
@@ -503,6 +528,28 @@ async def get_value_history(
             )
             for row in fx_result.all():
                 fx_history.setdefault(row.quote_currency, {})[row.date] = float(row.rate)
+
+            fx_seed_subq = (
+                select(
+                    FxRate.quote_currency,
+                    func.max(FxRate.date).label("max_date"),
+                )
+                .where(FxRate.base_currency == "EUR")
+                .where(FxRate.quote_currency.in_(list(needed_currencies)))
+                .where(FxRate.date < from_date)
+                .group_by(FxRate.quote_currency)
+                .subquery()
+            )
+            fx_seed_result = await session.execute(
+                select(FxRate.quote_currency, FxRate.rate).join(
+                    fx_seed_subq,
+                    (FxRate.quote_currency == fx_seed_subq.c.quote_currency)
+                    & (FxRate.date == fx_seed_subq.c.max_date)
+                    & (FxRate.base_currency == "EUR"),
+                )
+            )
+            for row in fx_seed_result.all():
+                seed_fx[row.quote_currency] = float(row.rate)
 
     # 4. Reconstruct daily cash balance
     fx_rates = await _get_fx_rates()
@@ -569,9 +616,11 @@ async def get_value_history(
         running_cash += daily_cash_delta.get(d, 0)
 
     # Determine the active positions for each date
-    # Find the most recent position snapshot on or before each date
-    last_price: dict[int, tuple[int, str]] = {}
-    last_fx: dict[str, float] = {}
+    # Find the most recent position snapshot on or before each date.
+    # Seed with pre-window snapshots so securities whose latest available
+    # price/FX predates from_date still get valued (mirrors /summary behavior).
+    last_price: dict[int, tuple[int, str]] = dict(seed_prices)
+    last_fx: dict[str, float] = dict(seed_fx)
     series = []
 
     # Pre-compute: for each chart date, what were the positions?
