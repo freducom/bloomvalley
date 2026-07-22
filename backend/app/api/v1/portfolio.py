@@ -51,6 +51,35 @@ async def _get_fx_rates() -> dict[str, Decimal]:
     return rates
 
 
+async def _get_earliest_fx_rates() -> dict[str, Decimal]:
+    """Earliest known FX rate per currency. Used as fallback when a valuation
+    date predates all recorded FX rates for that currency — better than a
+    silent 1:1 mixing of currencies, which would 10x-inflate SEK/NOK/JPY etc.
+    """
+    rates: dict[str, Decimal] = {"EUR": Decimal("1.0")}
+    async with async_session() as session:
+        subq = (
+            select(
+                FxRate.quote_currency,
+                func.min(FxRate.date).label("min_date"),
+            )
+            .where(FxRate.base_currency == "EUR")
+            .group_by(FxRate.quote_currency)
+            .subquery()
+        )
+        result = await session.execute(
+            select(FxRate).join(
+                subq,
+                (FxRate.quote_currency == subq.c.quote_currency)
+                & (FxRate.date == subq.c.min_date)
+                & (FxRate.base_currency == "EUR"),
+            )
+        )
+        for fx in result.scalars().all():
+            rates[fx.quote_currency] = fx.rate
+    return rates
+
+
 async def _get_latest_prices() -> dict[int, dict]:
     """Get latest price per security."""
     prices: dict[int, dict] = {}
@@ -150,6 +179,7 @@ async def get_holdings(
 
     prices = await _get_latest_prices()
     fx_rates = await _get_fx_rates()
+    earliest_fx_rates = await _get_earliest_fx_rates()
 
     # Get latest import values as fallback for securities without prices
     import_values: dict[int, dict] = {}  # security_id -> {market_value_eur_cents, last_price_cents, currency}
@@ -191,16 +221,17 @@ async def get_holdings(
         if current_price_cents is not None:
             market_value_cents = int(current_price_cents * float(net_qty))
 
-        # Convert to EUR
+        # Convert to EUR. If no latest rate is known for this currency,
+        # fall back to the earliest-known rate rather than a 1:1 mixing.
         market_value_eur_cents = None
         if market_value_cents is not None:
-            fx = fx_rates.get(price_currency)
             if price_currency == "EUR":
                 market_value_eur_cents = market_value_cents
-            elif fx:
-                market_value_eur_cents = int(market_value_cents / float(fx))
             else:
-                market_value_eur_cents = market_value_cents  # Fallback: treat as EUR
+                fx = fx_rates.get(price_currency) or earliest_fx_rates.get(price_currency)
+                if fx:
+                    market_value_eur_cents = int(market_value_cents / float(fx))
+                # else: no FX data at all for this currency → leave as None
 
         # Fallback: use import values if no price data
         if market_value_eur_cents is None and row.security_id in import_values:
@@ -418,6 +449,7 @@ async def get_value_history(
     from datetime import timedelta
 
     from_date = date.today() - timedelta(days=days)
+    earliest_fx_rates = await _get_earliest_fx_rates()
 
     # 1. Get ALL position-affecting transactions (not just from from_date)
     #    to reconstruct what was held on each date
@@ -666,10 +698,18 @@ async def get_value_history(
                 if d in fx_history.get(currency, {}):
                     last_fx[currency] = fx_history[currency][d]
                 fx = last_fx.get(currency)
+                if fx is None:
+                    # Date predates any FX rate we have for this currency —
+                    # fall back to earliest-known rather than silent 1:1.
+                    ef = earliest_fx_rates.get(currency)
+                    if ef is not None:
+                        fx = float(ef)
                 if fx:
                     total_eur_cents += value_cents / fx
                 else:
-                    total_eur_cents += value_cents
+                    # No FX data at all for this currency — skip position
+                    # rather than 10x-inflating it via a 1:1 conversion.
+                    continue
 
             has_data = True
 
