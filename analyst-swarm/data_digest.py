@@ -127,12 +127,21 @@ def digest_fundamentals_for_security(json_str: str, ticker: str) -> str:
         return f"No fundamental data available for {ticker}."
 
     lines = [f"FUNDAMENTALS: {ticker}"]
+
+    fcf_cur = rec.get("fcfCurrency") or rec.get("currency") or ""
+    fcf_m = rec.get("freeCashFlowMillions")
+    mcap_m = rec.get("marketCapMillions")
+    rev_m = rec.get("revenueMillions")
+
     fields = [
         ("P/E", rec.get("peRatio")),
         ("P/B", rec.get("priceToBook")),
         ("ROIC", f"{rec['roic']:.1%}" if rec.get("roic") else None),
         ("ROE", f"{rec['roe']:.1%}" if rec.get("roe") else None),
         ("FCF Yield", f"{rec['fcfYield']:.1%}" if rec.get("fcfYield") else None),
+        ("FCF", f"{fcf_m:,.0f}M {fcf_cur}" if fcf_m is not None else None),
+        ("Market Cap", f"{mcap_m:,.0f}M {fcf_cur}" if mcap_m is not None else None),
+        ("Revenue (TTM)", f"{rev_m:,.0f}M {fcf_cur}" if rev_m is not None else None),
         ("Net Debt/EBITDA", rec.get("netDebtEbitda")),
         ("Gross Margin", f"{rec['grossMargin']:.1%}" if rec.get("grossMargin") else None),
         ("Operating Margin", f"{rec['operatingMargin']:.1%}" if rec.get("operatingMargin") else None),

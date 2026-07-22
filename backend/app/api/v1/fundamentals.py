@@ -74,6 +74,16 @@ def _fundamentals_to_dict(f: SecurityFundamentals, sec: Security, current_price:
         shares_outstanding = f.market_cap_cents / current_price
         dcf_per_share_cents = round(f.dcf_value_cents / shares_outstanding)
 
+    # Human-scaled aliases for large-magnitude cent integers. Raw cents are
+    # kept for existing consumers, but the "*_Millions" fields (in the
+    # native fcf/price currency, rounded to 2 dp) remove the ambiguity that
+    # makes it easy to misread e.g. 6,122,824,908,800 cents as $612B when
+    # it's actually $61B. Analysts and LLM prompts should prefer these.
+    def _to_millions(cents: int | None) -> float | None:
+        if cents is None:
+            return None
+        return round(cents / 100_000_000, 2)
+
     return {
         "id": f.id,
         "securityId": f.security_id,
@@ -84,8 +94,10 @@ def _fundamentals_to_dict(f: SecurityFundamentals, sec: Security, current_price:
         # Valuation
         "priceToBook": float(f.price_to_book) if f.price_to_book is not None else None,
         "freeCashFlowCents": f.free_cash_flow_cents,
+        "freeCashFlowMillions": _to_millions(f.free_cash_flow_cents),
         "fcfCurrency": f.fcf_currency,
         "dcfValueCents": f.dcf_value_cents,
+        "dcfValueMillions": _to_millions(f.dcf_value_cents),
         "dcfPerShareCents": dcf_per_share_cents,
         "dcfDiscountRate": float(f.dcf_discount_rate) if f.dcf_discount_rate is not None else None,
         "dcfTerminalGrowth": float(f.dcf_terminal_growth) if f.dcf_terminal_growth is not None else None,
@@ -116,6 +128,8 @@ def _fundamentals_to_dict(f: SecurityFundamentals, sec: Security, current_price:
         "netMargin": float(f.net_margin) if f.net_margin is not None else None,
         "peRatio": float(f.pe_ratio) if f.pe_ratio is not None else None,
         "marketCapCents": f.market_cap_cents,
+        "marketCapMillions": _to_millions(f.market_cap_cents),
+        "revenueMillions": _to_millions(f.revenue_cents),
         "updatedAt": f.updated_at.isoformat(),
     }
 

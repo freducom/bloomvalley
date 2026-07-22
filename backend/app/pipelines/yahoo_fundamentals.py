@@ -271,6 +271,18 @@ class YahooFundamentals(PipelineAdapter):
             roe = _safe_decimal(_safe_get(info, "returnOnEquity"))
             free_cash_flow = _safe_get(info, "freeCashflow")
             price_to_book = _safe_decimal(_safe_get(info, "priceToBook"))
+            # Plausibility gate for P/B — Yahoo occasionally serves absurd
+            # values (e.g. BRK-B reporting 0.001 on 2026-07-22). Real listed
+            # equities land in roughly 0.05–30; anything outside is corrupt
+            # or a share-class quirk and shouldn't be laundered downstream.
+            if price_to_book is not None and not (0.05 <= price_to_book <= 30):
+                ticker_str = rec.get("ticker") or "?"
+                logger.warning(
+                    "yahoo_fundamentals_pb_implausible",
+                    ticker=ticker_str,
+                    price_to_book=price_to_book,
+                )
+                price_to_book = None
             # Use trailingAnnualDividendYield (already a decimal, e.g. 0.061 = 6.1%)
             # More reliable than dividendYield which is inconsistently scaled
             dividend_yield = _safe_decimal(_safe_get(info, "trailingAnnualDividendYield"))
