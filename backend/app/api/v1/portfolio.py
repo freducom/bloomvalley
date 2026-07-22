@@ -51,6 +51,55 @@ async def _get_fx_rates() -> dict[str, Decimal]:
     return rates
 
 
+async def _get_shadow_prices(
+    security_ids: list[int] | None = None,
+) -> dict[int, tuple[int, str]]:
+    """Last transaction-implied price per security, used as a fallback when
+    the security has no market price data. Implied price = total_cents /
+    quantity from the most recent buy/sell, in the transaction's booked
+    currency. Ensures unpriced holdings (NORDSVIX, MOON, SHRT-*, WHEAT.L)
+    still contribute to portfolio valuation instead of being silently omitted.
+    """
+    prices: dict[int, tuple[int, str]] = {}
+    async with async_session() as session:
+        subq = (
+            select(
+                Transaction.security_id,
+                func.max(Transaction.trade_date).label("max_date"),
+            )
+            .where(Transaction.security_id.isnot(None))
+            .where(Transaction.type.in_([
+                "buy", "sell", "transfer_in", "transfer_out",
+            ]))
+            .where(Transaction.quantity > 0)
+        )
+        if security_ids:
+            subq = subq.where(Transaction.security_id.in_(security_ids))
+        subq = subq.group_by(Transaction.security_id).subquery()
+
+        result = await session.execute(
+            select(
+                Transaction.security_id,
+                Transaction.total_cents,
+                Transaction.quantity,
+                Transaction.currency,
+            ).join(
+                subq,
+                (Transaction.security_id == subq.c.security_id)
+                & (Transaction.trade_date == subq.c.max_date),
+            )
+        )
+        for r in result.all():
+            if not r.quantity or not r.total_cents:
+                continue
+            qty = float(r.quantity)
+            if qty <= 0:
+                continue
+            implied = int(round(float(r.total_cents) / qty))
+            prices[r.security_id] = (implied, r.currency or "EUR")
+    return prices
+
+
 async def _get_earliest_fx_rates() -> dict[str, Decimal]:
     """Earliest known FX rate per currency. Used as fallback when a valuation
     date predates all recorded FX rates for that currency — better than a
@@ -181,6 +230,11 @@ async def get_holdings(
     fx_rates = await _get_fx_rates()
     earliest_fx_rates = await _get_earliest_fx_rates()
 
+    # Shadow prices: last transaction-implied price per security, used as
+    # a last-resort fallback for holdings with no market price data.
+    unpriced_sids = [r.security_id for r in position_rows if r.security_id not in prices]
+    shadow_prices = await _get_shadow_prices(unpriced_sids) if unpriced_sids else {}
+
     # Get latest import values as fallback for securities without prices
     import_values: dict[int, dict] = {}  # security_id -> {market_value_eur_cents, last_price_cents, currency}
     async with async_session() as session:
@@ -214,6 +268,7 @@ async def get_holdings(
         price_data = prices.get(row.security_id)
         current_price_cents = price_data["close_cents"] if price_data else None
         price_currency = price_data["currency"] if price_data else sec.currency
+        price_source_val: str | None = price_data["source"] if price_data else None
         price_stale = False
 
         # Market value in security currency
@@ -233,11 +288,28 @@ async def get_holdings(
                     market_value_eur_cents = int(market_value_cents / float(fx))
                 # else: no FX data at all for this currency → leave as None
 
-        # Fallback: use import values if no price data
+        # Fallback 1: use import values if no price data
         if market_value_eur_cents is None and row.security_id in import_values:
             iv = import_values[row.security_id]
             market_value_eur_cents = iv["market_value_eur_cents"]
             price_stale = True
+            price_source_val = "nordnet_import"
+
+        # Fallback 2: last transaction-implied price. Same shadow-price
+        # semantics as value-history — keeps unpriced holdings visible.
+        if market_value_eur_cents is None and row.security_id in shadow_prices:
+            scents, scur = shadow_prices[row.security_id]
+            current_price_cents = scents
+            price_currency = scur
+            market_value_cents = int(scents * float(net_qty))
+            if scur == "EUR":
+                market_value_eur_cents = market_value_cents
+            else:
+                fx = fx_rates.get(scur) or earliest_fx_rates.get(scur)
+                if fx:
+                    market_value_eur_cents = int(market_value_cents / float(fx))
+            price_stale = True
+            price_source_val = "transaction_implied"
 
         # Cost basis
         total_cost = int(row.total_cost_cents) if row.total_cost_cents else 0
@@ -277,7 +349,7 @@ async def get_holdings(
             "currentPriceCents": current_price_cents,
             "priceCurrency": price_currency,
             "priceDate": price_data["date"] if price_data else None,
-            "priceSource": price_data["source"] if price_data else ("nordnet_import" if price_stale else None),
+            "priceSource": price_source_val,
             "priceStale": price_stale,
             "marketValueCents": market_value_cents,
             "marketValueEurCents": market_value_eur_cents,
