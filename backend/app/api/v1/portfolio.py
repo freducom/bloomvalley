@@ -545,6 +545,48 @@ async def get_value_history(
             for row in seed_result.all():
                 seed_prices[row.security_id] = (row.close_cents, row.currency)
 
+    # 2b. Synthesize "shadow prices" from transactions for securities with
+    # no price rows at all (e.g. Nordnet in-house funds like NORDSVIX, or
+    # crypto MOON). Without this, an unpriced position never contributes
+    # to holdings valuation, but its eventual buy/sell still moves cash —
+    # producing a phantom step in the value-history chart on transaction
+    # dates. Shadow price per date = tx.total_cents / tx.quantity in the
+    # tx's booked currency, held flat until the next transaction.
+    priced_sids = {r.security_id for r in price_rows} | set(seed_prices.keys())
+    unpriced_sids = set(all_security_ids) - priced_sids
+    shadow_in_window: list[tuple[int, date, int, str]] = []
+    if unpriced_sids:
+        async with async_session() as session:
+            stx_result = await session.execute(
+                select(
+                    Transaction.security_id,
+                    Transaction.trade_date,
+                    Transaction.quantity,
+                    Transaction.total_cents,
+                    Transaction.currency,
+                )
+                .where(Transaction.security_id.in_(list(unpriced_sids)))
+                .where(Transaction.type.in_([
+                    "buy", "sell", "transfer_in", "transfer_out",
+                ]))
+                .order_by(Transaction.trade_date)
+            )
+            for tx in stx_result.all():
+                if not tx.quantity or not tx.total_cents:
+                    continue
+                qty = float(tx.quantity)
+                if qty <= 0:
+                    continue
+                implied_cents = int(round(float(tx.total_cents) / qty))
+                cur = tx.currency or "EUR"
+                if tx.trade_date < from_date:
+                    # Latest pre-window transaction wins (list is date-ordered)
+                    seed_prices[tx.security_id] = (implied_cents, cur)
+                else:
+                    shadow_in_window.append(
+                        (tx.security_id, tx.trade_date, implied_cents, cur)
+                    )
+
     # 3. Fetch FX rate history, seeding pre-window rates the same way.
     needed_currencies = {c for c in sec_currencies.values() if c != "EUR"}
     fx_history: dict[str, dict[date, float]] = {}
@@ -635,8 +677,12 @@ async def get_value_history(
     daily_prices: dict[int, dict[date, tuple[int, str]]] = defaultdict(dict)
     for row in price_rows:
         daily_prices[row.security_id][row.date] = (row.close_cents, row.currency)
+    for sid, tdate, cents, cur in shadow_in_window:
+        daily_prices[sid][tdate] = (cents, cur)
 
-    all_dates = sorted({row.date for row in price_rows})
+    all_dates = sorted(
+        {row.date for row in price_rows} | {t[1] for t in shadow_in_window}
+    )
     if not all_dates:
         return {"data": []}
 
