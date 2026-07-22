@@ -584,7 +584,7 @@ AGENT_DATA = {
         "/fundamentals?limit=200", "/screener/munger", "/macro/regime",
     ],
     "macro-strategist": [
-        "/macro/summary", "/macro/regime", "/portfolio/summary",
+        "/macro/summary", "/macro/regime", "/rrg", "/portfolio/summary",
         "/news?limit=30", "/portfolio/holdings",
     ],
     "fixed-income-analyst": [
@@ -599,6 +599,7 @@ AGENT_DATA = {
     "technical-analyst": [
         "/portfolio/holdings", "/screener/munger",
         "/charts/heatmap?source=holdings&period=1W",
+        "/rrg",
         "/watchlists/",
     ],
     "compliance-officer": [

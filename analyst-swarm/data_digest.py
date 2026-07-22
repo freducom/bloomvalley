@@ -322,6 +322,56 @@ def digest_macro_regime(json_str: str) -> str:
 # ── Risk ──
 
 
+def digest_rrg(json_str: str) -> str:
+    """Summarize the sector Relative Rotation Graph — where each sector sits
+    (Leading/Weakening/Lagging/Improving), the 4-week quadrant transition,
+    and the buy/sell/moved signal. Gives the macro-strategist price-action
+    confirmation of rotation calls without dumping raw floats on the LLM.
+    """
+    d = _safe_parse(json_str)
+    if not d or not isinstance(d, dict):
+        return "No sector rotation (RRG) data available."
+
+    as_of = d.get("asOf", "?")
+    bench = d.get("benchmark", {}) or {}
+    sectors = d.get("sectors", []) or []
+    if not sectors:
+        return "No sector rotation (RRG) data available."
+
+    lines = [
+        f"SECTOR ROTATION (RRG, benchmark: {bench.get('ticker', '?')}, as of {as_of})"
+    ]
+
+    order = ["Leading", "Weakening", "Lagging", "Improving"]
+    by_quadrant: dict[str, list] = {q: [] for q in order}
+    for s in sectors:
+        q = s.get("quadrant") or "?"
+        by_quadrant.setdefault(q, []).append(s)
+
+    for q in order:
+        rows = by_quadrant.get(q) or []
+        if not rows:
+            continue
+        rows.sort(
+            key=lambda r: (r.get("rsRatio") or 0) + (r.get("rsMomentum") or 0),
+            reverse=(q in ("Leading", "Improving")),
+        )
+        lines.append(f"  {q}:")
+        for s in rows:
+            name = s.get("sector", "?")
+            tk = s.get("ticker", "?")
+            rsr = s.get("rsRatio")
+            rsm = s.get("rsMomentum")
+            prev = s.get("quadrant4wAgo")
+            sig = s.get("signal") or "-"
+            transition = f" (was {prev} 4w ago)" if prev and prev != q else ""
+            lines.append(
+                f"    {name} ({tk}): RS-Ratio {rsr:.1f}, RS-Mom {rsm:.1f}, signal={sig}{transition}"
+            )
+
+    return "\n".join(lines)
+
+
 def digest_risk(json_str: str) -> str:
     """Convert risk metrics into readable text."""
     d = _safe_parse(json_str)
@@ -682,6 +732,7 @@ _DIGEST_MAP: dict[str, callable] = {
     "/news": digest_news,
     "/macro/summary": digest_macro,
     "/macro/regime": digest_macro_regime,
+    "/rrg": digest_rrg,
     "/risk/metrics": digest_risk,
     "/risk/stress-tests": digest_stress_tests,
     "/watchlists/": digest_watchlist,
