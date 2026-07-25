@@ -132,7 +132,13 @@ async def signal_webhook(body: dict, request: Request):
     from app.config import settings
 
     response = await signal_bot.process_message(text, request.app.state.redis, settings.API_KEY)
-    return PlainTextResponse(response or "")
+    # An empty response means the handler already delivered everything via a
+    # side-channel (typically an image attachment through signal-gateway-notify).
+    # Return HTTP 204 so signal-gateway's router doesn't post a redundant text
+    # follow-up ("ok" or "chart sent").
+    if not response:
+        return PlainTextResponse("", status_code=204)
+    return PlainTextResponse(response)
 
 
 @router.post("/weekly-digest")

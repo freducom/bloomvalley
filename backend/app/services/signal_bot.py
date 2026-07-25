@@ -292,7 +292,9 @@ async def _portfolio_chart(headers: dict, days: int) -> str:
         f"{latest:,.0f} EUR ({delta:+,.0f} EUR, {delta_pct:+.1f}%)"
     )
     ok = await signal_provider.send_image(caption, png, force=True)
-    return "chart sent" if ok else "chart render OK but Signal send failed"
+    # Empty return → signal-webhook responds with HTTP 204 → router suppresses
+    # the text follow-up. The image + caption already convey what was sent.
+    return "" if ok else "chart render OK but Signal send failed"
 
 
 def _render_value_history_png(dates, values_eur, days: int):
