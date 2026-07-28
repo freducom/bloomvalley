@@ -48,6 +48,57 @@ def _safe_decimal(value) -> float | None:
         return None
 
 
+# Yahoo emits two overlapping taxonomies — GICS on European tickers,
+# an older "Yahoo Sector" set on US tickers. Normalise to GICS so a
+# single sector filter matches all peers.
+_SECTOR_CANONICAL: dict[str, str] = {
+    "Financial Services": "Financials",
+    "Consumer Cyclical": "Consumer Discretionary",
+    "Consumer Defensive": "Consumer Staples",
+    "Technology": "Information Technology",
+    "Healthcare": "Health Care",
+    "Basic Materials": "Materials",
+}
+
+
+def _canonicalize_sector(name: str | None) -> str | None:
+    if not name:
+        return None
+    return _SECTOR_CANONICAL.get(name.strip(), name.strip())
+
+
+# Yahoo returns full country names; securities.country is VARCHAR(2) ISO.
+_COUNTRY_NAME_TO_ISO2: dict[str, str] = {
+    "United States": "US", "Germany": "DE", "France": "FR", "United Kingdom": "GB",
+    "Italy": "IT", "Spain": "ES", "Netherlands": "NL", "Belgium": "BE",
+    "Switzerland": "CH", "Sweden": "SE", "Finland": "FI", "Denmark": "DK",
+    "Norway": "NO", "Ireland": "IE", "Luxembourg": "LU", "Portugal": "PT",
+    "Austria": "AT", "Poland": "PL", "Czech Republic": "CZ", "Czechia": "CZ",
+    "Greece": "GR", "Hungary": "HU", "Romania": "RO", "Turkey": "TR",
+    "Japan": "JP", "China": "CN", "Taiwan": "TW", "South Korea": "KR",
+    "Hong Kong": "HK", "Singapore": "SG", "India": "IN", "Indonesia": "ID",
+    "Vietnam": "VN", "Malaysia": "MY", "Thailand": "TH", "Philippines": "PH",
+    "Australia": "AU", "New Zealand": "NZ",
+    "Brazil": "BR", "Mexico": "MX", "Argentina": "AR", "Chile": "CL",
+    "Canada": "CA", "Israel": "IL", "United Arab Emirates": "AE",
+    "Saudi Arabia": "SA", "South Africa": "ZA", "Georgia": "GE",
+    "Russia": "RU", "Ukraine": "UA", "Iceland": "IS", "Estonia": "EE",
+    "Latvia": "LV", "Lithuania": "LT", "Malta": "MT", "Cyprus": "CY",
+    "Slovakia": "SK", "Slovenia": "SI", "Bulgaria": "BG", "Croatia": "HR",
+}
+
+
+def _country_to_iso2(name: str | None) -> str | None:
+    """Convert Yahoo's country name to ISO-3166 alpha-2. Returns None if unmapped
+    to avoid truncation errors (better to skip than mis-code)."""
+    if not name:
+        return None
+    name = name.strip()
+    if len(name) == 2 and name.isupper():
+        return name  # Already an ISO code
+    return _COUNTRY_NAME_TO_ISO2.get(name)
+
+
 def _extract_dividend_yield(info: dict) -> float | None:
     """Return dividend yield as a decimal (0.061 = 6.1%).
 
@@ -355,16 +406,54 @@ class YahooFundamentals(PipelineAdapter):
             if financial_debt is not None and total_cash is not None and ebitda is not None and ebitda != 0:
                 net_debt_ebitda = (financial_debt - total_cash) / ebitda
 
-            # Computed: fcf_yield
+            # Computed: fcf_yield. Gate on plausibility — FCF yield above 100%
+            # is almost always a currency-mismatch upstream (e.g. KT ADR:
+            # Yahoo returned FCF in Korean-won-worth of dollars while market
+            # cap tracked only the ADR shell). Reject rather than store noise.
             fcf_yield = None
             if free_cash_flow is not None and market_cap is not None and market_cap > 0:
-                fcf_yield = free_cash_flow / market_cap
+                candidate = free_cash_flow / market_cap
+                if -1.0 <= candidate <= 1.0:
+                    fcf_yield = candidate
+                else:
+                    logger.warning(
+                        "yahoo_fundamentals_fcfy_implausible",
+                        ticker=rec.get("ticker") or "?",
+                        fcf_yield=candidate,
+                    )
+                    # If FCF yield is nonsense we can't trust the underlying
+                    # FCF or market-cap pairing either. Null both so screens
+                    # don't inherit the bad data.
+                    free_cash_flow = None
+                    market_cap = None
+
+            # Plausibility gate on P/E — real listed equities land in
+            # roughly -50..150 (Yahoo occasionally serves 200-1000+ for
+            # micro-caps or during data glitches, e.g. AKTIA.HE showing
+            # 281 in 2026-07). Keep negative P/E (loss-makers) but drop
+            # extreme positives that are almost always bad data.
+            if pe_ratio is not None and (pe_ratio > 200 or pe_ratio < -50):
+                logger.warning(
+                    "yahoo_fundamentals_pe_implausible",
+                    ticker=rec.get("ticker") or "?",
+                    pe_ratio=pe_ratio,
+                )
+                pe_ratio = None
 
             # Computed: ROIC
             roic = _compute_roic(info)
 
             # WACC: cannot be reliably computed from yfinance alone
             wacc = None
+
+            # Metadata backfill — Yahoo returns sector/industry/country in
+            # `info`. The securities table often lacks these because they
+            # weren't set at create-time. Passed through the record so
+            # load() can update securities.* only when the current value
+            # is NULL (never overwrite user-set data).
+            sector = _canonicalize_sector(_safe_get(info, "sector"))
+            industry = _safe_get(info, "industry") or None
+            country = _country_to_iso2(_safe_get(info, "country"))
 
             transformed.append(
                 {
@@ -385,6 +474,9 @@ class YahooFundamentals(PipelineAdapter):
                     "market_cap_cents": _to_cents(market_cap, currency),
                     "roic": roic,
                     "wacc": wacc,
+                    "_sector": sector,
+                    "_industry": industry,
+                    "_country": country,
                 }
             )
 
@@ -427,14 +519,51 @@ class YahooFundamentals(PipelineAdapter):
                 updated_at = now()
         """)
 
+        # Backfill missing sector/industry/country on the securities table
+        # (never overwrite values already set by the user or a previous run).
+        # Explicit CAST()s are required so asyncpg can infer parameter types
+        # when the value is None — otherwise ``:sector IS NOT NULL`` becomes
+        # ambiguous and raises AmbiguousParameterError.
+        securities_backfill_sql = text("""
+            UPDATE securities
+            SET sector = COALESCE(sector, CAST(:sector AS TEXT)),
+                industry = COALESCE(industry, CAST(:industry AS TEXT)),
+                country = COALESCE(country, CAST(:country AS TEXT))
+            WHERE id = :security_id
+              AND (
+                (sector IS NULL AND CAST(:sector AS TEXT) IS NOT NULL)
+                OR (industry IS NULL AND CAST(:industry AS TEXT) IS NOT NULL)
+                OR (country IS NULL AND CAST(:country AS TEXT) IS NOT NULL)
+              )
+        """)
+
         rows_affected = 0
+        metadata_updates = 0
         async with async_session() as session:
             for rec in transformed_records:
-                await session.execute(upsert_sql, rec)
+                # Strip meta-only keys before passing to the fundamentals upsert
+                fund_rec = {k: v for k, v in rec.items() if not k.startswith("_")}
+                await session.execute(upsert_sql, fund_rec)
                 rows_affected += 1
+
+                # Metadata backfill on securities table
+                meta = {
+                    "security_id": rec["security_id"],
+                    "sector": rec.get("_sector"),
+                    "industry": rec.get("_industry"),
+                    "country": rec.get("_country"),
+                }
+                if any(meta[k] is not None for k in ("sector", "industry", "country")):
+                    result = await session.execute(securities_backfill_sql, meta)
+                    if result.rowcount > 0:
+                        metadata_updates += 1
             await session.commit()
 
-        logger.info("yahoo_fundamentals_loaded", rows=rows_affected)
+        logger.info(
+            "yahoo_fundamentals_loaded",
+            rows=rows_affected,
+            metadata_backfilled=metadata_updates,
+        )
 
         # Compute DCF valuations for all securities with positive FCF
         await self._compute_dcf_valuations()
