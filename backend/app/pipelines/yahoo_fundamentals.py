@@ -48,6 +48,53 @@ def _safe_decimal(value) -> float | None:
         return None
 
 
+def _extract_dividend_yield(info: dict) -> float | None:
+    """Return dividend yield as a decimal (0.061 = 6.1%).
+
+    Yahoo Finance's ``trailingAnnualDividendYield`` field is unreliable for
+    UK stocks quoted in pence: the dividend rate is denominated in pounds
+    while the price is in pence, producing a ratio 100× too small. We
+    compute from ``trailingAnnualDividendRate`` / ``regularMarketPrice``
+    ourselves with currency-aware scaling, and gate the result on a
+    plausibility range (0.05%–30%).
+    """
+    rate = _safe_get(info, "trailingAnnualDividendRate")
+    price = _safe_get(info, "regularMarketPrice") or _safe_get(info, "currentPrice")
+    ccy = (_safe_get(info, "currency") or "").strip()
+
+    computed: float | None = None
+    if rate is not None and price is not None:
+        try:
+            r = float(rate)
+            p = float(price)
+            if r > 0 and p > 0:
+                # GBp: price is in pence, rate is in pounds → scale rate by 100
+                if ccy == "GBp":
+                    r = r * 100
+                computed = r / p
+        except (ValueError, TypeError):
+            computed = None
+
+    if computed is not None and 0.0005 <= computed <= 0.30:
+        return computed
+
+    # Fall back to trailingAnnualDividendYield when plausible
+    trailing = _safe_decimal(_safe_get(info, "trailingAnnualDividendYield"))
+    if trailing is not None and 0.0005 <= trailing <= 0.30:
+        return trailing
+
+    # Last resort: Yahoo's `dividendYield` field. Some builds return a
+    # percentage (7.31), others a ratio (0.0731). Normalise both.
+    raw = _safe_decimal(_safe_get(info, "dividendYield"))
+    if raw is not None:
+        if 0.0005 <= raw <= 0.30:
+            return raw
+        if 0.05 <= raw <= 30:
+            return raw / 100
+
+    return None
+
+
 def _get_financial_debt(info: dict) -> int | None:
     """
     Return financial debt excluding IFRS 16 lease liabilities.
@@ -283,9 +330,15 @@ class YahooFundamentals(PipelineAdapter):
                     price_to_book=price_to_book,
                 )
                 price_to_book = None
-            # Use trailingAnnualDividendYield (already a decimal, e.g. 0.061 = 6.1%)
-            # More reliable than dividendYield which is inconsistently scaled
-            dividend_yield = _safe_decimal(_safe_get(info, "trailingAnnualDividendYield"))
+            # Dividend yield extraction — Yahoo scales inconsistently across markets:
+            #   - Most markets: trailingAnnualDividendYield is a decimal (0.061 = 6.1%)
+            #   - UK (GBp) stocks: trailingAnnualDividendRate is in pounds but
+            #     regularMarketPrice is in pence, so trailingAnnualDividendYield
+            #     comes back off by 100x (e.g. LGEN.L shows 0.0007 instead of 0.073).
+            # Prefer computing yield ourselves from rate/price with currency-aware
+            # scaling; fall back to trailingAnnualDividendYield only when the
+            # computed value is unavailable and the trailing value looks plausible.
+            dividend_yield = _extract_dividend_yield(info)
             trailing_eps = _safe_get(info, "trailingEps")
             total_revenue = _safe_get(info, "totalRevenue")
             gross_margin = _safe_decimal(_safe_get(info, "grossMargins"))
