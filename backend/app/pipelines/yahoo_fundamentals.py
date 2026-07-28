@@ -194,12 +194,23 @@ def _compute_roic(info: dict) -> float | None:
         invested_capital = financial_debt + equity - cash
         if invested_capital > 0:
             nopat = ebit * (1 - DEFAULT_TAX_RATE)
-            return nopat / invested_capital
+            roic_candidate = nopat / invested_capital
+            # Same plausibility gate as ROE — when invested capital shrinks
+            # from aggressive buybacks (Apple, NVIDIA, etc.), the ratio
+            # explodes and stops being a useful capital-efficiency signal.
+            if -1.0 <= roic_candidate <= 1.0:
+                return roic_candidate
 
-    # Fallback: returnOnEquity (better proxy than ROA for capital efficiency)
+    # Fallback: returnOnEquity (better proxy than ROA for capital efficiency).
+    # Gate on plausibility (see _extract_dividend_yield rationale) — buyback-
+    # eroded book equity produces artefactually huge ROE that distorts the
+    # quality screen. Also skip when balance-sheet equity is non-positive.
     roe = _safe_get(info, "returnOnEquity")
     if roe is not None:
-        return float(roe)
+        roe_f = float(roe)
+        equity_bs = _safe_get(info, "bs_stockholders_equity") or _safe_get(info, "stockholdersEquity")
+        if -1.0 <= roe_f <= 1.0 and not (equity_bs is not None and equity_bs <= 0):
+            return roe_f
 
     # Fallback: returnOnAssets
     roa = _safe_get(info, "returnOnAssets")
@@ -372,6 +383,35 @@ class YahooFundamentals(PipelineAdapter):
 
             # Direct mappings
             roe = _safe_decimal(_safe_get(info, "returnOnEquity"))
+            # ROE plausibility: Yahoo's returnOnEquity is Net Income / Equity.
+            # When a company has bought back stock aggressively enough that
+            # book equity is near zero or negative (Clorox, Kimberly-Clark,
+            # Apple, NVIDIA), the ratio explodes (100–550%) and its sign may
+            # flip when equity crosses zero. Mathematically real but not a
+            # meaningful "return on invested capital" signal — a screener
+            # ranking on high ROE will over-weight the accounting artifact.
+            # Drop values above 100% and cross-check the sign against
+            # balance-sheet equity when we have it.
+            bs_equity = _safe_get(info, "bs_stockholders_equity") or _safe_get(info, "stockholdersEquity")
+            if roe is not None:
+                if roe > 1.0 or roe < -1.0:
+                    logger.info(
+                        "yahoo_fundamentals_roe_out_of_range",
+                        ticker=rec.get("ticker") or "?",
+                        roe=roe,
+                        bs_equity=bs_equity,
+                    )
+                    roe = None
+                elif bs_equity is not None and bs_equity <= 0:
+                    # Positive ROE stored against negative book — Yahoo took
+                    # abs(equity) somewhere in the calc. Not trustworthy.
+                    logger.info(
+                        "yahoo_fundamentals_roe_negative_book",
+                        ticker=rec.get("ticker") or "?",
+                        roe=roe,
+                        bs_equity=bs_equity,
+                    )
+                    roe = None
             free_cash_flow = _safe_get(info, "freeCashflow")
             # Sanity guard: FCF ≤ OpCF is a physical identity (FCF = OpCF − CapEx
             # with CapEx ≥ 0). Yahoo's info dict occasionally returns a stale/
