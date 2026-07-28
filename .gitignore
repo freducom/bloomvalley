@@ -37,6 +37,12 @@ frontend/.env.local
 .DS_Store
 Thumbs.db
 
+# Core dumps
+core
+core.*
+backend/core
+backend/core.*
+
 # Testing
 .coverage
 htmlcov/

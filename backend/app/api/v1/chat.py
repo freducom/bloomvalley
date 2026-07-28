@@ -296,6 +296,99 @@ async def _fetch_security_context(ticker: str) -> str:
     return context
 
 
+async def _fetch_watchlist_context() -> str:
+    """Fetch all watchlist items + their fundamentals so the LLM can rank without DB access."""
+    _api_key = os.environ.get("API_KEY", "")
+    headers = {"X-API-Key": _api_key} if _api_key else {}
+    base = "http://localhost:8000/api/v1"
+
+    async with httpx.AsyncClient(timeout=20, base_url=base, headers=headers) as client:
+        try:
+            wl_resp = await client.get("/watchlists/")
+            if wl_resp.status_code != 200:
+                return ""
+            watchlists = wl_resp.json().get("data", []) or []
+        except Exception:
+            return ""
+        if not watchlists:
+            return ""
+
+        defaults = [w for w in watchlists if w.get("isDefault")]
+        targets = defaults if defaults else watchlists
+
+        items: list[dict] = []
+        seen_sec_ids: set[int] = set()
+        for wl in targets:
+            try:
+                resp = await client.get(f"/watchlists/{wl['id']}")
+                if resp.status_code != 200:
+                    continue
+                wl_items = (resp.json().get("data") or {}).get("items", []) or []
+            except Exception:
+                continue
+            for it in wl_items:
+                sid = it.get("securityId")
+                if not sid or sid in seen_sec_ids:
+                    continue
+                seen_sec_ids.add(sid)
+                items.append({
+                    "securityId": sid,
+                    "ticker": it.get("ticker") or "?",
+                    "name": it.get("name") or "",
+                    "sector": it.get("sector") or "",
+                    "currency": it.get("currency") or "",
+                    "watchlist": wl.get("name") or "",
+                })
+
+        if not items:
+            return ""
+
+        fund_tasks = [
+            client.get(f"/fundamentals?securityId={it['securityId']}")
+            for it in items
+        ]
+        responses = await asyncio.gather(*fund_tasks, return_exceptions=True)
+        for it, r in zip(items, responses):
+            if isinstance(r, Exception) or r.status_code != 200:
+                continue
+            data = r.json().get("data", [])
+            f = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else {})
+            it["fundamentals"] = f or {}
+
+    def _fmt_pct(v):
+        return f"{v*100:.1f}%" if isinstance(v, (int, float)) else "-"
+
+    def _fmt_num(v, prec=1):
+        return f"{v:.{prec}f}" if isinstance(v, (int, float)) else "-"
+
+    parts = [
+        f"\n## Watchlist Snapshot ({len(items)} securities across {len(targets)} watchlist(s))\n",
+        "Columns: Ticker | Name | Sector | P/E | P/B | ROIC | ROE | FCF Yld | Op Margin | Net Debt/EBITDA | Div Yld | DCF Upside",
+    ]
+    for it in items:
+        f = it.get("fundamentals") or {}
+        row = [
+            it["ticker"],
+            (it["name"] or "")[:30],
+            (it["sector"] or "")[:18],
+            _fmt_num(f.get("peRatio")),
+            _fmt_num(f.get("priceToBook"), 2),
+            _fmt_pct(f.get("roic")),
+            _fmt_pct(f.get("roe")),
+            _fmt_pct(f.get("fcfYield")),
+            _fmt_pct(f.get("operatingMargin")),
+            _fmt_num(f.get("netDebtEbitda")),
+            _fmt_pct(f.get("dividendYield")),
+            _fmt_num(f.get("dcfUpsidePct")) + "%" if isinstance(f.get("dcfUpsidePct"), (int, float)) else "-",
+        ]
+        parts.append(" | ".join(row))
+
+    context = "\n".join(parts)
+    if len(context) > 25000:
+        context = context[:25000] + "\n\n[... watchlist truncated]"
+    return context
+
+
 async def _call_claude_cli(messages: list[ChatMessage], page_url: str = "",
                            security_context: str = "") -> str:
     """Get full response from Claude CLI."""

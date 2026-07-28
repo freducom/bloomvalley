@@ -10,13 +10,16 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select, case, literal_column
 
+from app.api.v1.accounts import _parse_cash_text
 from app.db.engine import async_session
 from app.db.models.accounts import Account
 from app.db.models.holdings_snapshot import HoldingsSnapshot
 from app.db.models.imports import Import, ImportRow
 from app.db.models.prices import FxRate, Price
 from app.db.models.securities import Security
+from app.db.models.tax_lots import TaxLot
 from app.db.models.transactions import Transaction
+from app.services import nordnet_paste as np_paste
 from app.services.tax_lots import apply_transaction as apply_tax_lot
 
 logger = structlog.get_logger()
@@ -1110,76 +1113,67 @@ async def sell_holding(body: SellRequest):
 
 @router.get("/sold-holdings")
 async def get_sold_holdings():
-    """Return securities that were fully sold (net quantity = 0 or less).
+    """Return securities that have been fully exited (no open lots remain).
 
-    Includes historical cost basis, total proceeds, realized P&L, and dates.
+    Aggregates from `tax_lots` so cost/proceeds/realized P&L are reported
+    in the lot's recorded cost-basis currency (typically EUR, FX-converted
+    at trade time). Summing raw transaction totals here would mix currencies
+    when buys and sells were booked in different units (e.g., SEK buy vs.
+    EUR-converted Nordnet sell), producing nonsense aggregates.
     """
     async with async_session() as session:
-        qty_case = case(
-            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
-            (Transaction.type.in_(["sell", "transfer_out"]), -Transaction.quantity),
-            else_=literal_column("0"),
+        # Aggregate closed lots per (account, security)
+        closed_agg = await session.execute(
+            select(
+                TaxLot.account_id,
+                TaxLot.security_id,
+                func.count().label("lot_count"),
+                func.sum(TaxLot.original_quantity).label("total_qty"),
+                func.sum(TaxLot.cost_basis_cents).label("total_cost_cents"),
+                func.sum(TaxLot.proceeds_cents).label("total_proceeds_cents"),
+                func.sum(TaxLot.realized_pnl_cents).label("realized_pnl_cents"),
+                func.min(TaxLot.acquired_date).label("first_buy_date"),
+                func.max(TaxLot.closed_date).label("last_sell_date"),
+                func.max(TaxLot.cost_basis_currency).label("currency"),
+            )
+            .where(TaxLot.state == "closed")
+            .group_by(TaxLot.account_id, TaxLot.security_id)
         )
-        bought_qty = case(
-            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.quantity),
-            else_=literal_column("0"),
-        )
-        sold_qty = case(
-            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.quantity),
-            else_=literal_column("0"),
-        )
-        cost_case = case(
-            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.total_cents),
-            else_=literal_column("0"),
-        )
-        proceeds_case = case(
-            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.total_cents),
-            else_=literal_column("0"),
-        )
-        fees_case = case(
-            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.fee_cents),
-            else_=literal_column("0"),
-        )
-        first_buy = case(
-            (Transaction.type.in_(["buy", "transfer_in"]), Transaction.trade_date),
-            else_=None,
-        )
-        last_sell = case(
-            (Transaction.type.in_(["sell", "transfer_out"]), Transaction.trade_date),
-            else_=None,
-        )
+        closed_rows = closed_agg.all()
 
-        result = await session.execute(
+        # Set of (account, security) pairs that still have any open lots — exclude them
+        open_result = await session.execute(
+            select(TaxLot.account_id, TaxLot.security_id)
+            .where(TaxLot.state.in_(["open", "partially_closed"]))
+            .distinct()
+        )
+        open_pairs = {(r.account_id, r.security_id) for r in open_result.all()}
+
+        # Sell-side fee totals from transactions (per account+security) — these are
+        # not stored on tax_lots, so we read them directly. Fee values are in the
+        # transaction's fee_currency (typically EUR per the project convention).
+        fee_result = await session.execute(
             select(
                 Transaction.account_id,
                 Transaction.security_id,
-                func.sum(qty_case).label("net_qty"),
-                func.sum(bought_qty).label("total_bought"),
-                func.sum(sold_qty).label("total_sold"),
-                func.sum(cost_case).label("total_cost_cents"),
-                func.sum(proceeds_case).label("total_proceeds_cents"),
-                func.sum(fees_case).label("total_sell_fees_cents"),
-                func.min(first_buy).label("first_buy_date"),
-                func.max(last_sell).label("last_sell_date"),
+                func.sum(Transaction.fee_cents).label("fees"),
             )
-            .where(
-                Transaction.security_id.isnot(None),
-                Transaction.type.in_(["buy", "sell", "transfer_in", "transfer_out"]),
-            )
+            .where(Transaction.type.in_(["sell", "transfer_out"]))
             .group_by(Transaction.account_id, Transaction.security_id)
-            .having(func.sum(qty_case) <= 0)
         )
-        rows = result.all()
+        fee_map = {(r.account_id, r.security_id): int(r.fees or 0) for r in fee_result.all()}
 
-    if not rows:
+    # Filter out positions that still have open lots
+    fully_sold = [r for r in closed_rows if (r.account_id, r.security_id) not in open_pairs]
+
+    if not fully_sold:
         return {
             "data": [],
             "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
         }
 
-    # Load securities and accounts
-    security_ids = {r.security_id for r in rows}
-    account_ids = {r.account_id for r in rows}
+    security_ids = {r.security_id for r in fully_sold}
+    account_ids = {r.account_id for r in fully_sold}
 
     async with async_session() as session:
         sec_result = await session.execute(
@@ -1193,7 +1187,7 @@ async def get_sold_holdings():
         accounts = {a.id: a for a in acct_result.scalars().all()}
 
     data = []
-    for r in rows:
+    for r in fully_sold:
         sec = securities.get(r.security_id)
         acct = accounts.get(r.account_id)
         if not sec:
@@ -1201,8 +1195,10 @@ async def get_sold_holdings():
 
         cost = int(r.total_cost_cents or 0)
         proceeds = int(r.total_proceeds_cents or 0)
-        fees = int(r.total_sell_fees_cents or 0)
-        realized_pnl = proceeds - cost - fees
+        fees = fee_map.get((r.account_id, r.security_id), 0)
+        # realized_pnl on tax_lots already nets cost vs proceeds; do not subtract fees
+        # twice (buy-side fee is typically baked into cost_basis_cents).
+        realized_pnl = int(r.realized_pnl_cents or 0) if r.realized_pnl_cents is not None else proceeds - cost
 
         data.append({
             "accountId": r.account_id,
@@ -1211,13 +1207,13 @@ async def get_sold_holdings():
             "ticker": sec.ticker,
             "name": sec.name,
             "assetClass": sec.asset_class,
-            "totalBought": str(r.total_bought or 0),
-            "totalSold": str(r.total_sold or 0),
+            "totalBought": str(r.total_qty or 0),
+            "totalSold": str(r.total_qty or 0),
             "totalCostCents": cost,
             "totalProceedsCents": proceeds,
             "totalFeesCents": fees,
             "realizedPnlCents": realized_pnl,
-            "currency": sec.currency,
+            "currency": r.currency or "EUR",
             "firstBuyDate": r.first_buy_date.isoformat() if r.first_buy_date else None,
             "lastSellDate": r.last_sell_date.isoformat() if r.last_sell_date else None,
         })
@@ -1544,6 +1540,174 @@ async def get_currency_exposure():
                 "byCurrency": fx_impact_by_currency,
             },
             "holdings": holdings_detail,
+        },
+        "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+    }
+
+
+class NordnetPasteRequest(BaseModel):
+    text: str
+    commit: bool = False
+    # optional: account_id (int) → cash text like "341 EUR" — applied after commit
+    cash_balances: Optional[dict[str, str]] = None
+
+
+@router.post("/nordnet-paste")
+async def nordnet_paste(body: NordnetPasteRequest):
+    """Parse a paste of Nordnet transaction-history rows and optionally commit them.
+
+    Set `commit=false` for a dry-run preview. Set `commit=true` to write rows
+    with status="ok" (duplicates and errors are skipped). Optionally pass
+    `cash_balances` = {account_id_str: "341 EUR", ...} to overwrite cash after
+    commit — matches the /accounts/cash endpoint's format.
+
+    Duplicate detection: same external_ref (exact re-paste), or same
+    (account, type, |total_cents|, security) within ±10 days.
+    """
+    rows = np_paste.parse_paste(body.text)
+
+    if not rows:
+        return {
+            "data": {"rows": [], "summary": {"totalRows": 0}},
+            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        }
+
+    committed_ids: list[int] = []
+    cash_updates: list[dict] = []
+
+    async with async_session() as session:
+        # Resolve accounts + securities, then check duplicates
+        for row in rows:
+            if row.status == "error":
+                continue
+
+            if row.account_number:
+                acct_id = np_paste.ACCOUNT_NUMBER_MAP.get(row.account_number)
+                if acct_id is None:
+                    row.errors.append(
+                        f"unknown Nordnet account number {row.account_number} — "
+                        f"add it to ACCOUNT_NUMBER_MAP in nordnet_paste.py"
+                    )
+                    row.status = "needs_review"
+                    continue
+                row.account_id = acct_id
+
+            if row.tx_type in np_paste.NEEDS_SECURITY and row.security_name:
+                sec, confidence = await np_paste.resolve_security(
+                    session, row.security_name
+                )
+                row.security_match_confidence = confidence
+                if sec:
+                    row.security_id = sec.id
+                    row.security_ticker = sec.ticker
+                else:
+                    row.warnings.append(
+                        f"could not resolve security {row.security_name!r} "
+                        f"(confidence={confidence})"
+                    )
+                    row.status = "needs_review"
+                    continue
+
+            dup = await np_paste.find_duplicate(session, row)
+            if dup is not None:
+                row.existing_transaction_id = dup
+                row.status = "duplicate"
+                continue
+
+            row.status = "ok"
+
+        # Commit phase
+        if body.commit:
+            for row in rows:
+                if row.status != "ok":
+                    continue
+                if row.trade_date is None or row.total_value is None or row.tx_type is None:
+                    continue
+
+                tx = Transaction(
+                    account_id=row.account_id,
+                    security_id=row.security_id if row.tx_type in np_paste.NEEDS_SECURITY else None,
+                    type=row.tx_type,
+                    trade_date=date.fromisoformat(row.trade_date),
+                    quantity=(row.quantity or Decimal("0")),
+                    price_cents=np_paste.to_cents(row.price_value),
+                    price_currency=row.price_currency or (row.total_currency or "EUR"),
+                    total_cents=np_paste.compute_total_cents(
+                        row.tx_type, row.total_value, row.fee_value
+                    ),
+                    fee_cents=np_paste.to_cents(row.fee_value) or 0,
+                    fee_currency=row.fee_currency or "EUR",
+                    currency=row.total_currency or "EUR",
+                    notes=(
+                        f"Nordnet paste: {row.type_finnish} — "
+                        f"raw price {row.price_value} {row.price_currency or ''}, "
+                        f"fee {row.fee_value} {row.fee_currency}, "
+                        f"total {row.total_value} {row.total_currency or ''}"
+                    ).strip(),
+                    external_ref=np_paste.external_ref_for(row),
+                )
+                session.add(tx)
+                await session.flush()
+                try:
+                    await apply_tax_lot(session, tx)
+                except Exception as e:
+                    logger.warning(
+                        "nordnet_paste_tax_lot_failed",
+                        txn_id=tx.id,
+                        error=str(e),
+                    )
+                row.committed_transaction_id = tx.id
+                row.status = "committed"
+                committed_ids.append(tx.id)
+
+            # Optional cash-balance overwrite (mirrors /accounts/cash)
+            if body.cash_balances:
+                for acct_id_str, cash_text in body.cash_balances.items():
+                    try:
+                        acct_id_int = int(acct_id_str)
+                    except ValueError:
+                        continue
+                    account = await session.get(Account, acct_id_int)
+                    if account is None:
+                        cash_updates.append({
+                            "accountId": acct_id_int,
+                            "error": "account not found",
+                        })
+                        continue
+                    try:
+                        cents, currency = _parse_cash_text(cash_text)
+                    except Exception:
+                        cash_updates.append({
+                            "accountId": acct_id_int,
+                            "error": f"cannot parse cash: {cash_text!r}",
+                        })
+                        continue
+                    account.cash_balance_cents = cents
+                    account.cash_currency = currency
+                    cash_updates.append({
+                        "accountId": account.id,
+                        "accountName": account.name,
+                        "cashBalanceCents": cents,
+                        "cashCurrency": currency,
+                    })
+
+            await session.commit()
+
+    summary = {
+        "totalRows": len(rows),
+        "ok": sum(1 for r in rows if r.status == "ok"),
+        "committed": len(committed_ids),
+        "duplicates": sum(1 for r in rows if r.status == "duplicate"),
+        "needsReview": sum(1 for r in rows if r.status == "needs_review"),
+        "errors": sum(1 for r in rows if r.status == "error"),
+    }
+
+    return {
+        "data": {
+            "rows": [r.to_dict() for r in rows],
+            "summary": summary,
+            "cashUpdates": cash_updates,
+            "committed": body.commit,
         },
         "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
     }
