@@ -165,6 +165,7 @@ const DEFAULT_FILTERS: Filters = {
 const PRESETS: { key: string; label: string; filters: Partial<Filters> }[] = [
   { key: "compounders", label: "Quality Compounders", filters: { minRoic: "0.15", minGrossMargin: "0.15", maxDebt: "3" } },
   { key: "value", label: "Value", filters: { maxPe: "20", maxPb: "2", minFcfYield: "0.04" } },
+  { key: "deepvalue", label: "Deep Value", filters: { maxPe: "12", maxPb: "1.5", minFcfYield: "0.06", maxDebt: "3" } },
   { key: "dividend", label: "Dividend", filters: { minRoic: "0.10" } },
   { key: "undervalued", label: "Undervalued (DCF)", filters: {} },
   { key: "lowdebt", label: "Low Debt", filters: { maxDebt: "1" } },
@@ -204,6 +205,12 @@ function applyFilters(data: Fundamentals[], filters: Filters): Fundamentals[] {
     // Dividend preset: must have dividend yield > 2%
     if (filters.preset === "dividend") {
       if (f.dividendYield === null || f.dividendYield < 0.02) return false;
+    }
+
+    // Deep Value preset: dividend yield ≥ 3% and positive ROE (Browne rubric)
+    if (filters.preset === "deepvalue") {
+      if (f.dividendYield === null || f.dividendYield < 0.03) return false;
+      if (f.roe === null || f.roe < 0.05) return false;
     }
 
     // Undervalued preset: must have DCF upside > 20%

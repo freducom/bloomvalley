@@ -111,7 +111,7 @@ Each filter row contains:
 | Boglehead ETF | Low-cost broad index funds | Asset Class = ETF, TER < 0.30% |
 | Dividend Aristocrats | 25+ years consecutive dividend increases | Consecutive Dividend Years >= 25, Payout Ratio < 80% |
 | High Growth | High-growth companies | Revenue Growth > 15%, Earnings Growth > 15%, P/E < 50 |
-| Deep Value | Statistically cheap stocks | P/B < 1.5, P/E < 12, Div Yield > 3% |
+| Deep Value | Statistically cheap stocks (Browne rubric) | P/B < 1.5, P/E < 12, FCF Yield >= 6%, Div Yield >= 3%, ROE >= 5%, Debt/EBITDA < 3x. Shipped on `/fundamentals` page. |
 
 Clicking a preset loads its filters into the builder. User can modify and save as a new custom preset.
 

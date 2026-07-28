@@ -388,12 +388,16 @@ def _compute_munger_factors(
                 factors["earningsConsistency"] = 0.5
 
     # ── M6: FCF Yield ──
-    if fund and fund.free_cash_flow_cents is not None and price_cents and price_cents > 0:
-        # FCF yield = FCF / market_cap.  We don't have shares outstanding,
-        # so use FCF_cents / price_cents as a per-share proxy.
+    # FCF yield = FCF / market_cap. Both are whole-company figures in the
+    # security's reporting currency (cents), so the ratio is dimensionless.
+    # Prefer the pre-computed value from the fundamentals pipeline.
+    if fund and fund.fcf_yield is not None:
+        factors["fcfYield"] = float(fund.fcf_yield)
+    elif fund and fund.free_cash_flow_cents is not None and fund.market_cap_cents:
         fcf = fund.free_cash_flow_cents
-        if fcf > 0:
-            factors["fcfYield"] = fcf / price_cents
+        mcap = fund.market_cap_cents
+        if fcf > 0 and mcap > 0:
+            factors["fcfYield"] = fcf / mcap
 
     # ── M7: Gross Margin ──
     if not is_financial:
@@ -424,8 +428,9 @@ def _compute_munger_factors(
             factors["pe"] = price_cents / annual_eps[latest_year]
 
     # ── M10: P/FCF ──
-    if fund and fund.free_cash_flow_cents and fund.free_cash_flow_cents > 0 and price_cents and price_cents > 0:
-        factors["pFcf"] = price_cents / fund.free_cash_flow_cents
+    # market_cap / FCF — both whole-company in the same currency.
+    if fund and fund.free_cash_flow_cents and fund.free_cash_flow_cents > 0 and fund.market_cap_cents:
+        factors["pFcf"] = fund.market_cap_cents / fund.free_cash_flow_cents
 
     return factors
 
