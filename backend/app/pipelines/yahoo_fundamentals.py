@@ -102,46 +102,51 @@ def _country_to_iso2(name: str | None) -> str | None:
 def _extract_dividend_yield(info: dict) -> float | None:
     """Return dividend yield as a decimal (0.061 = 6.1%).
 
-    Yahoo Finance's ``trailingAnnualDividendYield`` field is unreliable for
-    UK stocks quoted in pence: the dividend rate is denominated in pounds
-    while the price is in pence, producing a ratio 100× too small. We
-    compute from ``trailingAnnualDividendRate`` / ``regularMarketPrice``
-    ourselves with currency-aware scaling, and gate the result on a
-    plausibility range (0.05%–30%).
+    Yahoo exposes three dividend fields with distinct problems:
+      * ``dividendYield`` — reliably in percent form (e.g. 2.83 for a
+        2.83% yielder); works for ADRs where the other fields don't.
+      * ``trailingAnnualDividendRate`` / ``regularMarketPrice`` — needs
+        GBp scaling on UK stocks and produces raw-Swiss / ADR-price
+        garbage for ADRs (Yahoo returns local-currency dividend rate
+        against ADR-currency price).
+      * ``trailingAnnualDividendYield`` — same ADR pitfall as above.
+
+    Prefer ``dividendYield`` first, then fall through to the computed
+    yield (with GBp scaling), then trailingAnnualDividendYield. Gate
+    everything on plausibility (0.05%–30%).
     """
-    rate = _safe_get(info, "trailingAnnualDividendRate")
-    price = _safe_get(info, "regularMarketPrice") or _safe_get(info, "currentPrice")
     ccy = (_safe_get(info, "currency") or "").strip()
 
-    computed: float | None = None
+    # 1. Yahoo's dividendYield (usually percent form; older yfinance
+    # versions returned ratios). Try both interpretations and take
+    # whichever lands in the plausible range — prefer the percent
+    # interpretation (divide by 100) since that's the current format.
+    raw = _safe_decimal(_safe_get(info, "dividendYield"))
+    if raw is not None:
+        for candidate in (raw / 100, raw):
+            if 0.0005 <= candidate <= 0.30:
+                return candidate
+
+    # 2. Compute from rate / price with GBp scaling
+    rate = _safe_get(info, "trailingAnnualDividendRate")
+    price = _safe_get(info, "regularMarketPrice") or _safe_get(info, "currentPrice")
     if rate is not None and price is not None:
         try:
             r = float(rate)
             p = float(price)
             if r > 0 and p > 0:
-                # GBp: price is in pence, rate is in pounds → scale rate by 100
                 if ccy == "GBp":
                     r = r * 100
                 computed = r / p
+                if 0.0005 <= computed <= 0.30:
+                    return computed
         except (ValueError, TypeError):
-            computed = None
+            pass
 
-    if computed is not None and 0.0005 <= computed <= 0.30:
-        return computed
-
-    # Fall back to trailingAnnualDividendYield when plausible
+    # 3. Last resort: trailing yield (unreliable for ADRs)
     trailing = _safe_decimal(_safe_get(info, "trailingAnnualDividendYield"))
     if trailing is not None and 0.0005 <= trailing <= 0.30:
         return trailing
-
-    # Last resort: Yahoo's `dividendYield` field. Some builds return a
-    # percentage (7.31), others a ratio (0.0731). Normalise both.
-    raw = _safe_decimal(_safe_get(info, "dividendYield"))
-    if raw is not None:
-        if 0.0005 <= raw <= 0.30:
-            return raw
-        if 0.05 <= raw <= 30:
-            return raw / 100
 
     return None
 
