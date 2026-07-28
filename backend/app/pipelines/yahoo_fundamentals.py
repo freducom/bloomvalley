@@ -373,6 +373,25 @@ class YahooFundamentals(PipelineAdapter):
             # Direct mappings
             roe = _safe_decimal(_safe_get(info, "returnOnEquity"))
             free_cash_flow = _safe_get(info, "freeCashflow")
+            # Sanity guard: FCF ≤ OpCF is a physical identity (FCF = OpCF − CapEx
+            # with CapEx ≥ 0). Yahoo's info dict occasionally returns a stale/
+            # garbage freeCashflow value that violates this (observed on
+            # 8TRA.DE reporting €10.9B FCF vs €0.7B OpCF while the actual cash
+            # flow statement shows −€1.9B). When we can prove the identity is
+            # violated, drop the value rather than laundering it downstream.
+            operating_cf = _safe_get(info, "operatingCashflow")
+            if (
+                free_cash_flow is not None
+                and operating_cf is not None
+                and free_cash_flow > operating_cf
+            ):
+                logger.warning(
+                    "yahoo_fundamentals_fcf_exceeds_opcf",
+                    ticker=rec.get("ticker") or "?",
+                    free_cash_flow=free_cash_flow,
+                    operating_cashflow=operating_cf,
+                )
+                free_cash_flow = None
             price_to_book = _safe_decimal(_safe_get(info, "priceToBook"))
             # Plausibility gate for P/B — Yahoo occasionally serves absurd
             # values (e.g. BRK-B reporting 0.001 on 2026-07-22). Real listed
