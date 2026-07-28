@@ -177,7 +177,20 @@ class YahooFinancePrices(PipelineAdapter):
 
             def _make_record(ticker, sec, idx, row):
                 price_date = idx.date() if hasattr(idx, "date") else idx
-                yahoo_ccy = yahoo_currencies.get(ticker, sec.currency)
+                # Prefer Yahoo's per-call currency, but fall back to a
+                # ticker-suffix inference when the info fetch failed silently
+                # (yfinance rate-limits and occasionally returns empty info).
+                # This is what caused the historical GBp/GBP scaling bugs
+                # for JD.L, EZJ.L, PAG.L, PTEC.L — the info fetch didn't
+                # populate yahoo_currencies so the code fell through to
+                # sec.currency (EUR — the "UK stored as EUR" legacy) and
+                # skipped the GBp → GBP divide-by-100.
+                yahoo_ccy = yahoo_currencies.get(ticker)
+                if not yahoo_ccy:
+                    if ticker.endswith(".L"):
+                        yahoo_ccy = "GBp"  # London Stock Exchange trades in pence
+                    else:
+                        yahoo_ccy = sec.currency
                 minor = MINOR_CURRENCY_MAP.get(yahoo_ccy)
                 divisor = minor[1] if minor else 1
                 currency = minor[0] if minor else yahoo_ccy

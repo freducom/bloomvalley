@@ -411,9 +411,38 @@ class YahooFundamentals(PipelineAdapter):
             if financial_debt is not None and total_cash is not None and ebitda is not None and ebitda != 0:
                 net_debt_ebitda = (financial_debt - total_cash) / ebitda
 
+            # Currency guard: Yahoo reports FCF in `financialCurrency` (the
+            # company's reporting currency) while `marketCap` follows the
+            # ticker's trading currency. For ADRs and companies that report
+            # in a currency different from where they trade (Petrobras BRL
+            # vs USD ADR, SBM Offshore USD financials on EUR listing), the
+            # ratio mixes units and is meaningless. Skip FCF metrics when
+            # currencies differ — we could FX-convert but the FX rate at
+            # the reporting-period end vs the current market-cap date is a
+            # different question that isn't worth solving inline.
+            fin_ccy = (_safe_get(info, "financialCurrency") or "").strip().upper()
+            price_ccy = (_safe_get(info, "currency") or currency).strip().upper()
+            # Treat GBp (pence) and GBP (pounds) as the same currency for
+            # this check — Yahoo picks either for UK listings.
+            def _norm_ccy(c: str) -> str:
+                return "GBP" if c in ("GBP", "GBX", "GBp") else c
+            currency_mismatch = (
+                fin_ccy and price_ccy and _norm_ccy(fin_ccy) != _norm_ccy(price_ccy)
+            )
+            if currency_mismatch:
+                logger.info(
+                    "yahoo_fundamentals_currency_mismatch",
+                    ticker=rec.get("ticker") or "?",
+                    financial_currency=fin_ccy,
+                    price_currency=price_ccy,
+                )
+                free_cash_flow = None
+                # market_cap is still trustworthy (it's price × shares in
+                # price currency), so keep it — just skip fcf_yield.
+
             # Computed: fcf_yield. Gate on plausibility — FCF yield above 100%
-            # is almost always a currency-mismatch upstream (e.g. KT ADR:
-            # Yahoo returned FCF in Korean-won-worth of dollars while market
+            # is almost always a currency mismatch or a Yahoo data glitch
+            # (KT ADR served FCF in the Korean parent's USD while market
             # cap tracked only the ADR shell). Reject rather than store noise.
             fcf_yield = None
             if free_cash_flow is not None and market_cap is not None and market_cap > 0:
@@ -427,10 +456,10 @@ class YahooFundamentals(PipelineAdapter):
                         fcf_yield=candidate,
                     )
                     # If FCF yield is nonsense we can't trust the underlying
-                    # FCF or market-cap pairing either. Null both so screens
-                    # don't inherit the bad data.
+                    # FCF pairing either. Null free_cash_flow so screens don't
+                    # inherit the bad data — keep market_cap which is still
+                    # correct as price × shares.
                     free_cash_flow = None
-                    market_cap = None
 
             # Plausibility gate on P/E — real listed equities land in
             # roughly -50..150 (Yahoo occasionally serves 200-1000+ for
