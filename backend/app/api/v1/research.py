@@ -258,7 +258,10 @@ async def cleanup_research():
     return {"data": result, "meta": {"timestamp": datetime.now(timezone.utc).isoformat()}}
 
 
-# All 9 analyst agents
+# All analyst agents surfaced in the consensus view.
+# Style analysts (graham-browne, buffett-munger) run on the universe and only
+# emit notes for names that clear their canonical criteria. They are silent
+# most of the time — see specs/06-investment-philosophy/.
 KNOWN_AGENTS = [
     "research-analyst",
     "technical-analyst",
@@ -269,9 +272,14 @@ KNOWN_AGENTS = [
     "tax-strategist",
     "compliance-officer",
     "portfolio-manager",
+    "graham-browne-analyst",
+    "buffett-munger-analyst",
 ]
 
-# Agents that produce per-security analysis (used for consensus coverage denominator)
+# Agents that produce per-security analysis (used for consensus coverage denominator).
+# Style analysts are intentionally excluded — their silent-if-zero rule means
+# most securities won't have a note, and counting them here would inflate the
+# denominator and make coverage % look worse than it actually is.
 PER_SECURITY_AGENTS = ["research-analyst", "technical-analyst", "portfolio-manager"]
 
 

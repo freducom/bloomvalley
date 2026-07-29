@@ -50,6 +50,8 @@ brief_types:
 # Which agents to run (order matters — portfolio-manager runs last)
 agents:
   - research-analyst
+  - graham-browne-analyst    # Statistical deep-value screener; silent when nothing qualifies
+  - buffett-munger-analyst   # Quality-compounder screener; silent when nothing qualifies
   - risk-manager
   - quant-analyst
   - macro-strategist

@@ -243,13 +243,14 @@ An AI-powered investment advisory team and software development team building a 
 1. **Macro Strategist** provides current regime assessment and outlook
 2. **Quantitative Analyst** runs screens and identifies candidates
 3. **Research Analyst** performs deep-dive on candidates (Munger criteria)
-4. **Technical Analyst** provides timing context for potential entries
-5. **ESG Analyst** screens candidates for ESG issues
-6. **Risk Manager** assesses impact on portfolio risk metrics
-7. **Fixed Income & Dividend Income Analyst** evaluates bond/fixed income portion and dividend sustainability
-8. **Tax Strategist** optimizes execution for Finnish tax efficiency
-9. **Portfolio Manager** synthesizes all inputs and makes final recommendation
-10. **Compliance Officer** validates the recommendation against policy before execution
+4. **Graham/Browne Analyst** and **Buffett/Munger Analyst** apply canonical style criteria across the universe (silent when nothing qualifies) — feed the recommendation list when a candidate clears the promotion threshold
+5. **Technical Analyst** provides timing context for potential entries
+6. **ESG Analyst** screens candidates for ESG issues
+7. **Risk Manager** assesses impact on portfolio risk metrics
+8. **Fixed Income & Dividend Income Analyst** evaluates bond/fixed income portion and dividend sustainability
+9. **Tax Strategist** optimizes execution for Finnish tax efficiency
+10. **Portfolio Manager** synthesizes all inputs and makes final recommendation
+11. **Compliance Officer** validates the recommendation against policy before execution
 
 ## Glidepath Schedule
 

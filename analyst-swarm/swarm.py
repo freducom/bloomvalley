@@ -617,7 +617,21 @@ AGENT_DATA = {
         "/news?limit=20", "/macro/summary", "/macro/regime",
         "/fundamentals?limit=200", "/recommendations?status=active&limit=50",
         "/research/notes?tag=research-analyst&limit=100",
+        "/research/notes?tag=graham-browne-analyst&limit=20",
+        "/research/notes?tag=buffett-munger-analyst&limit=20",
         "/research/notes?tag=analyst_report&limit=10",
+    ],
+    "graham-browne-analyst": [
+        "/fundamentals?limit=500",
+        "/portfolio/holdings", "/watchlists/",
+        "/insiders/signals",
+        "/research/notes?tag=research-analyst&limit=100",
+    ],
+    "buffett-munger-analyst": [
+        "/fundamentals?limit=500",
+        "/portfolio/holdings", "/watchlists/",
+        "/insiders/signals",
+        "/research/notes?tag=research-analyst&limit=100",
     ],
 }
 

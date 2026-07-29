@@ -36,6 +36,8 @@ const AGENT_NAMES = [
   "tax-strategist",
   "compliance-officer",
   "portfolio-manager",
+  "graham-browne-analyst",
+  "buffett-munger-analyst",
 ];
 
 const AGENT_SHORT: Record<string, string> = {
@@ -48,6 +50,8 @@ const AGENT_SHORT: Record<string, string> = {
   "tax-strategist": "Tax",
   "compliance-officer": "Compliance",
   "portfolio-manager": "PM",
+  "graham-browne-analyst": "Graham/Browne",
+  "buffett-munger-analyst": "Buffett/Munger",
 };
 
 const ACTION_STYLE: Record<string, string> = {
@@ -93,7 +97,7 @@ export default function ConsensusPage() {
   if (loading) {
     return (
       <div className="p-6">
-        <h1 className="text-lg font-bold text-terminal-text-primary mb-4">Analyst Consensus <InfoTip text="Aggregated view of how all 9 AI analyst agents agree or disagree on each security. Highlights conflicts between Research Analyst and Portfolio Manager recommendations." /></h1>
+        <h1 className="text-lg font-bold text-terminal-text-primary mb-4">Analyst Consensus <InfoTip text="Aggregated view of how the AI analyst agents agree or disagree on each security. Highlights conflicts between Research Analyst and Portfolio Manager recommendations. Style analysts (Graham/Browne, Buffett/Munger) are silent unless a name clears their canonical criteria." /></h1>
         <div className="text-sm text-terminal-text-muted animate-pulse">Loading consensus data...</div>
       </div>
     );
@@ -101,10 +105,10 @@ export default function ConsensusPage() {
 
   return (
     <div className="p-6 max-w-7xl">
-      <h1 className="text-lg font-bold text-terminal-text-primary mb-2">Analyst Consensus <InfoTip text="Aggregated view of how all 9 AI analyst agents agree or disagree on each security. Highlights conflicts between Research Analyst and Portfolio Manager recommendations." /></h1>
+      <h1 className="text-lg font-bold text-terminal-text-primary mb-2">Analyst Consensus <InfoTip text="Aggregated view of how the AI analyst agents agree or disagree on each security. Highlights conflicts between Research Analyst and Portfolio Manager recommendations. Style analysts (Graham/Browne, Buffett/Munger) are silent unless a name clears their canonical criteria." /></h1>
       <p className="text-xs text-terminal-text-muted mb-4">
-        How the 9 AI analysts agree or disagree on each security. Conflicts are flagged when the Research Analyst
-        and Portfolio Manager disagree.
+        How the AI analysts agree or disagree on each security. Conflicts are flagged when the Research Analyst
+        and Portfolio Manager disagree. Style analysts stay silent when nothing clears their bar.
       </p>
 
       {/* Summary */}
