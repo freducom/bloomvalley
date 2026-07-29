@@ -163,6 +163,8 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 const PRESETS: { key: string; label: string; filters: Partial<Filters> }[] = [
+  { key: "grahambrowne", label: "Graham/Browne", filters: { maxPb: "1.5", maxPe: "15", minFcfYield: "0.06", maxDebt: "3" } },
+  { key: "buffettmunger", label: "Buffett/Munger", filters: { minRoic: "0.15", minGrossMargin: "0.40", maxDebt: "2", minFcfYield: "0.04" } },
   { key: "compounders", label: "Quality Compounders", filters: { minRoic: "0.15", minGrossMargin: "0.15", maxDebt: "3" } },
   { key: "value", label: "Value", filters: { maxPe: "20", maxPb: "2", minFcfYield: "0.04" } },
   { key: "deepvalue", label: "Deep Value", filters: { maxPe: "12", maxPb: "1.5", minFcfYield: "0.06", maxDebt: "3" } },
@@ -211,6 +213,22 @@ function applyFilters(data: Fundamentals[], filters: Filters): Fundamentals[] {
     if (filters.preset === "deepvalue") {
       if (f.dividendYield === null || f.dividendYield < 0.03) return false;
       if (f.roe === null || f.roe < 0.05) return false;
+    }
+
+    // Graham/Browne preset: G3 Graham number (P/E × P/B ≤ 22.5), G5 dividend yield ≥ 3%, ROE ≥ 5% (avoid outright bad businesses)
+    // See specs/06-investment-philosophy/graham-browne.md
+    if (filters.preset === "grahambrowne") {
+      if (f.peRatio !== null && f.priceToBook !== null && f.peRatio * f.priceToBook > 22.5) return false;
+      if (f.dividendYield === null || f.dividendYield < 0.03) return false;
+      if (f.roe === null || f.roe < 0.05) return false;
+    }
+
+    // Buffett/Munger preset: B2 ROE ≥ 15% (5-yr avg proxied by TTM), B6 earnings consistency proxied by positive netMargin.
+    // Full B6/B7 (10-yr consistency + cash conversion) enforced in the analyst agent, not the row filter.
+    // See specs/06-investment-philosophy/buffett-munger.md
+    if (filters.preset === "buffettmunger") {
+      if (f.roe === null || f.roe < 0.15) return false;
+      if (f.netMargin === null || f.netMargin <= 0) return false;
     }
 
     // Undervalued preset: must have DCF upside > 20%

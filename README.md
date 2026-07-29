@@ -38,7 +38,7 @@ The analyst swarm — 9 specialized agents from Portfolio Manager to Compliance 
 
 ## The AI Analyst Team
 
-An autonomous swarm of 9 specialized investment analysts runs 3x daily, each with deep domain expertise:
+An autonomous swarm of specialized investment analysts runs 3x daily, each with deep domain expertise:
 
 | Role | What it does |
 |------|-------------|
@@ -51,6 +51,8 @@ An autonomous swarm of 9 specialized investment analysts runs 3x daily, each wit
 | **Tax Strategist** | Finnish tax optimization, loss harvesting, tax-advantaged account strategy |
 | **Technical Analyst** | Chart patterns, momentum signals, support/resistance, sentiment analysis |
 | **Compliance Officer** | Regulatory checks, concentration limits, risk guardrails |
+| **Graham/Browne Analyst** | Statistical deep-value screener — flags names cheap on P/B, P/E, Graham number, FCF yield, dividend yield. Silent when nothing qualifies. See [`specs/06-investment-philosophy/graham-browne.md`](specs/06-investment-philosophy/graham-browne.md). |
+| **Buffett/Munger Analyst** | Quality-compounder screener — flags wide-moat, high-ROIC businesses at a fair price. Silent when nothing qualifies. See [`specs/06-investment-philosophy/buffett-munger.md`](specs/06-investment-philosophy/buffett-munger.md). |
 
 The swarm runs on **Claude Code CLI** or **Ollama** (local LLMs) — your choice. Agent definitions are fully customizable Markdown files in `.claude/agents/`.
 
@@ -102,7 +104,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Analyst Consensus** — view how the 9 AI agents agree or disagree per security, with conflict detection between Research Analyst and Portfolio Manager
 - **Recommendation Accuracy** — mark-to-market tracking of PM recommendations at 30/90/180 day checkpoints with win rates, avg returns, and best/worst calls
 - **Sector Rotation (RRG)** — 14-week Relative Rotation Graph of the 11 GICS sectors vs SPY, plotting each sector by RS-Ratio and RS-Momentum on a 4-quadrant chart (Leading / Weakening / Lagging / Improving). Flags BUY signals (Improving→Leading) and SELL signals (Weakening→Lagging), and lists the top ETFs by dollar-volume and top stocks by market cap from your watchlist in each mover sector
-- **Fundamentals** — P/B, FCF, DCF valuation, ROIC, margins, short interest
+- **Fundamentals** — P/B, FCF, DCF valuation, ROIC, margins, short interest. Style presets one-click filter the universe against **Graham/Browne** (statistical deep value), **Buffett/Munger** (quality compounders at a fair price), plus Quality Compounders, Value, Deep Value, Dividend, Undervalued (DCF), and Low Debt. Style-preset criteria are documented in [`specs/06-investment-philosophy/`](specs/06-investment-philosophy/).
 - **Earnings** — calendar with estimates, actual EPS, revenue surprises
 - **Retirement Projections** — Monte Carlo simulation (10,000 paths) with fan chart, survival probabilities, safe withdrawal rate, and sensitivity analysis
 - **Portfolio Optimization** — efficient frontier, optimal portfolio for risk tolerance, risk parity, tax-aware rebalancing with trade suggestions

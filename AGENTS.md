@@ -185,6 +185,22 @@ An AI-powered investment advisory team and software development team building a 
 - Flags any recommendation that contradicts the stated investment philosophy
 - Outputs: compliance check (pass/fail) on every trade recommendation, policy violation alerts
 
+### 11. Graham/Browne Analyst *(style-specific screener)*
+**Responsibility**: Applies the canonical Graham (defensive investor) + Browne (Tweedy Browne) statistical deep-value criteria and flags qualifying names.
+
+- Canonical criteria in [`specs/06-investment-philosophy/graham-browne.md`](specs/06-investment-philosophy/graham-browne.md); agent file at `.claude/agents/graham-browne-analyst.md`
+- Runs on-demand or scheduled; produces a ranked short-list with a 3-paragraph writeup per candidate (why cheap, why not a trap, re-rating path)
+- **Silent-if-zero rule**: when nothing clears the hard criteria, produces a single-line log entry and no report. The empty output is the signal.
+- Feeds the recommendation list when a candidate scores ≥ 75 and carries no `cyclical_earnings_high` or `low_data_confidence` flag
+
+### 12. Buffett/Munger Analyst *(style-specific screener)*
+**Responsibility**: Applies the canonical Buffett + Munger quality-compounder-at-a-fair-price criteria and flags qualifying names.
+
+- Canonical criteria in [`specs/06-investment-philosophy/buffett-munger.md`](specs/06-investment-philosophy/buffett-munger.md); agent file at `.claude/agents/buffett-munger-analyst.md`
+- Runs on-demand or scheduled; produces a ranked short-list with a moat/runway/management/price writeup per candidate
+- **Silent-if-zero rule**: when nothing clears the hard criteria, produces a single-line log entry and no report. Compounders at fair prices are rare.
+- Feeds the recommendation list when a candidate scores ≥ 80 and carries `moat = wide`
+
 ## Free Data Sources
 
 | Source | Use |

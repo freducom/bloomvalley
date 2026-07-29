@@ -107,11 +107,13 @@ Each filter row contains:
 
 | Preset | Description | Filters |
 |--------|-------------|---------|
+| Graham/Browne | Statistical deep value (Graham defensive + Browne modern) | P/B ≤ 1.5, P/E ≤ 15, Graham number (P/E × P/B) ≤ 22.5, FCF Yield ≥ 6%, Div Yield ≥ 3%, ROE ≥ 5%, Debt/EBITDA ≤ 3x. See `specs/06-investment-philosophy/graham-browne.md`. Shipped on `/fundamentals` page. |
+| Buffett/Munger | Quality compounders at a fair price | ROIC ≥ 15%, ROE ≥ 15%, Gross Margin ≥ 40%, Net Debt/EBITDA ≤ 2x, FCF Yield ≥ 4%, positive net margin. Row-filter subset; full B6/B7 (10-yr earnings consistency + cash conversion) enforced by `buffett-munger-analyst`. See `specs/06-investment-philosophy/buffett-munger.md`. Shipped on `/fundamentals` page. |
 | Munger Quality | Wonderful companies at fair prices | ROE > 15%, ROIC > 12%, Debt/Equity < 1.0, Earnings Growth > 5%, P/E < 25 |
 | Boglehead ETF | Low-cost broad index funds | Asset Class = ETF, TER < 0.30% |
 | Dividend Aristocrats | 25+ years consecutive dividend increases | Consecutive Dividend Years >= 25, Payout Ratio < 80% |
 | High Growth | High-growth companies | Revenue Growth > 15%, Earnings Growth > 15%, P/E < 50 |
-| Deep Value | Statistically cheap stocks (Browne rubric) | P/B < 1.5, P/E < 12, FCF Yield >= 6%, Div Yield >= 3%, ROE >= 5%, Debt/EBITDA < 3x. Shipped on `/fundamentals` page. |
+| Deep Value | Statistically cheap stocks (Browne rubric — looser than Graham/Browne) | P/B < 1.5, P/E < 12, FCF Yield >= 6%, Div Yield >= 3%, ROE >= 5%, Debt/EBITDA < 3x. Shipped on `/fundamentals` page. |
 
 Clicking a preset loads its filters into the builder. User can modify and save as a new custom preset.
 
@@ -211,7 +213,7 @@ Better values are subtly highlighted with `positive-muted` background. Worst val
 3. The watchlist table displays all specified columns (price, day change, P/E, P/B, div yield, market cap, moat, notes) with correct values.
 4. The screener filter builder supports all listed factors with comparison and `between` operators.
 5. AND/OR logic between filters works correctly and produces accurate results.
-6. All 5 built-in presets (Munger Quality, Boglehead ETF, Dividend Aristocrats, High Growth, Deep Value) load correct filter configurations.
+6. All 7 built-in presets (Graham/Browne, Buffett/Munger, Munger Quality, Boglehead ETF, Dividend Aristocrats, High Growth, Deep Value) load correct filter configurations.
 7. Custom presets can be saved, loaded, and deleted.
 8. The universe selector correctly filters screener results by exchange/market.
 9. Screener results are sortable by any column and paginated.
@@ -227,3 +229,4 @@ Better values are subtly highlighted with `positive-muted` background. Worst val
 | Date | Change |
 |------|--------|
 | 2026-03-19 | Initial draft |
+| 2026-07-29 | Added Graham/Browne and Buffett/Munger canonical presets on `/fundamentals`. Cross-references specs under `06-investment-philosophy/`. |
