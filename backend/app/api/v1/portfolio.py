@@ -1565,13 +1565,6 @@ async def nordnet_paste(body: NordnetPasteRequest):
     (account, type, |total_cents|, security) within ±10 days.
     """
     rows = np_paste.parse_paste(body.text)
-
-    if not rows:
-        return {
-            "data": {"rows": [], "summary": {"totalRows": 0}},
-            "meta": {"timestamp": datetime.now(timezone.utc).isoformat()},
-        }
-
     committed_ids: list[int] = []
     cash_updates: list[dict] = []
 

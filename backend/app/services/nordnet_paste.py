@@ -386,12 +386,16 @@ async def find_duplicate(
         return ref_hit
 
     tdate = date.fromisoformat(row.trade_date)
-    total_cents = abs(to_cents(row.total_value) or 0)
+    # Compare against the value we'd actually store — for buys/sells this is
+    # gross-before-fee, not the raw Nordnet number which includes the fee.
+    stored_total_cents = abs(
+        compute_total_cents(row.tx_type, row.total_value, row.fee_value)
+    )
 
     q = select(Transaction.id).where(
         Transaction.account_id == row.account_id,
         Transaction.type == row.tx_type,
-        func.abs(Transaction.total_cents) == total_cents,
+        func.abs(Transaction.total_cents) == stored_total_cents,
         Transaction.trade_date >= tdate - timedelta(days=tolerance_days),
         Transaction.trade_date <= tdate + timedelta(days=tolerance_days),
     )
