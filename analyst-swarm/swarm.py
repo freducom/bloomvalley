@@ -1198,7 +1198,11 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
 
     try:
         # Fetch bulk data once
-        bulk_endpoints = ["/portfolio/holdings", "/fundamentals?limit=200",
+        # limit=500 matches the /fundamentals endpoint cap; total universe is
+        # ~350 securities today. If it grows past 500, replace with a per-ticker
+        # fetch so we never re-introduce the tail-alphabetical dropout that
+        # caused wholesale LLM hallucination for tickers N-Z.
+        bulk_endpoints = ["/portfolio/holdings", "/fundamentals?limit=500",
                           "/insiders/signals", "/news?limit=30", "/prices/latest"]
         if agent_name == "research-analyst":
             bulk_endpoints.append("/watchlists/")
@@ -1297,7 +1301,8 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
             else:
                 parts = []
                 fund_text = digest_fundamentals_for_security(fundamentals_raw, ticker)
-                if fund_text:
+                has_fundamentals = bool(fund_text) and "No fundamental data" not in fund_text
+                if has_fundamentals:
                     parts.append(fund_text)
                 insider_text = digest_insider_signals(insiders_raw, ticker)
                 if insider_text and "No insider" not in insider_text:
@@ -1305,6 +1310,21 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                 news_text = digest_news(news_raw, ticker)
                 if news_text and "No recent" not in news_text:
                     parts.append(news_text)
+
+                # For research-analyst, refuse to run the LLM without
+                # fundamentals — otherwise the model hallucinates figures from
+                # training data and emits a "Data caveat" disclaimer that leaks
+                # into the security page. Insider/news alone can't drive a
+                # research thesis. Skip the ticker instead of storing wrong
+                # data with a small warning label. See 2026-08-05 leak.
+                if agent_name == "research-analyst" and not has_fundamentals:
+                    completed_sec += 1
+                    await report_status(backend_url, "running", agent=agent_name,
+                                        completed=completed_sec, total=total_sec,
+                                        message=f"{ticker} skipped — no fundamentals ({completed_sec}/{total_sec})")
+                    print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ⊘ (no fundamentals — skipped)", flush=True)
+                    return None
+
                 data_section = "\n\n".join(parts) if parts else f"Limited data available for {ticker}."
 
             # Build prompt from template

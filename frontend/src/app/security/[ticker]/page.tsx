@@ -195,6 +195,7 @@ interface ResearchNote {
   bullCase: string | null;
   bearCase: string | null;
   tags?: string[];
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -465,6 +466,7 @@ export default function SecurityDetailPage() {
         if (holdRes) setHoldings(holdRes.filter((h) => h.securityId === id));
         if (recRes?.data) setRecommendations(recRes.data.filter((r) => r.ticker === ticker));
         if (researchRes?.data) setResearch(researchRes.data.filter((n) => {
+              if (n.isActive === false) return false;
               const tags = n.tags || [];
               // Exclude machine-generated data notes that contain raw JSON, not prose
               const dataTags = ["sec_filing", "etf_profile", "justetf", "fund_rating", "morningstar"];
