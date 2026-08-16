@@ -57,6 +57,9 @@ imports/
 exports/
 data/personal/
 
+# One-shot temp scripts (may contain personal data) — always keep out of commits
+_tmp-*
+
 # Personal agent profiles (contains portfolio details, broker info, specific holdings)
 .claude/agents/personal/
 

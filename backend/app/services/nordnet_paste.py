@@ -45,6 +45,8 @@ TYPE_MAP: dict[str, str] = {
     "nosto": "withdrawal",
     "palkkio": "fee",
     "korko": "interest",
+    "etf_kk säästön palvelumaksu": "fee",
+    "per etf-kk säästön palvemaksu": "fee",
 }
 
 # Nordnet account number → account_id in our DB.
@@ -279,6 +281,22 @@ def parse_paste(text: str) -> list[ParsedRow]:
 
 _CLASS_SUFFIX_RE = re.compile(r"^(.*?)\s+([A-Z])$")
 
+# Nordnet decorates ETF names with class markers like " USD (Acc)",
+# " EUR (Acc)", " - USD Acc", " - EUR Dist" — strip them for LIKE-matching.
+_ETF_CLASS_TRAILING_RE = re.compile(
+    r"\s+(?:-\s+)?[A-Z]{3}\s*\(?(?:Acc|Dist|Inc|Cap)\)?\s*$",
+    re.IGNORECASE,
+)
+
+# Nordnet prefixes some SPDR ETFs with "SS " (State Street issuer marker).
+_ETF_ISSUER_PREFIX_RE = re.compile(r"^SS\s+", re.IGNORECASE)
+
+
+def _strip_etf_decorations(name: str) -> str:
+    n = _ETF_ISSUER_PREFIX_RE.sub("", name).strip()
+    n = _ETF_CLASS_TRAILING_RE.sub("", n).strip()
+    return n
+
 
 async def resolve_security(session: AsyncSession, name: str) -> tuple[
     Optional[Security], str
@@ -287,7 +305,7 @@ async def resolve_security(session: AsyncSession, name: str) -> tuple[
 
     Returns (security_or_None, confidence_label).
     """
-    stripped = name.strip()
+    stripped = _strip_etf_decorations(name.strip())
     m = _CLASS_SUFFIX_RE.match(stripped)
     base = m.group(1) if m else stripped
     class_suffix = m.group(2) if m else None
@@ -315,6 +333,20 @@ async def resolve_security(session: AsyncSession, name: str) -> tuple[
     if len(candidates) == 1:
         return candidates[0], "high" if class_suffix is None else "medium"
 
+    # Multiple candidates — try to pick the canonical entry by matching on
+    # the decorations-stripped name. If several strip to the same target,
+    # prefer the shortest original name (least-decorated = canonical).
+    target = _strip_etf_decorations(stripped).lower()
+    canonical = [
+        c for c in candidates
+        if _strip_etf_decorations(c.name).lower() == target
+    ]
+    if len(canonical) == 1:
+        return canonical[0], "high"
+    if len(canonical) > 1:
+        canonical.sort(key=lambda c: len(c.name))
+        return canonical[0], "medium"
+
     return None, "ambiguous"
 
 
@@ -334,7 +366,9 @@ def compute_total_cents(tx_type: str, total_value: Decimal, fee_value: Decimal) 
       - sell:  gross received (positive) = |total| + fee
       - dividend: net received (positive) = |total|
       - deposit: positive
-      - withdrawal / fee: negative
+      - withdrawal / fee: signed as shown in Nordnet — normally negative,
+        but reversals like "Per etf-kk säästön palvemaksu" arrive positive
+        and must be preserved as inflows.
     """
     fee = fee_value or Decimal("0")
     abs_total = abs(total_value)
@@ -347,7 +381,7 @@ def compute_total_cents(tx_type: str, total_value: Decimal, fee_value: Decimal) 
     if tx_type == "deposit":
         return to_cents(abs_total) or 0
     if tx_type in ("withdrawal", "fee"):
-        return -(to_cents(abs_total) or 0)
+        return to_cents(total_value) or 0
     return to_cents(total_value) or 0
 
 

@@ -48,8 +48,10 @@ SEED_SECURITIES = [
 
     # ETFs
     {"ticker": "IWDA", "name": "iShares Core MSCI World UCITS ETF", "asset_class": "etf", "currency": "USD", "exchange": "XAMS", "is_accumulating": True, "isin": "IE00B4L5Y983"},
+    {"ticker": "EIMI", "name": "iShares Core MSCI EM IMI UCITS ETF", "asset_class": "etf", "currency": "USD", "exchange": "XLON", "is_accumulating": True, "isin": "IE00BKM4GZ66"},
     {"ticker": "VUSA", "name": "Vanguard S&P 500 UCITS ETF", "asset_class": "etf", "currency": "USD", "exchange": "XLON", "is_accumulating": False, "isin": "IE00B3XXRP09"},
     {"ticker": "IEGA", "name": "iShares Core Euro Government Bond UCITS ETF", "asset_class": "etf", "currency": "EUR", "exchange": "XAMS", "is_accumulating": True, "isin": "IE00B4WXJJ64"},
+    {"ticker": "ZPRV", "name": "SPDR MSCI USA Small Cap Value Weighted UCITS ETF", "asset_class": "etf", "currency": "USD", "exchange": "XETR", "is_accumulating": True, "isin": "IE00BSPLC298"},
 
     # US sector ETFs — used for Relative Rotation Graph (F23). SPY is the RRG benchmark.
     {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "asset_class": "etf", "currency": "USD", "exchange": "XNYS", "country": "US", "isin": "US78462F1030", "is_accumulating": False},
