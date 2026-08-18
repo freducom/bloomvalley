@@ -356,14 +356,17 @@ class YahooFundamentals(PipelineAdapter):
                 errors.append(f"{ticker}: no fundamental metrics available")
                 continue
 
-            # Sanity checks on key ratios
-            pe = _safe_get(info, "trailingPE")
+            # Sanity checks on key ratios. Yahoo occasionally returns these
+            # as strings (e.g. "Infinity"), so coerce through _safe_decimal
+            # before comparing — a raw str compared to int raises TypeError
+            # and crashes the whole pipeline (see 2026-08-16 failure).
+            pe = _safe_decimal(_safe_get(info, "trailingPE"))
             if pe is not None and (pe < 0 or pe > 10000):
                 logger.warning("yahoo_fundamentals_pe_outlier", ticker=ticker, pe=pe)
                 # Don't reject, just log — negative PE is legitimate for loss-making companies
                 # but extreme values may indicate bad data
 
-            pb = _safe_get(info, "priceToBook")
+            pb = _safe_decimal(_safe_get(info, "priceToBook"))
             if pb is not None and pb < 0:
                 logger.warning("yahoo_fundamentals_pb_negative", ticker=ticker, pb=pb)
                 # Negative P/B can happen with negative book value — keep it
