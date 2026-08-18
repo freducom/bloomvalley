@@ -41,6 +41,7 @@ TYPE_MAP: dict[str, str] = {
     "osto": "buy",
     "myynti": "sell",
     "osinko": "dividend",
+    "ennakkopidätys": "withholding_tax",  # virtual — merged into paired dividend
     "talletus": "deposit",
     "nosto": "withdrawal",
     "palkkio": "fee",
@@ -104,6 +105,9 @@ class ParsedRow:
     fee_currency: str = "EUR"
     total_value: Optional[Decimal] = None   # signed as-shown in Nordnet
     total_currency: Optional[str] = None
+    # Set on dividend rows during the withholding-tax merge pass. Stored on
+    # the paired dividend Transaction (see Transaction.withholding_tax_cents).
+    withholding_tax_cents: int = 0
 
     # Resolution
     account_id: Optional[int] = None
@@ -137,6 +141,7 @@ class ParsedRow:
                 "feeCurrency": self.fee_currency,
                 "total": str(self.total_value) if self.total_value is not None else None,
                 "totalCurrency": self.total_currency,
+                "withholdingTaxCents": self.withholding_tax_cents,
             },
             "resolution": {
                 "accountId": self.account_id,
@@ -273,8 +278,63 @@ def _parse_one(lines: list[str], index: int) -> ParsedRow:
     return row
 
 
+def _merge_withholding_taxes(rows: list[ParsedRow]) -> None:
+    """Attach each Ennakkopidätys row to its paired dividend row.
+
+    Nordnet reports Finnish domestic withholding tax on foreign dividends as
+    a separate ledger line (same trade_date, same security). Our Transaction
+    schema stores the tax on the dividend row itself (withholding_tax_cents),
+    so we merge in place: reduce the dividend's total_value by |tax|, set
+    withholding_tax_cents, and mark the tax row status='merged' so the
+    commit phase skips it.
+
+    Unmatched tax rows keep status='error' with the original 'unknown Finnish
+    transaction type' message replaced by a clearer merge-failure message.
+    """
+    dividends = [
+        r for r in rows
+        if r.tx_type == "dividend" and r.trade_date and r.security_name
+    ]
+    for tax_row in rows:
+        if tax_row.tx_type != "withholding_tax":
+            continue
+        # Clear the "unknown Finnish transaction type" pre-emptively; if we
+        # fail to match, we'll add a specific error below.
+        tax_row.errors = [
+            e for e in tax_row.errors
+            if "unknown Finnish transaction type" not in e
+        ]
+        tax_row.status = "pending"
+        match = next(
+            (
+                d for d in dividends
+                if d.trade_date == tax_row.trade_date
+                and d.account_number == tax_row.account_number
+                and d.security_name == tax_row.security_name
+                and d.withholding_tax_cents == 0
+            ),
+            None,
+        )
+        if match is None:
+            tax_row.errors.append(
+                f"no paired dividend found for Ennakkopidätys "
+                f"({tax_row.security_name!r} on {tax_row.trade_date})"
+            )
+            tax_row.status = "error"
+            continue
+        tax_cents = abs(to_cents(tax_row.total_value) or 0)
+        match.withholding_tax_cents = tax_cents
+        # Reduce dividend total from gross → net so compute_total_cents stores
+        # the net-received figure per the existing convention.
+        if match.total_value is not None:
+            match.total_value = match.total_value - (Decimal(tax_cents) / Decimal(100))
+        tax_row.status = "merged"
+
+
 def parse_paste(text: str) -> list[ParsedRow]:
-    return [_parse_one(rec, i) for i, rec in enumerate(_split_records(text))]
+    rows = [_parse_one(rec, i) for i, rec in enumerate(_split_records(text))]
+    _merge_withholding_taxes(rows)
+    return rows
 
 
 # ── Security matching ────────────────────────────────────────────────────

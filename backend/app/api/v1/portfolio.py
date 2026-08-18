@@ -1571,7 +1571,9 @@ async def nordnet_paste(body: NordnetPasteRequest):
     async with async_session() as session:
         # Resolve accounts + securities, then check duplicates
         for row in rows:
-            if row.status == "error":
+            if row.status in ("error", "merged"):
+                # "merged" = Ennakkopidätys row already folded into its paired
+                # dividend by parse_paste; no standalone commit needed.
                 continue
 
             if row.account_number:
@@ -1631,6 +1633,7 @@ async def nordnet_paste(body: NordnetPasteRequest):
                     fee_cents=np_paste.to_cents(row.fee_value) or 0,
                     fee_currency=row.fee_currency or "EUR",
                     currency=row.total_currency or "EUR",
+                    withholding_tax_cents=row.withholding_tax_cents,
                     notes=(
                         f"Nordnet paste: {row.type_finnish} — "
                         f"raw price {row.price_value} {row.price_currency or ''}, "

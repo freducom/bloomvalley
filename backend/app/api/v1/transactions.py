@@ -152,6 +152,7 @@ async def list_transactions(
             "feeCents": t.fee_cents,
             "feeCurrency": t.fee_currency,
             "currency": t.currency,
+            "withholdingTaxCents": t.withholding_tax_cents,
             "notes": t.notes,
             "createdAt": t.created_at.isoformat(),
         })
