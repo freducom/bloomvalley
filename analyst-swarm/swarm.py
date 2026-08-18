@@ -1319,7 +1319,7 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                         pass
 
         # Raw data strings for digest functions
-        fundamentals_raw = data.get("/fundamentals?limit=200", "")
+        fundamentals_raw = data.get("/fundamentals?limit=500", "")
         insiders_raw = data.get("/insiders/signals", "")
         news_raw = data.get("/news?limit=30", "")
 
