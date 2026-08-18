@@ -535,8 +535,9 @@ export default function SecurityDetailPage() {
   const CLAUDE_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
   const now = Date.now();
   const researchAnalystNotes = research.filter((n) => n.tags?.includes("research-analyst"));
-  const claudeResearch = researchAnalystNotes.find((n) => n.tags?.includes("llm:claude")) || null;
-  const ollamaResearch = researchAnalystNotes.find((n) => n.tags?.includes("llm:ollama")) || null;
+  // Tags may include the model, e.g. "llm:ollama/gemma4-64k:latest" — match by prefix
+  const claudeResearch = researchAnalystNotes.find((n) => n.tags?.some((t) => t.startsWith("llm:claude"))) || null;
+  const ollamaResearch = researchAnalystNotes.find((n) => n.tags?.some((t) => t.startsWith("llm:ollama"))) || null;
   const claudeAge = claudeResearch?.createdAt ? now - new Date(claudeResearch.createdAt).getTime() : Infinity;
   const latestResearchAnalyst = (claudeResearch && claudeAge < CLAUDE_MAX_AGE_MS)
     ? claudeResearch
