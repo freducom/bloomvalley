@@ -5,7 +5,9 @@
       "Edit",
       "Write",
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "Bash(psql \"$BLOOMVALLEY_DB_URL\":*)",
+      "Bash(psql $BLOOMVALLEY_DB_URL:*)"
     ]
   }
 }
