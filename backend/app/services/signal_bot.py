@@ -243,7 +243,7 @@ async def _analyze(ticker: str) -> str:
     if not ctx:
         return f"No data found for ticker {ticker}."
     msg = ChatMessage(role="user", content=f"Give me a concise 5-bullet analysis of {ticker}.")
-    return await get_full_response([msg], security_context=ctx)
+    return await get_full_response([msg], security_context=ctx, channel="signal")
 
 
 _WATCHLIST_KEYWORDS = (
@@ -366,7 +366,7 @@ async def _chat(text: str, redis) -> str:
         except Exception as e:
             logger.warning("watchlist_context_failed", error=str(e))
 
-    response = await get_full_response(messages, security_context=security_context)
+    response = await get_full_response(messages, security_context=security_context, channel="signal")
 
     history.append({"role": "assistant", "content": response})
     await redis.set(_REDIS_HISTORY_KEY, json.dumps(history), ex=_HISTORY_TTL)

@@ -36,6 +36,19 @@ Investment philosophy context:
 
 Keep responses concise and actionable. Use markdown formatting. When discussing specific securities, mention relevant metrics."""
 
+SYSTEM_PROMPT_SIGNAL = SYSTEM_PROMPT.replace(
+    "Keep responses concise and actionable. Use markdown formatting. When discussing specific securities, mention relevant metrics.",
+    "Keep responses concise and actionable. Reply in plain text only — no markdown headings (# ##), no ** bold **, no bulleted lists. Signal doesn't render markdown, so any markdown you emit shows up as literal characters. When discussing specific securities, mention relevant metrics.",
+)
+
+
+def _system_prompt_for(channel: str) -> str:
+    """Pick the right system prompt for the outbound channel."""
+    if channel == "signal":
+        return SYSTEM_PROMPT_SIGNAL
+    return SYSTEM_PROMPT
+
+
 
 class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"
@@ -390,7 +403,7 @@ async def _fetch_watchlist_context() -> str:
 
 
 async def _call_claude_cli(messages: list[ChatMessage], page_url: str = "",
-                           security_context: str = "") -> str:
+                           security_context: str = "", channel: str = "web") -> str:
     """Get full response from Claude CLI."""
     cfg = _get_llm_config()
     cli_cfg = cfg["claude_cli"]
@@ -398,7 +411,7 @@ async def _call_claude_cli(messages: list[ChatMessage], page_url: str = "",
     model = cli_cfg.get("model", "")
 
     # Build conversation: system + page context + security data + messages
-    parts = [SYSTEM_PROMPT]
+    parts = [_system_prompt_for(channel)]
     if page_url:
         parts.append(f"\n\nCurrent page context: {_build_page_context(page_url)}")
     if security_context:
@@ -448,7 +461,7 @@ async def _call_claude_cli(messages: list[ChatMessage], page_url: str = "",
 
 
 async def _stream_claude_cli(messages: list[ChatMessage], page_url: str = "",
-                             security_context: str = ""):
+                             security_context: str = "", channel: str = "web"):
     """Get response from Claude CLI and simulate streaming with chunked output."""
     text = await _call_claude_cli(messages, page_url, security_context)
     if not text:
@@ -468,7 +481,7 @@ async def _stream_claude_cli(messages: list[ChatMessage], page_url: str = "",
 
 
 async def _stream_claude_api(messages: list[ChatMessage], page_url: str = "",
-                            security_context: str = ""):
+                            security_context: str = "", channel: str = "web"):
     """Stream response from Claude API."""
     cfg = _get_llm_config()
     api_key = cfg["claude"]["api_key"]
@@ -476,7 +489,7 @@ async def _stream_claude_api(messages: list[ChatMessage], page_url: str = "",
         yield "Error: ANTHROPIC_API_KEY not configured."
         return
 
-    system = SYSTEM_PROMPT
+    system = _system_prompt_for(channel)
     if page_url:
         system += f"\n\nCurrent page context: {_build_page_context(page_url)}"
     if security_context:
@@ -522,12 +535,12 @@ async def _stream_claude_api(messages: list[ChatMessage], page_url: str = "",
 
 
 async def _stream_ollama(messages: list[ChatMessage], page_url: str = "",
-                        security_context: str = ""):
+                        security_context: str = "", channel: str = "web"):
     """Stream response from Ollama."""
     cfg = _get_llm_config()
     base_url = cfg["ollama"]["base_url"].rstrip("/")
 
-    system = SYSTEM_PROMPT
+    system = _system_prompt_for(channel)
     if page_url:
         system += f"\n\nCurrent page context: {_build_page_context(page_url)}"
     if security_context:
@@ -560,7 +573,7 @@ async def _stream_ollama(messages: list[ChatMessage], page_url: str = "",
                     pass
 
 
-async def _stream_response(messages: list[ChatMessage], page_url: str = ""):
+async def _stream_response(messages: list[ChatMessage], page_url: str = "", channel: str = "web"):
     """Route to the configured LLM provider's streaming function."""
     cfg = _get_llm_config()
     provider = cfg["llm_provider"]
@@ -576,22 +589,22 @@ async def _stream_response(messages: list[ChatMessage], page_url: str = ""):
             logger.warning("security_context_fetch_failed", ticker=ticker, error=str(e))
 
     if provider == "claude_cli":
-        async for chunk in _stream_claude_cli(messages, page_url, security_context):
+        async for chunk in _stream_claude_cli(messages, page_url, security_context, channel=channel):
             yield chunk
     elif provider == "claude":
-        async for chunk in _stream_claude_api(messages, page_url, security_context):
+        async for chunk in _stream_claude_api(messages, page_url, security_context, channel=channel):
             yield chunk
     elif provider == "ollama":
-        async for chunk in _stream_ollama(messages, page_url, security_context):
+        async for chunk in _stream_ollama(messages, page_url, security_context, channel=channel):
             yield chunk
     else:
         yield f"Error: Unknown LLM provider: {provider}"
 
 
-async def _sse_generator(messages: list[ChatMessage], page_url: str = ""):
+async def _sse_generator(messages: list[ChatMessage], page_url: str = "", channel: str = "web"):
     """Generate SSE events from the LLM stream."""
     try:
-        async for chunk in _stream_response(messages, page_url):
+        async for chunk in _stream_response(messages, page_url, channel=channel):
             if chunk:
                 data = json.dumps({"type": "content", "text": chunk})
                 yield f"data: {data}\n\n"
@@ -602,7 +615,7 @@ async def _sse_generator(messages: list[ChatMessage], page_url: str = ""):
 
 
 async def get_full_response(messages: list[ChatMessage], page_url: str = "",
-                           security_context: str = "") -> str:
+                           security_context: str = "", channel: str = "web") -> str:
     """Get a complete (non-streaming) LLM response. Used by Telegram bot."""
     cfg = _get_llm_config()
     provider = cfg["llm_provider"]
@@ -617,14 +630,14 @@ async def get_full_response(messages: list[ChatMessage], page_url: str = "",
                 pass
 
     if provider == "claude_cli":
-        return await _call_claude_cli(messages, page_url, security_context)
+        return await _call_claude_cli(messages, page_url, security_context, channel=channel)
     else:
         # Accumulate streaming providers into full text
         chunks = []
         if provider == "claude":
-            gen = _stream_claude_api(messages, page_url, security_context)
+            gen = _stream_claude_api(messages, page_url, security_context, channel=channel)
         elif provider == "ollama":
-            gen = _stream_ollama(messages, page_url, security_context)
+            gen = _stream_ollama(messages, page_url, security_context, channel=channel)
         else:
             return f"Error: Unknown LLM provider: {provider}"
         async for chunk in gen:
