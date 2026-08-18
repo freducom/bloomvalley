@@ -822,6 +822,50 @@ def _strip_foreign_fundamentals(text: str, ticker: str) -> str:
     ).rstrip()
 
 
+# Case-insensitive substring patterns that signal the LLM refused to analyse
+# (missing data / no tools / no web access) and produced boilerplate instead.
+# If any of these appears in the first ~1200 chars of the report, the note is
+# worthless and should not be stored. Defense in depth around the earlier
+# fundamentals-availability gate and the asset-class filter.
+_CAVEAT_PATTERNS = (
+    "data caveat",
+    "data note:",
+    "no fundamental data",
+    "no fundamental or live",
+    "no fundamental or current",
+    "no live fundamental",
+    "no live price",
+    "won't fabricate",
+    "will not fabricate",
+    "websearch isn't authorized",
+    "websearch wasn't authorized",
+    "webfetch permission",
+    "web access was denied",
+    "web access isn't",
+    "training data",
+    "training knowledge",
+    "knowledge cutoff",
+    "unable to fetch live",
+    "wasn't able to fetch",
+    "don't have access to live",
+)
+
+
+def _looks_like_caveat(report: str) -> str | None:
+    """Return the matching pattern if the report reads as a refusal/caveat.
+
+    Only inspects the first 1200 chars — a caveat that shows up deep in the
+    body doesn't dominate the note the way a preamble does.
+    """
+    if not report:
+        return None
+    head = report[:1200].lower()
+    for pat in _CAVEAT_PATTERNS:
+        if pat in head:
+            return pat
+    return None
+
+
 def _parse_research_sections(report: str) -> list[dict]:
     """Split a research analyst report into per-security sections."""
     matches = list(_SECTION_RE.finditer(report))
@@ -1236,6 +1280,7 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                     "ticker": ticker,
                     "name": h.get("name", ticker),
                     "securityId": h.get("securityId"),
+                    "assetClass": h.get("assetClass"),
                     "is_watchlist": False,
                 })
                 seen_tickers.add(ticker)
@@ -1247,6 +1292,7 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                     "ticker": ticker,
                     "name": item.get("securityName") or item.get("name", ticker),
                     "securityId": item.get("securityId"),
+                    "assetClass": item.get("assetClass"),
                     "is_watchlist": True,
                 })
                 seen_tickers.add(ticker)
@@ -1294,6 +1340,21 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
             name = sec["name"]
             prefix = "W-" if sec["is_watchlist"] else ""
 
+            # research-analyst is designed for single-company bull/bear on
+            # operating businesses. ETFs, funds, crypto etc. have no earnings,
+            # margins, or DCF-able cash flows — the LLM fills the vacuum with
+            # "Data caveat" disclaimers and structural boilerplate. Skip them
+            # here so the security page never shows a caveat note for e.g.
+            # EUNL.DE. (technical-analyst still runs — ETFs have price series.)
+            asset_class = (sec.get("assetClass") or "").lower()
+            if agent_name == "research-analyst" and asset_class and asset_class != "stock":
+                completed_sec += 1
+                await report_status(backend_url, "running", agent=agent_name,
+                                    completed=completed_sec, total=total_sec,
+                                    message=f"{ticker} skipped — {asset_class} ({completed_sec}/{total_sec})")
+                print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ⊘ (asset_class={asset_class} — skipped)", flush=True)
+                return None
+
             # Build per-security data section
             if is_technical:
                 ohlc_raw = ohlc_data.get(ticker, "")
@@ -1339,6 +1400,18 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
                     # Strip stray fundamentals blocks for other tickers
                     # (LLM sometimes echoes data from context/training)
                     report = _strip_foreign_fundamentals(report, ticker)
+
+                    # Drop the note if the LLM refused/hedged with a caveat
+                    # preamble instead of a real thesis. Prevents polluted
+                    # notes even if the fundamentals gate is bypassed.
+                    caveat = _looks_like_caveat(report) if agent_name == "research-analyst" else None
+                    if caveat:
+                        completed_sec += 1
+                        await report_status(backend_url, "running", agent=agent_name,
+                                            completed=completed_sec, total=total_sec,
+                                            message=f"{ticker} discarded — caveat ({completed_sec}/{total_sec})")
+                        print(f"  [{agent_name}] {prefix}{n}/{len(securities)} {ticker} ⊘ (caveat: {caveat!r} — discarded)", flush=True)
+                        return None
 
                     # Post per-security note immediately (don't wait for all to finish)
                     if report and agent_name == "research-analyst":
