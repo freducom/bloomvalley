@@ -11,8 +11,13 @@ from sqlalchemy import func, select
 from app.db.engine import async_session
 from app.db.models.recommendation_checkpoints import RecommendationCheckpoint
 from app.db.models.recommendations import Recommendation
+from app.db.models.research_notes import ResearchNote
 from app.db.models.securities import Security
 from app.db.models.prices import Price
+
+# Buy/hold/sell recommendations for stocks require a per-security
+# research-analyst note within this many days, else stale_research=True.
+RESEARCH_FRESHNESS_DAYS = 7
 
 logger = structlog.get_logger()
 
@@ -63,7 +68,29 @@ def _rec_to_dict(r: Recommendation, sec: Security | None = None) -> dict:
         "exitPriceCents": r.exit_price_cents,
         "returnPct": float(r.return_pct) if r.return_pct is not None else None,
         "outcomeNotes": r.outcome_notes,
+        "staleResearch": r.stale_research,
     }
+
+
+async def _is_research_stale(session, sec: Security) -> bool:
+    """True if `sec` is a stock with no per-security research-analyst note in
+    the last RESEARCH_FRESHNESS_DAYS. Non-stocks always return False — the
+    swarm's research-analyst skips them by design, so the rule doesn't apply.
+    """
+    if (sec.asset_class or "").lower() != "stock":
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RESEARCH_FRESHNESS_DAYS)
+    result = await session.execute(
+        select(ResearchNote.id)
+        .where(
+            ResearchNote.security_id == sec.id,
+            ResearchNote.is_active.is_(True),
+            ResearchNote.tags.contains(["research-analyst"]),
+            ResearchNote.created_at >= cutoff,
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is None
 
 
 @router.get("")
@@ -144,6 +171,8 @@ async def create_recommendation(body: RecommendationCreate):
             if latest:
                 entry_price = latest
 
+        stale_research = await _is_research_stale(session, sec)
+
         rec = Recommendation(
             security_id=body.security_id,
             action=body.action,
@@ -158,6 +187,7 @@ async def create_recommendation(body: RecommendationCreate):
             time_horizon=body.time_horizon,
             recommended_date=rec_date,
             expiry_date=date.fromisoformat(body.expiry_date) if body.expiry_date else None,
+            stale_research=stale_research,
         )
         session.add(rec)
         await session.commit()

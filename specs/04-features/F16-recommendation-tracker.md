@@ -73,6 +73,7 @@ CREATE TABLE recommendations (
     close_reason            VARCHAR(500),                    -- explanation for manual close
     actual_return_percent   NUMERIC(8, 4),                   -- calculated at close
     benchmark_return_percent NUMERIC(8, 4),                  -- benchmark return over same period
+    stale_research          BOOLEAN         NOT NULL DEFAULT false,  -- see "Research freshness gate" below
     updated_at              TIMESTAMPTZ     NOT NULL DEFAULT now(),
 
     CONSTRAINT chk_recommendations_target_positive
@@ -371,6 +372,8 @@ The core analytical view. Only shown when `closedRecommendations >= 20` (statist
    - If buy recommendations consistently underperform sell recommendations, flag as "Possible bullish bias"
 
 10. **No editing closed recommendations**: Once a recommendation is closed (any terminal status), it cannot be edited. This preserves the integrity of the retrospective analysis.
+
+11. **Research freshness gate (`stale_research`)**: On `POST /recommendations`, the server checks whether the underlying security has a per-security research-analyst note (`research_notes` row with `security_id` set, `is_active = true`, `tags @> ARRAY['research-analyst']`) created within the last 7 days. If not, the row is still created but with `stale_research = true`. Applies to stocks only — non-stock asset classes (crypto, ETFs) are always `stale_research = false` because the research-analyst pipeline skips them by design. The flag is exposed as `staleResearch` in API responses so the frontend can visually demote stale-basis calls. Existing rows keep the migration default (`false`) and are re-evaluated only on new writes.
 
 ## Edge Cases
 
