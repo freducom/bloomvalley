@@ -274,6 +274,8 @@ async def get_retrospective():
                 "byAction": {},
                 "byConfidence": {},
                 "bySource": {},
+                "byHorizon": {},
+                "biasFlags": [],
                 "bestCalls": [],
                 "worstCalls": [],
             },
@@ -330,6 +332,45 @@ async def get_retrospective():
     best = sorted_by_return[:5]
     worst = sorted_by_return[-5:]
 
+    # By horizon — holding period vs target. F16 rule #9: flag "Premature
+    # closing" bias when a horizon's avg holding period is <50% of its target.
+    # Targets match the buckets in EXTRACT_RECS_PROMPT (swarm.py): short=<3m,
+    # medium=3-12m, long=>12m. Using conservative targets on the short end of
+    # each range so "premature" only fires on genuine early closures.
+    horizon_target_days = {"short": 90, "medium": 180, "long": 365}
+    by_horizon: dict[str, dict] = {}
+    for horizon, target_days in horizon_target_days.items():
+        h_recs = [
+            r for r in closed
+            if r.time_horizon == horizon
+            and r.closed_date is not None
+            and r.recommended_date is not None
+        ]
+        if not h_recs:
+            continue
+        held_days = [(r.closed_date - r.recommended_date).days for r in h_recs]
+        avg_days = sum(held_days) / len(held_days)
+        by_horizon[horizon] = {
+            "count": len(h_recs),
+            "targetDays": target_days,
+            "avgDaysHeld": round(avg_days, 1),
+            "prematureRatio": round(avg_days / target_days, 3),
+        }
+
+    bias_flags = []
+    for horizon, stats in by_horizon.items():
+        if stats["prematureRatio"] < 0.5 and stats["count"] >= 20:
+            bias_flags.append({
+                "flag": "Premature closing",
+                "horizon": horizon,
+                "detail": (
+                    f"avg {stats['avgDaysHeld']}d held for {horizon}-horizon calls "
+                    f"(target ~{stats['targetDays']}d, {int(stats['prematureRatio']*100)}% of target). "
+                    "Recommendations are being closed well before the stated thesis window can play out."
+                ),
+                "sampleSize": stats["count"],
+            })
+
     return {
         "data": {
             "totalClosed": total,
@@ -341,6 +382,8 @@ async def get_retrospective():
             "byAction": by_action,
             "byConfidence": by_confidence,
             "bySource": by_source,
+            "byHorizon": by_horizon,
+            "biasFlags": bias_flags,
             "bestCalls": [
                 {"id": r.id, "securityId": r.security_id, "action": r.action, "returnPct": float(r.return_pct)}
                 for r in best

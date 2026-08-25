@@ -220,6 +220,19 @@ CREATE INDEX idx_recommendation_snapshots_date ON recommendation_snapshots (snap
     "worstCalls": [
       { "id": 37, "ticker": "INTC", "action": "buy", "returnPercent": -22.1, "holdingDays": 180 }
     ],
+    "byHorizon": {
+      "short":  { "count": 42, "targetDays": 90,  "avgDaysHeld": 62.4,  "prematureRatio": 0.693 },
+      "medium": { "count": 78, "targetDays": 180, "avgDaysHeld": 141.2, "prematureRatio": 0.784 },
+      "long":   { "count": 55, "targetDays": 365, "avgDaysHeld": 82.1,  "prematureRatio": 0.225 }
+    },
+    "biasFlags": [
+      {
+        "flag": "Premature closing",
+        "horizon": "long",
+        "detail": "avg 82.1d held for long-horizon calls (target ~365d, 22% of target). Recommendations are being closed well before the stated thesis window can play out.",
+        "sampleSize": 55
+      }
+    ],
     "biasAnalysis": [
       { "bias": "Overconfidence in tech sector — high confidence calls in tech underperform other sectors by 8%", "severity": "medium" },
       { "bias": "Time horizon too short — 3-month calls have 40% hit rate vs 70% for 1-year calls", "severity": "high" }
