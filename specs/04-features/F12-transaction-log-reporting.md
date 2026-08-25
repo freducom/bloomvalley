@@ -224,7 +224,8 @@ Finnish annual tax report (Vero.fi) requires:
 ### Sub-tab: Transactions
 
 - **Transaction table** (full-width, dense layout):
-  - Columns: Date, Type (icon + label), Security (ticker + name), Account, Quantity, Price, Fees, Total, Notes
+  - Columns: Date, Type (icon + label), Security (ticker + name), Account, Quantity, Price, Fees, Total, **P/L** (realized profit/loss on `sell` rows only, always shown in EUR; `—` for buys and unmatched sells), Notes
+  - `GET /transactions` returns `realizedPnlCents` and `realizedPnlCurrency` per row. The value is aggregated from `tax_lots.realized_pnl_cents` grouped by `close_transaction_id`; because the tax-lots service normalizes proceeds and cost basis to EUR before subtraction (`cost_basis_currency = 'EUR'`), the aggregate is EUR-denominated regardless of the trade's native currency. Frontend renders green when ≥ 0, red when negative. Unmatched sells (no matching open lot at close time, logged as `tax_lot_sell_unmatched`) get `null` and display `—`.
   - Type icons: green arrow up (buy), red arrow down (sell), dollar sign (dividend), transfer icons, etc.
   - Sortable by any column; default sort: date descending
   - Filterable: date range picker, account dropdown, security search, type multi-select

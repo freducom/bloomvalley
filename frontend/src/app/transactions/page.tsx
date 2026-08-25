@@ -24,6 +24,8 @@ interface Transaction {
   feeCents: number;
   feeCurrency: string;
   currency: string;
+  realizedPnlCents: number | null;
+  realizedPnlCurrency: string | null;
   notes: string | null;
   createdAt: string;
 }
@@ -266,19 +268,20 @@ export default function TransactionsPage() {
                 <th className="px-3 py-2 font-medium text-right">Price</th>
                 <th className="px-3 py-2 font-medium text-right">Total</th>
                 <th className="px-3 py-2 font-medium text-right">Fee</th>
+                <th className="px-3 py-2 font-medium text-right">P/L</th>
                 <th className="px-3 py-2 w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-terminal-border">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-terminal-text-secondary">
+                  <td colSpan={11} className="px-3 py-8 text-center text-terminal-text-secondary">
                     Loading...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-terminal-text-secondary">
+                  <td colSpan={11} className="px-3 py-8 text-center text-terminal-text-secondary">
                     No transactions found.
                   </td>
                 </tr>
@@ -346,6 +349,15 @@ export default function TransactionsPage() {
                     <td className="px-3 py-2 text-right font-mono text-xs text-terminal-text-secondary">
                       {isEditing ? editInput("feeCents") : (
                         t.feeCents ? <Private>{formatCurrency(t.feeCents, t.feeCurrency)}</Private> : "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {t.type === "sell" && t.realizedPnlCents !== null ? (
+                        <span className={t.realizedPnlCents >= 0 ? "text-terminal-positive" : "text-terminal-negative"}>
+                          <Private>{formatCurrency(t.realizedPnlCents, t.realizedPnlCurrency || "EUR")}</Private>
+                        </span>
+                      ) : (
+                        <span className="text-terminal-text-secondary">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">

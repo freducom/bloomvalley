@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from app.db.engine import async_session
 from app.db.models.accounts import Account
 from app.db.models.securities import Security
+from app.db.models.tax_lots import TaxLot
 from app.db.models.transactions import Transaction
 from app.services.tax_lots import apply_transaction as apply_tax_lot
 
@@ -130,6 +131,19 @@ async def list_transactions(
             acct_result = await session.execute(select(Account).where(Account.id.in_(acct_ids)))
             accounts = {a.id: a for a in acct_result.scalars().all()}
 
+        # Realized P/L per sell (aggregated across tax lots this txn closed).
+        # None when the txn closed no lots (e.g. buys, or sells with no
+        # matching open lot — apply_sell logs "tax_lot_sell_unmatched").
+        realized_by_txn: dict[int, int] = {}
+        txn_ids = [t.id for t in txns]
+        if txn_ids:
+            pnl_result = await session.execute(
+                select(TaxLot.close_transaction_id, func.sum(TaxLot.realized_pnl_cents))
+                .where(TaxLot.close_transaction_id.in_(txn_ids))
+                .group_by(TaxLot.close_transaction_id)
+            )
+            realized_by_txn = {row[0]: row[1] for row in pnl_result.all() if row[1] is not None}
+
     data = []
     for t in txns:
         sec = securities.get(t.security_id) if t.security_id else None
@@ -153,6 +167,11 @@ async def list_transactions(
             "feeCurrency": t.fee_currency,
             "currency": t.currency,
             "withholdingTaxCents": t.withholding_tax_cents,
+            "realizedPnlCents": realized_by_txn.get(t.id),
+            # Tax-lot service normalizes proceeds and cost basis to EUR before
+            # computing realized_pnl, so the aggregate is EUR-denominated
+            # regardless of the underlying trade currency.
+            "realizedPnlCurrency": "EUR" if realized_by_txn.get(t.id) is not None else None,
             "notes": t.notes,
             "createdAt": t.created_at.isoformat(),
         })
