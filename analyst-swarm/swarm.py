@@ -1248,7 +1248,7 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
         # caused wholesale LLM hallucination for tickers N-Z.
         bulk_endpoints = ["/portfolio/holdings", "/fundamentals?limit=500",
                           "/insiders/signals", "/news?limit=30", "/prices/latest"]
-        if agent_name == "research-analyst":
+        if agent_name in ("research-analyst", "technical-analyst"):
             bulk_endpoints.append("/watchlists/")
         data = await fetch_data(backend_url, bulk_endpoints)
 
@@ -1305,10 +1305,12 @@ async def run_per_security_agent(agent_name: str, cfg: dict, date_str: str) -> s
         is_technical = agent_name == "technical-analyst"
         template = _TECHNICAL_PER_SECURITY_TEMPLATE if is_technical else _RESEARCH_PER_SECURITY_TEMPLATE
 
-        # For technical analyst, fetch OHLC data in bulk
+        # For technical analyst, fetch OHLC data in bulk for every ticker
+        # (holdings + watchlist). Previously capped at 40, which silently
+        # dropped watchlist items past the cap.
         ohlc_data = {}
         if is_technical:
-            for sec in securities[:40]:
+            for sec in securities:
                 sid = sec.get("securityId")
                 if sid:
                     try:
