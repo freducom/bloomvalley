@@ -181,6 +181,7 @@ interface Recommendation {
   bearCase: string | null;
   targetPriceCents: number | null;
   status: string;
+  staleResearch?: boolean;
   recommendedDate: string;
   source: string | null;
 }
@@ -712,6 +713,14 @@ export default function SecurityDetailPage() {
                   ? "bg-terminal-warning/20 text-terminal-warning"
                   : "bg-terminal-bg-tertiary text-terminal-text-tertiary"
               }`}>{latestRec.confidence}</span>
+              {latestRec.staleResearch && (
+                <span
+                  className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-terminal-warning/20 text-terminal-warning cursor-help"
+                  title="Stale basis — no per-security research-analyst note in the last 7 days when this call was written. Treat with lower confidence."
+                >
+                  Stale
+                </span>
+              )}
             </div>
             <div className="flex items-baseline gap-2">
               {pmLlmTag && (

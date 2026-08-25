@@ -36,6 +36,7 @@ interface Recommendation {
   outcomeNotes: string | null;
   unrealizedReturnPct?: number;
   currentPriceCents?: number;
+  staleResearch?: boolean;
 }
 
 interface Retrospective {
@@ -392,7 +393,11 @@ function ActiveTab() {
   const renderCard = (r: Recommendation) => (
     <div
       key={r.id}
-      className="border border-terminal-border rounded bg-terminal-bg-secondary"
+      className={`border rounded bg-terminal-bg-secondary ${
+        r.staleResearch
+          ? "border-terminal-warning/40 opacity-60"
+          : "border-terminal-border"
+      }`}
     >
       <div
         className="flex items-center gap-3 p-4 cursor-pointer hover:bg-terminal-bg-tertiary"
@@ -406,6 +411,14 @@ function ActiveTab() {
         <span className={`text-xs ml-1 ${CONFIDENCE_COLORS[r.confidence] || ""}`}>
           {r.confidence}
         </span>
+        {r.staleResearch && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase bg-terminal-warning/20 text-terminal-warning cursor-help"
+            title="Stale basis — no per-security research-analyst note in the last 7 days when this call was written. Treat with lower confidence."
+          >
+            Stale
+          </span>
+        )}
         {r.timeHorizon && (
           <span className="text-xs text-terminal-text-secondary">
             {HORIZON_LABELS[r.timeHorizon] || r.timeHorizon}
