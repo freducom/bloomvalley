@@ -1584,22 +1584,14 @@ async def update_deployment_progress(backend_url: str):
             print(f"  [deployment] Failed to update progress: {e}", flush=True)
 
 
-# ── Portfolio Manager: Close Old Recs + Post New ──
-
-async def close_old_recommendations(backend_url: str):
-    """Close all active recommendations before posting new ones."""
-    async with httpx.AsyncClient(timeout=30, base_url=backend_url, headers=_AUTH_HEADERS) as client:
-        try:
-            resp = await client.get("/recommendations?status=active&limit=200")
-            if resp.status_code == 200:
-                recs = resp.json().get("data", [])
-                for r in recs:
-                    await client.put(f"/recommendations/{r['id']}/close", json={
-                        "outcome_notes": "Closed by analyst swarm — new analysis generated"
-                    })
-                print(f"  [pm] Closed {len(recs)} old recommendations", flush=True)
-        except Exception as e:
-            print(f"  [pm] Failed to close old recommendations: {e}", flush=True)
+# ── Portfolio Manager: Post New Recs ──
+#
+# Prior recs are NOT bulk-closed at the start of a PM run. When a new rec is
+# POSTed, the API (recommendations.py:120-132) auto-closes prior active recs
+# with the same (security_id, action) as "Superseded by new recommendation".
+# Recs not re-issued this run stay active until they hit their expiry_date,
+# target price, or stop-loss — preserving the thesis window so retrospective
+# analysis can measure actual outcomes rather than 1-day price drift.
 
 
 MORNING_BRIEF_PROMPT = """Summarize this portfolio manager report for a Telegram morning brief in 3000-4500 characters.
@@ -2277,6 +2269,18 @@ ALL data and analysis has been provided — do NOT attempt to make API calls."""
 
 {other_data_section}
 
+# Confidence Calibration
+
+Only mark a recommendation "high" confidence when the thesis rests on a clear
+≥12-month fundamental catalyst: earnings inflection, capital-return change,
+margin trajectory, moat widening, balance-sheet repair, or credible management
+change. Do NOT mark "high" based on technical setup, short-term momentum, DCF
+gap alone, or "everyone likes it." Use "medium" for solid fundamentals without
+a specific timing catalyst. Use "low" for speculative, thin-conviction, or
+early-cycle ideas. If in doubt, downgrade — retrospective analysis has shown
+this system's "high" ratings have historically been miscalibrated toward
+overconfidence.
+
 # Instructions
 
 Produce your COMPLETE final report following the exact format in your agent definition:
@@ -2393,7 +2397,6 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
             await extract_technical_notes(report, backend_url, date_str, llm_tag)
 
     # Step 4: Run portfolio manager last (needs analyst outputs + previous recommendations)
-    # NOTE: old recs are closed AFTER PM runs so it can compare against them
     if "portfolio-manager" in agents:
         print("\n[swarm] Running portfolio manager (phased synthesis)...", flush=True)
         await report_status(backend_url, "running", agent="portfolio-manager",
@@ -2401,9 +2404,9 @@ async def run_swarm(cfg: dict, brief_type: str | None = None):
         pm_report = await run_portfolio_manager_phased(cfg, date_str)
         completed_count += 1
 
-        # Step 5: Close old recs, then post new ones from PM report
+        # Step 5: Post new recs. Same-security+same-action prior recs are
+        # auto-superseded by the API. Un-reissued recs live to expiry.
         if pm_report:
-            await close_old_recommendations(backend_url)
             await report_status(backend_url, "running", message="Posting recommendations...")
             await extract_and_post_recommendations(pm_report, cfg, date_str, brief_type)
 

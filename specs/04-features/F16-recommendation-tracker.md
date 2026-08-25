@@ -375,6 +375,8 @@ The core analytical view. Only shown when `closedRecommendations >= 20` (statist
 
 11. **Research freshness gate (`stale_research`)**: On `POST /recommendations`, the server checks whether the underlying security has a per-security research-analyst note (`research_notes` row with `security_id` set, `is_active = true`, `tags @> ARRAY['research-analyst']`) created within the last 7 days. If not, the row is still created but with `stale_research = true`. Applies to stocks only — non-stock asset classes (crypto, ETFs) are always `stale_research = false` because the research-analyst pipeline skips them by design. The flag is exposed as `staleResearch` in API responses so the frontend can visually demote stale-basis calls. Existing rows keep the migration default (`false`) and are re-evaluated only on new writes.
 
+12. **Supersession on POST, not bulk-close on run**: When `POST /recommendations` is called, any prior active recommendation with the same `security_id` + `action` is auto-closed with `outcome_notes = "Superseded by new recommendation"` (`recommendations.py:120-132`). Recommendations that the analyst swarm does NOT re-issue this run stay active until they hit `expiry_date`, target price, or stop-loss — preserving the full thesis window. The swarm MUST NOT bulk-close active recommendations at the start of a run: doing so collapses holding periods to 0 days and turns `return_pct` into 1-day price drift, which makes the retrospective (rule #6, #9) statistically useless. This bug was fixed in the swarm on 2026-08-25.
+
 ## Edge Cases
 
 1. **Security delisted**: If a held security is delisted while a recommendation is active, manually close the recommendation with the last available price and note the delisting as the close reason.
