@@ -85,10 +85,10 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 
 ### Portfolio & Trading
 - **Portfolio Dashboard** — real-time holdings, P&L, portfolio value chart, allocation by asset class and account
-- **AI Recommendations** — buy/sell/hold signals from the analyst swarm with bull/bear cases, confidence levels, target prices, and retrospective accuracy tracking
+- **AI Recommendations** — buy/sell/hold signals from the analyst swarm with bull/bear cases, confidence levels, target prices, and retrospective accuracy tracking. Every recommendation carries a `staleResearch` flag set at write time: `true` when the underlying stock has no per-security research-analyst note in the last 7 days (non-stock asset classes are always `false` because the research-analyst pipeline skips them). See F16 rule #11.
 - **Performance** — period-scoped P&L (MTD / YTD / 1Y / custom) split into 5 buckets: realized gains, realized losses, dividends paid, unrealized gains, unrealized losses. Uses period-attributed math (`V_end − V_start − net_flows`) so cash deposits and withdrawals don't distort investment returns. Compact YTD strip on the dashboard, full breakdown with per-security table on `/performance`
 - **Holdings** — current positions across accounts with cost basis, unrealized P&L, live quotes, dividend income
-- **Transactions** — filterable transaction log with type/account filters, search, pagination, and summary stats
+- **Transactions** — filterable transaction log with type/account filters, search, pagination, and summary stats. `sell` rows show realized P/L in EUR (green/red) computed from the FIFO tax-lot chain; buys and unmatched sells show `—`.
 - **Nordnet Import** — paste Nordnet portfolio exports (Finnish CSV), automatic security matching and reconciliation
 
 ### Market Data
@@ -212,6 +212,12 @@ docker compose exec backend alembic upgrade head
 > ```bash
 > docker compose build frontend && docker compose up -d frontend
 > ```
+
+> **Analyst-swarm code changes require a rebuild too:** `analyst-swarm/swarm.py` and `data_digest.py` are baked into the image at build time (only `config.local.yaml` is bind-mounted for live edits). After editing swarm code, run:
+> ```bash
+> docker compose build analyst-swarm && docker compose up -d --force-recreate analyst-swarm
+> ```
+> Backend code hot-reloads (bind-mounted + `uvicorn --reload`) — no rebuild needed. Alembic migrations still require an explicit `docker compose exec backend alembic upgrade head`.
 
 Open http://localhost:3000. Trigger initial data fetch (include the API key from `.env`):
 
