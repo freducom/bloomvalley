@@ -6,8 +6,9 @@
       "Write",
       "WebSearch",
       "WebFetch",
-      "Bash(psql \"$BLOOMVALLEY_DB_URL\":*)",
-      "Bash(psql $BLOOMVALLEY_DB_URL:*)"
+      "Bash(psql:*)",
+      "Bash(curl:*)",
+      "Bash(timeout:*)"
     ]
   }
 }
