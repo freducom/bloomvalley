@@ -455,7 +455,7 @@ export default function SecurityDetailPage() {
           apiGetRaw<{ data: Fundamentals[] }>(`/fundamentals?securityId=${id}`).catch(() => null),
           apiGet<Holding[]>("/portfolio/holdings").catch(() => null),
           apiGetRaw<{ data: Recommendation[] }>("/recommendations?status=active&limit=50").catch(() => null),
-          apiGetRaw<{ data: ResearchNote[] }>(`/research/notes?securityId=${id}`).catch(() => null),
+          apiGetRaw<{ data: ResearchNote[] }>(`/research/notes?securityId=${id}&limit=500`).catch(() => null),
           apiGetRaw<{ data: InsiderTrade[] }>(`/insiders/trades?securityId=${id}`).catch(() => null),
           apiGetRaw<{ data: NewsItem[] }>(`/news?securityId=${id}&limit=10`).catch(() => null),
           apiGetRaw<{ data: DividendEvent[] }>(`/dividends/history?securityId=${id}`).catch(() => null),
