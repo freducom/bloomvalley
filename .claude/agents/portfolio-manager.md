@@ -175,8 +175,8 @@ Start with ```json and end with ```. Include EVERY security mentioned in your an
 
 ```json
 [
-  {"ticker": "EXAMPLE", "action": "buy", "confidence": "high", "rationale": "Strong fundamentals, DCF discount", "bull_case": "Recovery drives upside to 25% above current price", "bear_case": "Recession risk could compress margins 300bps", "time_horizon": "long"},
-  {"ticker": "EXAMPLE2", "action": "hold", "confidence": "medium", "rationale": "Fair value, wait for catalyst", "bull_case": "New product line could accelerate revenue growth", "bear_case": "Market share loss to competitors in core segment", "time_horizon": "medium"}
+  {"ticker": "EXAMPLE", "action": "buy", "confidence": "high", "rationale": "Strong fundamentals, DCF discount", "bull_case": "Recovery drives upside to 25% above current price", "bear_case": "Recession risk could compress margins 300bps", "time_horizon": "long", "source": "research-analyst"},
+  {"ticker": "EXAMPLE2", "action": "hold", "confidence": "medium", "rationale": "Fair value, wait for catalyst", "bull_case": "New product line could accelerate revenue growth", "bear_case": "Market share loss to competitors in core segment", "time_horizon": "medium", "source": "portfolio-manager"}
 ]
 ```
 
@@ -185,5 +185,18 @@ Action rules:
 - "sell": securities to sell/redeem (must be held)
 - "hold": securities currently owned, keep position (ONLY for held positions)
 - "wait": watchlist securities not owned, keep monitoring
+
+Source attribution (`source` field): name the ONE analyst whose case dominated your decision on this call. Valid values:
+- `research-analyst` — fundamental thesis (bull/bear/base case, moat, intrinsic value) was decisive
+- `technical-analyst` — chart pattern, momentum, or entry/exit signal was decisive
+- `graham-browne-analyst` — deep-value screener flagged this name
+- `buffett-munger-analyst` — quality-compounder screener flagged this name
+- `macro-strategist` — top-down macro/regime call was decisive
+- `quant-analyst` — factor exposure / statistical screen was decisive
+- `risk-manager` — risk-driven trim/sell (concentration, drawdown, correlation)
+- `fixed-income-analyst` — bond-specific (only for FI securities)
+- `tax-strategist` — tax-loss harvest or tax-optimization driven
+- `compliance-officer` — glidepath, policy, or hard-constraint driven
+- `portfolio-manager` — synthesis-driven, no single analyst dominated (use sparingly — prefer attributing to the most influential single source)
 
 MANDATORY: bull_case and bear_case must NEVER be null. Every security must have both a bull and bear case — no exceptions. Even for hold/wait actions, state what could go right and what could go wrong.

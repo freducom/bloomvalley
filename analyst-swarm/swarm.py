@@ -1651,6 +1651,24 @@ _BRIEF_PROMPTS = {
 SUMMARIZE_PM_PROMPT = MORNING_BRIEF_PROMPT
 
 
+# Allow-list for recommendation `source` attribution. PM emits this per-rec
+# in the structured JSON block; unknown values fall back to portfolio-manager
+# so free-form LLM strings can't pollute the source column downstream.
+_VALID_REC_SOURCES = frozenset({
+    "research-analyst",
+    "technical-analyst",
+    "graham-browne-analyst",
+    "buffett-munger-analyst",
+    "macro-strategist",
+    "quant-analyst",
+    "risk-manager",
+    "fixed-income-analyst",
+    "tax-strategist",
+    "compliance-officer",
+    "portfolio-manager",
+})
+
+
 EXTRACT_RECS_PROMPT = """Extract ALL actionable recommendations from this portfolio manager report.
 Return a JSON array of objects. Each object must have these fields:
 - "ticker": string (e.g. "VWCE", "ALYK", "MSFT", "INVE-B.ST", "KESKOB.HE")
@@ -1660,6 +1678,11 @@ Return a JSON array of objects. Each object must have these fields:
 - "bull_case": string (REQUIRED — what could go right, never null)
 - "bear_case": string (REQUIRED — what could go wrong, never null)
 - "time_horizon": "short" | "medium" | "long" (short=<3m, medium=3-12m, long=>12m)
+- "source": string — the analyst whose case dominated this call (one of:
+  research-analyst, technical-analyst, graham-browne-analyst, buffett-munger-analyst,
+  macro-strategist, quant-analyst, risk-manager, fixed-income-analyst, tax-strategist,
+  compliance-officer, portfolio-manager). Use "portfolio-manager" only when the call is
+  genuinely synthesis-driven with no single dominant analyst.
 
 IMPORTANT action rules:
 - Use "hold" ONLY for securities the investor currently owns (held positions).
@@ -1725,6 +1748,13 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
                     print(f"  [pm] Skipping {ticker} — not found in securities", flush=True)
                     continue
 
+                # Validate source against known analyst list; fall back to
+                # portfolio-manager when missing or invalid. Prevents free-form
+                # LLM strings from polluting the source column.
+                source = rec.get("source") or "portfolio-manager"
+                if source not in _VALID_REC_SOURCES:
+                    source = "portfolio-manager"
+
                 payload = {
                     "security_id": sec_id,
                     "action": rec.get("action", "hold"),
@@ -1732,7 +1762,7 @@ async def extract_and_post_recommendations(report: str, cfg: dict, date_str: str
                     "rationale": rec.get("rationale", ""),
                     "bull_case": rec.get("bull_case"),
                     "bear_case": rec.get("bear_case"),
-                    "source": "portfolio-manager",
+                    "source": source,
                     "time_horizon": rec.get("time_horizon", "medium"),
                     "recommended_date": date_str,
                 }
