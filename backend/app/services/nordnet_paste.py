@@ -460,12 +460,15 @@ async def find_duplicate(
     session: AsyncSession,
     row: ParsedRow,
     tolerance_days: int = 10,
+    amount_tolerance_cents: int = 2,
 ) -> Optional[int]:
     """Return an existing transaction id if a probable duplicate exists.
 
     Matches on (account, type, |total_cents|) within ±tolerance_days, plus
     security_id when the type requires one. Also matches on external_ref
-    exactly (same paste re-submitted).
+    exactly (same paste re-submitted). A small cent tolerance absorbs FX
+    rounding differences between auto-reconciled dividends (computed from
+    Yahoo ex-date FX) and the broker-confirmed cash amount.
     """
     if not row.trade_date or row.total_value is None or not row.tx_type:
         return None
@@ -489,7 +492,8 @@ async def find_duplicate(
     q = select(Transaction.id).where(
         Transaction.account_id == row.account_id,
         Transaction.type == row.tx_type,
-        func.abs(Transaction.total_cents) == stored_total_cents,
+        func.abs(func.abs(Transaction.total_cents) - stored_total_cents)
+            <= amount_tolerance_cents,
         Transaction.trade_date >= tdate - timedelta(days=tolerance_days),
         Transaction.trade_date <= tdate + timedelta(days=tolerance_days),
     )
