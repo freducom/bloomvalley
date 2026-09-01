@@ -79,7 +79,10 @@ async def _is_research_stale(session, sec: Security) -> bool:
     """
     if (sec.asset_class or "").lower() != "stock":
         return False
-    cutoff = datetime.now(timezone.utc) - timedelta(days=RESEARCH_FRESHNESS_DAYS)
+    # ResearchNote model declares created_at without timezone (matches
+    # services/research_cleanup.py). asyncpg rejects tz-aware params against
+    # a naive-typed column, so pass naive UTC to match the model.
+    cutoff = datetime.utcnow() - timedelta(days=RESEARCH_FRESHNESS_DAYS)
     result = await session.execute(
         select(ResearchNote.id)
         .where(

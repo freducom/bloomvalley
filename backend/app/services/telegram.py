@@ -125,7 +125,9 @@ async def notify_recommendations(summary: str, date_str: str, brief_type: str = 
     header = _BRIEF_HEADERS.get(brief_type, "PM Report")
     emoji = _BRIEF_EMOJIS.get(brief_type, "\U0001f4ca")
     text = f"{emoji} <b>{header} — {_escape(date_str)}</b>\n\n{_escape(summary)}"
-    await notifier.send(text)
+    # Scheduled PM briefs bypass quiet hours — a swarm run that finishes
+    # after 21:00 (Ollama is slow) should still deliver its brief.
+    await notifier.send(text, force=True)
 
 
 def _fmt_eur(cents: int | None) -> str:

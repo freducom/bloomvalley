@@ -520,8 +520,9 @@ async def fetch_data(backend_url: str, endpoints: list[str]) -> dict[str, str]:
                                         for item in wl_detail.get("items", []):
                                             item["watchlistName"] = wl["name"]
                                             all_items.append(item)
-                            # Rotate: send ~20 items per run, advance offset each time
-                            batch_size = 35
+                            # Rotate: send ~20 items per run, advance offset each time.
+                            # Override via WATCHLIST_BATCH_SIZE env var for full-coverage runs.
+                            batch_size = int(os.environ.get("WATCHLIST_BATCH_SIZE", 35))
                             offset = _get_watchlist_offset(backend_url)
                             if len(all_items) > batch_size:
                                 start = offset % len(all_items)
