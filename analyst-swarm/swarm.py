@@ -650,6 +650,27 @@ def load_agent_prompt(agent_name: str) -> str:
     raise FileNotFoundError(f"Agent definition not found for: {agent_name}")
 
 
+# Hallucination-guard for agents that consume /fundamentals?limit=N (bulk).
+# The bulk endpoint returns an alphabetical-capped subset; tickers past the cap
+# are silently missing. Without an explicit boundary the LLM will fill in
+# plausible-looking P/E, P/B, ROE, FCF values from training data.
+# 2026-08-05 shipped the per-ticker research-analyst guard; 2026-09-21
+# extended coverage to the bulk-consuming agents via prompt-level rules.
+FUNDAMENTALS_CONSUMING_AGENTS = {
+    "research-analyst", "portfolio-manager", "graham-browne-analyst",
+    "buffett-munger-analyst", "quant-analyst",
+}
+
+FUNDAMENTALS_COVERAGE_GUARD = """
+
+IMPORTANT — fundamentals-data boundary rule:
+- The /fundamentals endpoint returns a FIXED, alphabetically-capped subset of tickers (bulk fetch).
+- Some tickers in your holdings, watchlists, or universe may NOT appear in the /fundamentals JSON.
+- If a ticker is NOT in the /fundamentals data, you MUST treat P/E, P/B, P/S, P/FCF, EPS, ROE, ROIC, revenue-growth, operating-margin, gross-margin, EBITDA, EBIT, net-income, FCF, dividend-yield, payout-ratio, debt/equity, and any other fundamentals-derived metric as UNAVAILABLE for that ticker.
+- Do NOT invent, estimate from training data, paraphrase around missing values, or emit "approx"/"est"/"~". Write "no fundamentals data available" or omit the metric entirely.
+- The header line at the top of the /fundamentals data block lists the covered tickers; use it as the authoritative coverage boundary."""
+
+
 def build_prompt(agent_name: str, agent_def: str, data: dict[str, str],
                  date_str: str, cfg: dict | None = None) -> tuple[str, str]:
     """Build system prompt and user prompt for an agent."""
@@ -661,6 +682,8 @@ Follow your agent definition exactly. Today's date is {date_str}.
 ALL backend API data has been pre-fetched and is provided below — do NOT attempt to make API calls yourself.
 If a data section shows an error, that data is unavailable — work with what you have, do not ask for permission to fetch it.
 Produce your complete analysis report. Be specific with numbers, dates, and actionable recommendations."""
+    if agent_name in FUNDAMENTALS_CONSUMING_AGENTS:
+        system += FUNDAMENTALS_COVERAGE_GUARD
 
     if use_digest:
         digested = auto_digest(data)
@@ -670,12 +693,34 @@ Produce your complete analysis report. Be specific with numbers, dates, and acti
             if content
         )
     else:
-        data_section = "\n\n".join(
-            f"### Data from {ep}\n```json\n{content[:15000]}\n```"
-            if not content.startswith("ERROR")
-            else f"### Data from {ep}\n*Unavailable: {content}*"
-            for ep, content in data.items()
-        )
+        def _fmt_block(ep: str, content: str) -> str:
+            if content.startswith("ERROR"):
+                # Neutralize raw status codes; some LLMs paraphrase "ERROR 500"
+                # as if it were meaningful ticker data.
+                return f"### Data from {ep}\n*[Data unavailable — endpoint failed; treat as missing]*"
+            # For /fundamentals?limit=N, prepend an explicit coverage header
+            # so the LLM has a hard boundary vs the tradeable universe.
+            if ep.startswith("/fundamentals"):
+                try:
+                    import json as _json
+                    parsed = _json.loads(content)
+                    rows = parsed.get("data", parsed) if isinstance(parsed, dict) else parsed
+                    tickers = []
+                    if isinstance(rows, list):
+                        for r in rows:
+                            if isinstance(r, dict):
+                                t = r.get("ticker") or r.get("symbol") or r.get("secId")
+                                if t:
+                                    tickers.append(str(t))
+                    if tickers:
+                        header = (f"**Fundamentals coverage:** {len(tickers)} tickers — "
+                                  f"{', '.join(sorted(tickers))}. "
+                                  f"Any ticker NOT in this list has UNAVAILABLE fundamentals.")
+                        return f"### Data from {ep}\n{header}\n\n```json\n{content[:15000]}\n```"
+                except Exception:
+                    pass
+            return f"### Data from {ep}\n```json\n{content[:15000]}\n```"
+        data_section = "\n\n".join(_fmt_block(ep, content) for ep, content in data.items())
 
     prompt_def = _build_short_prompt(agent_name, agent_def) if use_short else agent_def
 
