@@ -1576,16 +1576,12 @@ async def nordnet_paste(body: NordnetPasteRequest):
                 # dividend by parse_paste; no standalone commit needed.
                 continue
 
-            if row.account_number:
-                acct_id = np_paste.ACCOUNT_NUMBER_MAP.get(row.account_number)
-                if acct_id is None:
-                    row.errors.append(
-                        f"unknown Nordnet account number {row.account_number} — "
-                        f"add it to ACCOUNT_NUMBER_MAP in nordnet_paste.py"
-                    )
-                    row.status = "needs_review"
-                    continue
-                row.account_id = acct_id
+            acct_id, acct_err = await np_paste.resolve_account_id(session, row)
+            if acct_id is None:
+                row.errors.append(acct_err)
+                row.status = "needs_review"
+                continue
+            row.account_id = acct_id
 
             if row.tx_type in np_paste.NEEDS_SECURITY and row.security_name:
                 sec, confidence = await np_paste.resolve_security(

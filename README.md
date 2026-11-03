@@ -133,7 +133,7 @@ The terminal itself was developed by an **AI development team** of 5 agents:
 - **Privacy Mode** (`Cmd+Shift+P`) — blur all monetary amounts
 - **PWA** — installable on mobile, offline access to dashboard, recommendations, holdings
 - **Status Bar** — live pipeline indicators, market hours for Nordic/EU/London/US/Crypto
-- **Notifications & Bot** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities, weekly Monday digest. Default provider is **Signal** (via [signal-gateway](https://github.com/freducom/signal-gateway)); **Telegram** also supported. The bot is bidirectional — message it on your phone for portfolio summary, latest brief, system status, or free-form LLM chat backed by the same model the web app uses.
+- **Notifications & Bot** — PM recommendations, macro regime changes, insider cluster buying, insider/congress trades on held securities, weekly Monday 08:00 digest. The weekly digest ships as 4–6 prose paragraphs written by Claude (via the CLI auth from `~/.claude/`), covering new recommendations, portfolio & watchlist movers, upcoming dividends/earnings, insider activity, and the macro regime. Provider waterfall: Claude CLI → Anthropic API (if `ANTHROPIC_API_KEY` set) → ollama/gemma4 → structured list fallback. Default provider is **Signal** (via [signal-gateway](https://github.com/freducom/signal-gateway)); **Telegram** also supported. The bot is bidirectional — message it on your phone for portfolio summary, latest brief, system status, or free-form LLM chat backed by the same model the web app uses.
 
 ## Architecture
 

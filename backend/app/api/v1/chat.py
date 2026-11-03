@@ -66,7 +66,7 @@ def _get_llm_config() -> dict:
         "llm_provider": os.environ.get("LLM_PROVIDER", "claude_cli"),
         "claude": {
             "api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
-            "model": os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-20250514"),
+            "model": os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6"),
             "max_tokens": 4096,
         },
         "claude_cli": {
@@ -74,7 +74,7 @@ def _get_llm_config() -> dict:
             "model": os.environ.get("CLAUDE_CLI_MODEL", ""),
         },
         "ollama": {
-            "base_url": os.environ.get("OLLAMA_BASE_URL", "http://192.168.1.160:11435"),
+            "base_url": os.environ.get("OLLAMA_BASE_URL", "http://192.168.1.160:11434"),
             "model": os.environ.get("OLLAMA_MODEL", "qwen3:32b"),
             "max_tokens": 4096,
         },

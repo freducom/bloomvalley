@@ -259,6 +259,30 @@ Current: Late Cycle
 🔄 Next swarm: 07:00
 ```
 
+### Weekly Digest
+
+Implemented in `backend/app/services/weekly_digest.py`. Fires via `backend/cron_scheduler.py` every Monday 08:00 Helsinki (`id="weekly_digest"`), ad-hoc trigger `POST /api/v1/notifications/weekly-digest`.
+
+**Output format.** 4–6 prose paragraphs. The structured list format exists in-code and is used only as a hard fallback when every LLM provider fails. Topic coverage:
+
+1. New recommendations (new BUY / SELL with horizon, upside %, source agent, first-sentence rationale)
+2. Portfolio & watchlist movers (top 5 gainers / losers over 7 trading days, held vs watchlist flag)
+3. Upcoming dividends (ex-dates in next 7 days) and earnings (report dates in next 7 days, est EPS + fiscal quarter)
+4. Top news impact (highest-severity news items on held/watchlist securities, last 7 days)
+5. Insider activity (significant trades + cluster buy signals, last 7–30 days)
+6. Macro regime with plain-language blurb
+
+**LLM provider waterfall** (in `_claude_prose_digest`):
+
+1. **Claude CLI** — same `claude -p --output-format text` invocation as the chat endpoint; uses the auth mounted via `~/.claude/`. Default primary.
+2. **Anthropic API** — only if `ANTHROPIC_API_KEY` is set in env.
+3. **ollama/gemma4** — final LLM fallback. Model override: `WEEKLY_DIGEST_OLLAMA_MODEL` or `OLLAMA_FALLBACK_MODEL` env var. Matches `analyst-swarm/config.yaml` ollama_fallback.model convention.
+4. **Structured list format** — only if all three LLMs fail. Guarantees Monday morning ships something.
+
+**Log signals.** `weekly_digest.complete prose=True` means an LLM path shipped; `prose=False` means list fallback. Which LLM fired is indicated by `prose_cli_*` / `prose_api_*` / `prose_ollama_*` log lines.
+
+**Tuning.** System prompt lives in `_PROSE_SYSTEM_PROMPT`. All paragraph counts, topic order, tone constraints, length target (~250–400 words) are prompt-level. Changing section content means also changing the structured helpers (`_recommendations_summary`, `_portfolio_watchlist_movers`, `_upcoming_dividends`, `_upcoming_earnings`, `_top_news_impact`, `_insider_summary`, `_macro_regime`) that feed data into both the LLM context and the fallback.
+
 ---
 
 ## 6. Implementation Phases

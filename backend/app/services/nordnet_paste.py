@@ -31,11 +31,24 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.accounts import Account
 from app.db.models.securities import Security
 from app.db.models.transactions import Transaction
 
 
 # ── Static mappings (extend when new accounts / types show up) ────────────
+
+# Nordnet account-type abbreviation (shown in new UI "Tili" column) → our
+# internal account type (matches Account.type values).
+ACCOUNT_TYPE_MAP: dict[str, str] = {
+    "AF": "regular",
+    "AOT": "regular",
+    "OST": "osakesaastotili",
+    "IPS": "pension",
+    "KF": "pension",
+    "ISK": "regular",
+}
+
 
 TYPE_MAP: dict[str, str] = {
     "osto": "buy",
@@ -95,6 +108,7 @@ class ParsedRow:
     # Parsed fields
     trade_date: Optional[str] = None       # ISO YYYY-MM-DD
     account_number: Optional[str] = None
+    account_type_abbr: Optional[str] = None  # OST / AOT / AF / IPS / KF / ISK — new UI only
     type_finnish: Optional[str] = None
     tx_type: Optional[str] = None           # internal enum value
     security_name: Optional[str] = None
@@ -131,6 +145,7 @@ class ParsedRow:
             "parsed": {
                 "tradeDate": self.trade_date,
                 "accountNumber": self.account_number,
+                "accountTypeAbbr": self.account_type_abbr,
                 "typeFinnish": self.type_finnish,
                 "type": self.tx_type,
                 "securityName": self.security_name,
@@ -221,6 +236,17 @@ def _parse_amount(text: str) -> tuple[Optional[Decimal], Optional[str]]:
 
 def _parse_one(lines: list[str], index: int) -> ParsedRow:
     row = ParsedRow(index=index, raw=list(lines))
+
+    # New Nordnet UI (seen 2026-10) renders Tili as two lines — account-type
+    # abbreviation + holder name — instead of the old "Holder · 12345678".
+    # Detect by: 9 lines where line 2 is a known account-type abbreviation.
+    if len(lines) == 9 and lines[1].strip().upper() in ACCOUNT_TYPE_MAP:
+        account_type_abbr = lines[1].strip().upper()
+        account_holder = lines[2]
+        collapsed = [lines[0], f"{account_type_abbr} {account_holder}"] + lines[3:]
+        row.account_type_abbr = account_type_abbr
+        lines = collapsed
+
     if len(lines) != 8:
         row.errors.append(
             f"expected 8 non-empty lines per record, got {len(lines)}"
@@ -243,7 +269,9 @@ def _parse_one(lines: list[str], index: int) -> ParsedRow:
     m = _ACCOUNT_RE.search(account_line)
     if m:
         row.account_number = m.group(1)
-    else:
+    elif row.account_type_abbr is None:
+        # Old-format rows still require the account number; new-format rows
+        # resolve by account_type at the endpoint layer.
         row.errors.append(f"no Nordnet account number in: {account_line!r}")
 
     row.type_finnish = type_str
@@ -376,6 +404,16 @@ async def resolve_security(session: AsyncSession, name: str) -> tuple[
     )
     candidates = (await session.execute(q)).scalars().all()
 
+    # Fallback: Nordnet shows some positions by ticker only (e.g. "IBM")
+    # when the full name doesn't contain the ticker substring. Try an exact
+    # ticker match before giving up.
+    if not candidates and re.fullmatch(r"[A-Za-z]{1,8}", stripped):
+        tq = select(Security).where(
+            func.upper(Security.ticker) == stripped.upper(),
+            Security.is_active.is_(True),
+        )
+        candidates = (await session.execute(tq)).scalars().all()
+
     if not candidates:
         return None, "none"
 
@@ -408,6 +446,60 @@ async def resolve_security(session: AsyncSession, name: str) -> tuple[
         return canonical[0], "medium"
 
     return None, "ambiguous"
+
+
+# ── Account resolution ────────────────────────────────────────────────────
+
+async def resolve_account_id(
+    session: AsyncSession,
+    row: ParsedRow,
+) -> tuple[Optional[int], str]:
+    """Resolve the internal account_id for a parsed row.
+
+    Strategy:
+      1. If row has an account_number, look it up in NORDNET_ACCOUNT_MAP.
+      2. Else, if row has an account_type_abbr (new UI), map it to our
+         internal account type via ACCOUNT_TYPE_MAP and look up the unique
+         active Nordnet account of that type.
+
+    Returns (account_id, error_message_or_empty).
+    """
+    if row.account_number:
+        acct_id = ACCOUNT_NUMBER_MAP.get(row.account_number)
+        if acct_id is None:
+            return None, (
+                f"unknown Nordnet account number {row.account_number} — "
+                f"add it to NORDNET_ACCOUNT_MAP"
+            )
+        return acct_id, ""
+
+    if row.account_type_abbr:
+        internal_type = ACCOUNT_TYPE_MAP.get(row.account_type_abbr)
+        if internal_type is None:
+            return None, (
+                f"unknown Nordnet account-type abbreviation "
+                f"{row.account_type_abbr!r}"
+            )
+        q = select(Account.id).where(
+            Account.institution == "Nordnet",
+            Account.type == internal_type,
+            Account.is_active.is_(True),
+        )
+        hits = (await session.execute(q)).scalars().all()
+        if len(hits) == 1:
+            return hits[0], ""
+        if not hits:
+            return None, (
+                f"no active Nordnet account with type {internal_type!r} "
+                f"(from Tili={row.account_type_abbr!r})"
+            )
+        return None, (
+            f"ambiguous: {len(hits)} active Nordnet accounts with type "
+            f"{internal_type!r} — add the Nordnet account number to "
+            f"NORDNET_ACCOUNT_MAP to disambiguate"
+        )
+
+    return None, "no Tili / account number on row"
 
 
 # ── Amount → cents ────────────────────────────────────────────────────────
@@ -447,8 +539,9 @@ def compute_total_cents(tx_type: str, total_value: Decimal, fee_value: Decimal) 
 
 def external_ref_for(row: ParsedRow) -> str:
     """Deterministic key for idempotent re-runs of the same paste."""
+    account_key = row.account_number or row.account_type_abbr or "unknown"
     return (
-        f"nordnet-paste:{row.account_number}:{row.trade_date}"
+        f"nordnet-paste:{account_key}:{row.trade_date}"
         f":{row.tx_type}:{row.quantity or 0}"
         f":{to_cents(row.total_value) or 0}"
     )
