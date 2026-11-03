@@ -209,7 +209,8 @@ async def _prose_via_ollama(structured_body: str) -> str | None:
         or "gemma4"
     )
     try:
-        async with httpx.AsyncClient(timeout=180) as client:
+        # Gemma on CPU with a long structured body can easily take 3-5 min.
+        async with httpx.AsyncClient(timeout=600) as client:
             resp = await client.post(
                 f"{base_url}/api/chat",
                 json={
@@ -233,7 +234,12 @@ async def _prose_via_ollama(structured_body: str) -> str | None:
         text = (payload.get("message") or {}).get("content", "").strip()
         return text or None
     except Exception as e:
-        logger.warning("weekly_digest.prose_ollama_failed", error=str(e), model=model)
+        logger.warning(
+            "weekly_digest.prose_ollama_failed",
+            error=repr(e),
+            error_type=type(e).__name__,
+            model=model,
+        )
         return None
 
 

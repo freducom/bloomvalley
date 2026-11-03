@@ -462,16 +462,38 @@ async def _call_claude_cli(messages: list[ChatMessage], page_url: str = "",
 
 async def _stream_claude_cli(messages: list[ChatMessage], page_url: str = "",
                              security_context: str = "", channel: str = "web"):
-    """Get response from Claude CLI and simulate streaming with chunked output."""
-    text = await _call_claude_cli(messages, page_url, security_context)
+    """Get response from Claude CLI and simulate streaming with chunked output.
+
+    The CLI runs synchronously (no token-by-token streaming yet), so it can
+    block for 30-90s on WebSearch-using queries. Fire the call as a task and
+    emit zero-width heartbeat chunks every few seconds so the browser (and
+    any proxy) keeps the SSE connection alive instead of showing a dead spin.
+    """
+    task = asyncio.create_task(
+        _call_claude_cli(messages, page_url, security_context)
+    )
+    while not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5)
+            break
+        except asyncio.TimeoutError:
+            # SSE comment line — browsers ignore it but it keeps the connection
+            # warm and triggers the frontend's onmessage even if the UI only
+            # reads JSON events. Also flushes any intermediary buffers.
+            yield "​"  # zero-width space
+
+    try:
+        text = task.result()
+    except Exception as e:
+        logger.error("stream_claude_cli_task_failed", error=repr(e))
+        return
     if not text:
         return
 
-    # Simulate streaming: emit in word-sized chunks for typewriter effect
+    # Emit in word-sized chunks for typewriter effect once the CLI returned.
     chunk = ""
     for char in text:
         chunk += char
-        # Emit at word boundaries or newlines for natural pacing
         if char in (" ", "\n", "\t") and len(chunk) >= 3:
             yield chunk
             chunk = ""
