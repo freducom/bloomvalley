@@ -18,6 +18,8 @@ Use the heading format `## N. TICKER — Company Name` for held positions and `#
 
 ROIC, ROE, P/B (core metric), free cash flow yield, debt/equity, earnings growth consistency, owner earnings.
 
+**ROIC vs ROCE vs ROI — never alias.** Many European issuers (Wärtsilä, Kone, Metso, most Nordic industrials) publish ROCE (operating profit / avg capital employed, pre-tax) or ROI, not a standard after-tax ROIC. If the data source gives you ROCE or ROI, label it as such in the output — do not relabel it "ROIC". Note metric type explicitly: *pre-tax vs after-tax*, *operating profit vs NOPAT*, *capital employed vs invested capital*. If you need a comparable after-tax figure for a company that only reports pre-tax ROCE, estimate it as `ROCE × (1 − effective tax rate)` and label the result as *estimated after-tax ROCE*, not ROIC.
+
 ## Deep Security Research
 
 Before analyzing any security, you MUST understand what it actually is. Do not rely solely on the ticker, name, or asset_class label in the database — these can be misleading.
@@ -101,6 +103,12 @@ Check EVERY one of these. A single flag is a concern; three or more is a sell si
     - Compare GAAP operating income to non-GAAP: if the gap is >30%, SBC is likely the primary driver
     - For any company where SBC > 10% of revenue, calculate "true FCF" = reported FCF - SBC expense. If true FCF is negative or near zero, the company is not actually generating free cash flow for shareholders.
 
+12. **Structurally Negative Working Capital — Return Ratio Distortion**: Flag any company where working capital is negative and the absolute value exceeds ~20% of revenue (customer advances, prepaid orders, or heavy supplier float funding operations). Common in long-cycle capital-goods businesses (Wärtsilä, Kone, ABB marine), subscription-first SaaS, and some industrials with large order backlogs.
+    - Mechanically inflates ROIC/ROCE by shrinking the denominator (capital employed). A 94% ROCE with WC = −20% of revenue is not the same business-quality signal as 94% ROCE on a normalized balance sheet.
+    - Must be called out in the bear case as: *"return is partly cash-cycle driven; test whether customer advances / order backlog funding are sustainable before treating today's return as normal."*
+    - Pair with a sustainability check: are customer advances growing in line with order intake, or is backlog shrinking while advances persist? Shrinking backlog + stable advances = the cash cycle is about to reverse and the ROCE will fall.
+    - A high-return business funded by customer advances is a real competitive advantage (strong pricing power / market position), but it is NOT the same as a durable high-ROIC moat on invested capital.
+
 ### Earnings Quality Score
 
 Rate every analyzed security: **High / Medium / Low / Red Flag**
@@ -174,3 +182,13 @@ For every security analyzed:
 10. **Insider Activity** — recent insider buying/selling signals
 11. **Key Risks** — top 3 risks ranked by probability × impact
 12. **Recommendation** — Buy / Hold / Sell with confidence level
+
+### Bull-case rules — valuation gate
+
+Any bull case that cites a quality metric (ROIC, ROCE, ROE, margins, moat width) as a BUY driver MUST also include a valuation anchor from this list:
+- P/B vs the security's own 5-year average (within 20% of the long-term median = fair)
+- DCF margin of safety (current price ≥20% below estimated intrinsic value)
+- FCF yield vs risk-free rate (FCF yield minus 10y govvie yield ≥ 2 percentage points)
+- For sector-specific valuations (banks → P/B, REITs → P/FFO, utilities → DDM, miners → P/NAV): the appropriate ratio vs sector median AND vs the security's own history
+
+"High ROIC → BUY" without a price gate is not a thesis — it is a quality observation. The verdict in that case is HOLD or WAIT until the price gate is met, not BUY.
