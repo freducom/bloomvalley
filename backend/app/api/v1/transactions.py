@@ -88,8 +88,8 @@ async def list_transactions(
     account_id: int | None = Query(None, alias="accountId"),
     security_id: int | None = Query(None, alias="securityId"),
     type: str | None = Query(None, description="buy, sell, dividend, transfer_in, etc."),
-    from_date: str | None = Query(None, alias="fromDate"),
-    to_date: str | None = Query(None, alias="toDate"),
+    from_date: date | None = Query(None, alias="fromDate"),
+    to_date: date | None = Query(None, alias="toDate"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
