@@ -1649,6 +1649,11 @@ Structure:
 5. Notable HOLDs — highlight any with significant news, upcoming dividends, or changed thesis (skip routine holds)
 6. WAIT/watchlist — tickers worth monitoring with trigger conditions
 7. Portfolio risk summary (1-2 lines — concentration, sector exposure, key risks to monitor)
+
+Rules:
+- NEVER present an unchanged indicator as a new development. If Finnish unemployment has been 11.0% for several months, do NOT write "deteriorated to 11.0%". Acceptable: "still at 11.0%", "remains elevated". Only call something a "change/move/deterioration/improvement" if the PM report flags it as NEW/CHANGED.
+- Account tags (e.g. "OST lot only", "AOT lot only") must be copied VERBATIM from the PM report. Never invent or swap OST↔AOT; if no account is specified, do not add one.
+
 Keep it dense and actionable. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
 
 MIDDAY_UPDATE_PROMPT = """You are comparing the MORNING portfolio manager brief with the latest NOON analysis.
@@ -1666,6 +1671,11 @@ Write a mid-day changes update for Telegram in 2000-3500 characters. Focus ONLY 
 4. Removed recommendations (tickers in morning brief no longer recommended)
 5. Changed macro outlook (only if it shifted since morning)
 If nothing material changed, say so briefly — "No material changes since morning brief" with a 1-2 line market color.
+
+Rules:
+- Account tags (e.g. "OST lot only", "AOT lot only") must be copied VERBATIM from the PM report. Never invent or swap OST↔AOT.
+- Only flag a macro indicator as a "change/move" if the PM report explicitly tagged it as NEW/CHANGED.
+
 Keep it dense and actionable. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
 
 EVENING_BRIEF_PROMPT = """Summarize this portfolio manager report as an evening wrap-up for Telegram in 3000-4500 characters.
@@ -1675,6 +1685,12 @@ This is the final brief of the day. Structure it as:
 3. Key earnings/events ahead (upcoming catalysts in next 1-2 days)
 4. Overnight/tomorrow watch (what to monitor — Asian markets, futures, data releases)
 5. Forward outlook (2-3 lines — positioning thoughts for tomorrow and the week ahead)
+
+Rules:
+- NEVER present an unchanged indicator as a new development. If Finnish unemployment has been 11.0% for several months, do NOT write "deteriorated to 11.0%" — that implies a move that did not happen. Acceptable framings for stable-but-weak levels: "still at 11.0%", "unemployment remains elevated at 11.0%", or omit entirely if not relevant tonight.
+- Only call something a "change", "move", "development", "shift", "deterioration", "improvement" etc. if the PM report explicitly flags it as NEW/CHANGED today or within the last few days. If the PM report shows a level with no change tag, treat it as background, not news.
+- Account tags (e.g. "OST lot only", "AOT lot only") must be copied VERBATIM from the PM report. Do NOT invent, guess, or swap OST↔AOT. If the PM report says a sell applies to the AOT lot, keep "AOT"; if the PM report doesn't specify an account, do not add one.
+
 Keep it dense and forward-looking. No greetings, no HTML tags, plain text only. Do NOT include any monetary values, position sizes, or portfolio amounts."""
 
 WEEKEND_MACRO_PROMPT = """Summarize this portfolio manager report as a weekend macro overview for Telegram in 3000-4500 characters.
@@ -1993,8 +2009,19 @@ def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
                     if sid:
                         fund_map[sid] = f
 
-            # Deduplicate by ticker, sum values across accounts
-            by_ticker = {}
+            # Map accountType → wrapper abbreviation (OST/AOT/CW/IPS)
+            _ACCT_ABBR = {
+                "osakesaastotili": "OST",
+                "regular": "AOT",
+                "crypto_wallet": "CW",
+                "pension": "IPS",
+            }
+
+            # Deduplicate by ticker, sum values across accounts, and record
+            # which wrappers each ticker is held in. The per-ticker account set
+            # is the AUTHORITATIVE source of truth for any "OST lot only" /
+            # "AOT lot only" tag in SELL recommendations.
+            by_ticker: dict[str, dict] = {}
             for h in holdings:
                 ticker = h.get("ticker", "?")
                 if ticker not in by_ticker:
@@ -2005,16 +2032,26 @@ def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
                         "sector": h.get("sector", ""),
                         "valueCents": 0,
                         "pnlPct": h.get("unrealizedPnlPct"),
+                        "accounts": set(),
                     }
                 by_ticker[ticker]["valueCents"] += h.get("marketValueEurCents") or 0
+                acct_type = h.get("accountType")
+                acct_name = h.get("accountName") or ""
+                abbr = _ACCT_ABBR.get(acct_type or "")
+                if not abbr and acct_name:
+                    first = acct_name.strip().split()[0].upper()
+                    if first in {"OST", "AOT", "AF", "IPS", "KF", "ISK"}:
+                        abbr = first
+                if abbr:
+                    by_ticker[ticker]["accounts"].add(abbr)
 
             # Sort by value descending
             sorted_holdings = sorted(by_ticker.items(), key=lambda x: x[1]["valueCents"], reverse=True)
             total_val = sum(v["valueCents"] for _, v in sorted_holdings) or 1
 
             lines = ["## HELD POSITIONS"]
-            lines.append("| # | Ticker | Name | Weight | Value (EUR) | P&L | ROIC | P/E | Div Yield | Sector |")
-            lines.append("|---|--------|------|--------|-------------|-----|------|-----|-----------|--------|")
+            lines.append("| # | Ticker | Name | Acct | Weight | Value (EUR) | P&L | ROIC | P/E | Div Yield | Sector |")
+            lines.append("|---|--------|------|------|--------|-------------|-----|------|-----|-----------|--------|")
             for i, (ticker, h) in enumerate(sorted_holdings, 1):
                 weight = h["valueCents"] / total_val * 100
                 value_str = f"€{h['valueCents'] / 100:,.0f}"
@@ -2026,10 +2063,38 @@ def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
                 pe_str = f"{float(pe):.1f}" if pe else "-"
                 div_y = f.get("dividendYield")
                 div_str = f"{float(div_y)*100:.1f}%" if div_y else "-"
+                accts_str = ",".join(sorted(h["accounts"])) or "?"
                 lines.append(
-                    f"| {i} | {ticker} | {h['name'][:25]} | {weight:.1f}% | {value_str} | "
+                    f"| {i} | {ticker} | {h['name'][:25]} | {accts_str} | {weight:.1f}% | {value_str} | "
                     f"{pnl_str} | {roic_str} | {pe_str} | {div_str} | {h.get('sector', '-')[:15]} |"
                 )
+
+            # Append an authoritative account-presence map and the list of
+            # currently-held tickers so the LLM has an unambiguous reference
+            # when writing SELL recommendations or lot tags.
+            lines.append("")
+            lines.append("### CURRENTLY-HELD TICKERS (authoritative)")
+            lines.append(
+                "These are the ONLY tickers that may appear as SELL/TRIM/HOLD "
+                "recommendations. A ticker NOT in this list means the position is "
+                "closed — never recommend selling it, regardless of any stale "
+                "active recommendation that references it."
+            )
+            held_tickers = sorted(by_ticker.keys())
+            lines.append(f"Count: {len(held_tickers)}")
+            if held_tickers:
+                lines.append("Tickers: " + ", ".join(held_tickers))
+            lines.append("")
+            lines.append("### ACCOUNT PRESENCE PER TICKER (authoritative)")
+            lines.append(
+                "Any account/wrapper tag in a recommendation (e.g. \"OST lot "
+                "only\") MUST match this map. Never invent OST/AOT when the "
+                "ticker is not held in that wrapper."
+            )
+            for ticker in held_tickers:
+                accts = sorted(by_ticker[ticker]["accounts"]) or ["?"]
+                lines.append(f"  - {ticker}: {', '.join(accts)}")
+
             sections.append("\n".join(lines))
         except (json.JSONDecodeError, TypeError):
             pass
@@ -2082,7 +2147,14 @@ def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
             regions = sm_data.get("data", sm_data) if isinstance(sm_data, dict) else sm_data
             if isinstance(regions, list):
                 lines = ["## MACRO INDICATORS"]
-                lines.append("Each indicator includes its release date and staleness. Only flag as 'CHANGED' if the data point is ≤14 days old.")
+                lines.append(
+                    "Each indicator carries a staleness tag. "
+                    "**CHANGED Xd ago** = fresh release AND the value moved — safe to frame as a new development. "
+                    "**LEVEL Xd ago** = fresh release but the value did NOT move — this is a stable level, do NOT write "
+                    "\"deteriorated to X\" / \"improved to X\" / \"moved to X\". Say \"still at X\" or \"remains at X\" or omit. "
+                    "**recent (Nd, unchanged)** = background only, not a development. "
+                    "**as of YYYY-MM-DD** = stale, use only as context."
+                )
                 lines.append("")
                 for region in regions:
                     lines.append(f"### {region.get('regionLabel', '?')}")
@@ -2095,18 +2167,27 @@ def _build_pm_data_brief(data: dict[str, str], date_str: str) -> str:
                             change = ind.get("change")
                             freq = ind.get("frequency", "")
 
-                            # Compute staleness
+                            # Compute staleness. Only call it CHANGED when a
+                            # fresh release ALSO moved the value — a new release
+                            # that prints the same number as last period is a
+                            # LEVEL print, not a development, and must not be
+                            # framed as a new move in the brief.
+                            moved = change is not None and abs(float(change)) >= 0.05
                             staleness = ""
                             if ind_date:
                                 try:
                                     d = dt.strptime(ind_date[:10], "%Y-%m-%d")
                                     days_old = (today - d).days
-                                    if days_old <= 1:
-                                        staleness = "TODAY"
-                                    elif days_old <= 7:
-                                        staleness = f"CHANGED {days_old}d ago"
+                                    if days_old <= 7:
+                                        staleness = (
+                                            f"CHANGED {days_old}d ago" if moved
+                                            else f"LEVEL {days_old}d ago (unchanged — do NOT frame as a new move)"
+                                        )
                                     elif days_old <= 14:
-                                        staleness = f"recent ({days_old}d ago)"
+                                        staleness = (
+                                            f"recent ({days_old}d ago, value moved)" if moved
+                                            else f"recent ({days_old}d ago, unchanged — background only)"
+                                        )
                                     else:
                                         staleness = f"as of {ind_date[:10]} ({days_old}d ago)"
                                 except ValueError:
@@ -2194,6 +2275,73 @@ def _extract_analyst_verdicts(data: dict[str, str]) -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
+async def _close_orphan_recommendations(backend_url: str, data: dict[str, str]) -> None:
+    """Auto-close active SELL/TRIM/HOLD recs whose ticker is no longer held.
+
+    When a position is sold the active recommendation for that ticker lingers
+    in `status=active` until something explicitly closes it. The PM then
+    re-reads it from `/recommendations?status=active&limit=50` and re-issues a
+    SELL for a position that no longer exists — the "BRK-B ghost sell"
+    incident. BUY recs are left alone: a prior BUY on a ticker we no longer
+    hold is still a valid open thesis if the user never acted on it.
+    """
+    holdings_raw = data.get("/portfolio/holdings", "")
+    recs_raw = data.get("/recommendations?status=active&limit=50", "")
+    if not holdings_raw or holdings_raw.startswith("ERROR"):
+        return
+    if not recs_raw or recs_raw.startswith("ERROR"):
+        return
+    try:
+        h = json.loads(holdings_raw)
+        held_tickers = {
+            row.get("ticker") for row in (h.get("data", h) if isinstance(h, dict) else h)
+            if row.get("ticker")
+        }
+        r = json.loads(recs_raw)
+        recs = r.get("data", r) if isinstance(r, dict) else r
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return
+
+    orphan_actions = {"sell", "trim", "hold"}
+    orphans = [
+        rec for rec in recs
+        if rec.get("status") == "active"
+        and (rec.get("action") or "").lower() in orphan_actions
+        and rec.get("ticker") and rec["ticker"] not in held_tickers
+    ]
+    if not orphans:
+        return
+
+    print(f"  [pm] Auto-closing {len(orphans)} orphan rec(s) "
+          f"(position no longer held): "
+          f"{', '.join(sorted({o['ticker'] for o in orphans}))}", flush=True)
+
+    async with httpx.AsyncClient(timeout=15, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+        for rec in orphans:
+            rid = rec.get("id")
+            if not rid:
+                continue
+            try:
+                resp = await client.put(
+                    f"/recommendations/{rid}/close",
+                    json={"outcome_notes": "Auto-closed: position no longer held (orphan cleanup)"},
+                )
+                if resp.status_code >= 400:
+                    print(f"    [pm] close rec {rid} ({rec.get('ticker')}) → {resp.status_code}",
+                          flush=True)
+            except Exception as e:
+                print(f"    [pm] close rec {rid} failed: {e}", flush=True)
+
+    # Refresh active-recs so the PM doesn't see the just-closed ones in its brief
+    try:
+        async with httpx.AsyncClient(timeout=15, base_url=backend_url, headers=_AUTH_HEADERS) as client:
+            resp = await client.get("/recommendations?status=active&limit=50")
+            if resp.status_code == 200:
+                data["/recommendations?status=active&limit=50"] = resp.text
+    except Exception:
+        pass
+
+
 async def run_portfolio_manager_phased(cfg: dict, date_str: str) -> str | None:
     """Run the portfolio manager in structured phases.
 
@@ -2213,6 +2361,10 @@ async def run_portfolio_manager_phased(cfg: dict, date_str: str) -> str | None:
         # Fetch all PM data
         endpoints = AGENT_DATA.get("portfolio-manager", [])
         data = await fetch_data(backend_url, endpoints)
+
+        # Close any active SELL/TRIM/HOLD recs whose ticker is no longer in holdings.
+        # Prevents the PM from re-issuing stale SELLs for closed positions.
+        await _close_orphan_recommendations(backend_url, data)
 
         # Phase 1: Deterministic data extraction
         print("  [pm] Phase 1: Extracting data brief...", flush=True)

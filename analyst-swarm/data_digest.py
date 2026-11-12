@@ -47,23 +47,57 @@ def _pct(val: float | None, decimals: int = 1) -> str:
 # ── Portfolio ──
 
 
+_ACCOUNT_TYPE_ABBR = {
+    "osakesaastotili": "OST",
+    "regular": "AOT",
+    "crypto_wallet": "CW",
+    "pension": "IPS",
+}
+
+
+def _account_abbr(account_type: str | None, account_name: str | None) -> str:
+    """Map an account to its short wrapper tag (OST/AOT/CW/IPS)."""
+    if account_type:
+        abbr = _ACCOUNT_TYPE_ABBR.get(account_type)
+        if abbr:
+            return abbr
+    # Fall back to first token of the account name (Nordnet UI pastes include OST/AOT prefix)
+    if account_name:
+        first = account_name.strip().split()[0].upper() if account_name.strip() else ""
+        if first in {"OST", "AOT", "AF", "IPS", "KF", "ISK"}:
+            return first
+    return "?"
+
+
 def digest_holdings(json_str: str) -> str:
-    """Convert holdings JSON into a readable table."""
+    """Convert holdings JSON into a readable table.
+
+    Each (account, security) pair is its own row — the PM needs the account
+    wrapper visible per holding so recommendations like "SELL BRK-B (OST lot
+    only)" can be grounded in the data instead of guessed.
+    """
     items = _safe_parse(json_str)
     if not items or not isinstance(items, list):
         return "No holdings data available."
 
     lines = ["PORTFOLIO HOLDINGS"]
-    lines.append(f"{'Ticker':<14} {'Name':<30} {'Qty':>8} {'Price(native)':>14} "
-                 f"{'Value EUR':>12} {'Wt%':>6} {'P&L%':>7} {'Class':<6}")
-    lines.append("-" * 100)
+    lines.append(
+        f"{'Ticker':<14} {'Name':<28} {'Acct':<5} {'Qty':>8} {'Price(native)':>14} "
+        f"{'Value EUR':>12} {'Wt%':>6} {'P&L%':>7} {'Class':<6}"
+    )
+    lines.append("-" * 110)
 
     total = sum(h.get("marketValueEurCents", 0) for h in items)
+    # Also compute per-ticker account presence so the PM can cross-check lot-tagging claims
+    accounts_by_ticker: dict[str, set[str]] = {}
+
     for h in sorted(items, key=lambda x: x.get("marketValueEurCents", 0), reverse=True):
         ticker = h.get("ticker", "?")
-        name = (h.get("name") or "")[:28]
+        name = (h.get("name") or "")[:26]
+        acct_abbr = _account_abbr(h.get("accountType"), h.get("accountName"))
+        if ticker != "?" and acct_abbr != "?":
+            accounts_by_ticker.setdefault(ticker, set()).add(acct_abbr)
         qty = h.get("quantity", "0")
-        # Handle string quantities (decimals from API)
         try:
             qty_f = float(qty)
             qty_s = f"{qty_f:.2f}" if qty_f != int(qty_f) else str(int(qty_f))
@@ -75,10 +109,30 @@ def digest_holdings(json_str: str) -> str:
         weight = f"{h.get('marketValueEurCents', 0) / total * 100:.1f}%" if total else "N/A"
         pnl = _pct(h.get("unrealizedPnlPct"))
         cls = h.get("assetClass", "?")[:6]
-        lines.append(f"{ticker:<14} {name:<30} {qty_s:>8} {price:>14} "
-                     f"{value:>12} {weight:>6} {pnl:>7} {cls:<6}")
+        lines.append(
+            f"{ticker:<14} {name:<28} {acct_abbr:<5} {qty_s:>8} {price:>14} "
+            f"{value:>12} {weight:>6} {pnl:>7} {cls:<6}"
+        )
 
     lines.append(f"\nTotal: {_cents_to_eur(total)} across {len(items)} positions")
+
+    # Append an explicit per-ticker account-presence map. This is the authoritative
+    # list the PM must consult before writing an account tag (e.g. "OST lot only")
+    # in any recommendation — prevents hallucinated wrappers.
+    multi_acct = {t: sorted(a) for t, a in accounts_by_ticker.items() if len(a) > 1}
+    single_acct = {t: next(iter(a)) for t, a in accounts_by_ticker.items() if len(a) == 1}
+    if accounts_by_ticker:
+        lines.append("")
+        lines.append("ACCOUNT PRESENCE PER TICKER (authoritative — do NOT invent other wrappers):")
+        for ticker in sorted(accounts_by_ticker.keys()):
+            accts = sorted(accounts_by_ticker[ticker])
+            lines.append(f"  {ticker}: {', '.join(accts)}")
+        if multi_acct:
+            lines.append(
+                f"  (Tickers held in multiple wrappers: {', '.join(sorted(multi_acct.keys()))})"
+            )
+        _ = single_acct  # retained for potential future use
+
     return "\n".join(lines)
 
 
@@ -264,30 +318,78 @@ def digest_news(json_str: str, ticker: str | None = None) -> str:
 
 
 def digest_macro(json_str: str) -> str:
-    """Convert macro summary into a narrative paragraph."""
+    """Convert macro summary into a narrative paragraph.
+
+    Adds an explicit tag per indicator so the PM LLM can tell a genuine release
+    from an unchanged stale level:
+      [NEW Xd ago] — fresh release within the last ~45 days AND value moved
+      [LEVEL Xd ago] — fresh release but same value as prior period (no change)
+      [STALE Xd ago] — last update is older than the expected release cadence
+    """
+    from datetime import date as _date, datetime as _dt
+
     data = _safe_parse(json_str)
     if not data:
         return "No macro data available."
 
-    # data is a list of regions with categories
     if not isinstance(data, list):
         return "No macro data available."
 
+    today = _date.today()
+
+    # How many days is a given frequency allowed to go without an update before
+    # we call it STALE. Loose bounds — the point is to flag "value is months old
+    # and hasn't moved" so the PM doesn't present it as breaking news.
+    _STALE_DAYS = {
+        "daily": 7,
+        "weekly": 21,
+        "monthly": 55,
+        "quarterly": 130,
+        "annual": 450,
+    }
+
     lines = ["MACRO INDICATORS"]
+    lines.append(
+        "  Tag meaning: [NEW Xd ago]=fresh release & value moved · "
+        "[LEVEL Xd ago]=fresh release, same value (do NOT frame as a new move) · "
+        "[STALE Xd ago]=older than expected release cadence"
+    )
     for region in data:
         region_label = region.get("regionLabel", "?")
         cats = region.get("categories", [])
         for cat in cats:
-            cat_label = cat.get("label", "?")
             indicators = cat.get("indicators", [])
             for ind in indicators:
                 name = ind.get("name", "?")
                 val = ind.get("value")
                 unit = ind.get("unit", "")
                 change = ind.get("change")
-                date = (ind.get("date") or "")[:10]
+                date_str = (ind.get("date") or "")[:10]
+                freq = (ind.get("frequency") or "monthly").lower()
+
+                age_days = None
+                if date_str:
+                    try:
+                        age_days = (today - _dt.fromisoformat(date_str).date()).days
+                    except ValueError:
+                        age_days = None
+
+                stale_limit = _STALE_DAYS.get(freq, 55)
+                moved = change is not None and abs(change) >= 0.05  # ignore rounding noise
+
+                if age_days is None:
+                    tag = f"[as-of {date_str}]"
+                elif age_days > stale_limit:
+                    tag = f"[STALE {age_days}d ago]"
+                elif moved:
+                    tag = f"[NEW {age_days}d ago]"
+                else:
+                    tag = f"[LEVEL {age_days}d ago]"
+
                 change_str = f" (chg: {change:+.2f})" if change is not None else ""
-                lines.append(f"  {region_label} | {name}: {val}{unit}{change_str} [{date}]")
+                lines.append(
+                    f"  {region_label} | {name}: {val}{unit}{change_str} {tag}"
+                )
 
     return "\n".join(lines)
 

@@ -29,9 +29,10 @@ You validate every recommendation against the investment policy before execution
 - Loss harvesting must respect substance-over-form doctrine
 
 ### Account Structure
-- OST: Finnish and EU equities (no crypto, no bonds)
-- Regular account: everything else
-- Crypto wallet: crypto assets only
+- **OST (osakesäästötili)** eligible: equities listed on regulated markets. With Nordnet this includes Helsinki, Stockholm, Copenhagen, Oslo, AND US exchanges (NYSE, NASDAQ). **No crypto, no bonds, no ETFs**. US equities ARE legally allowed in OST at Nordnet — do NOT flag a US stock as "prohibited in OST" on jurisdiction grounds alone. However, see the tax-efficiency note below before recommending US stocks for OST.
+- **Regular (AOT)**: everything else — any security type, any jurisdiction, any asset class
+- **Crypto wallet**: crypto assets only
+- **OST tax-efficiency nuance** (advisory, not a compliance block): dividends from US stocks pay a 15% US withholding tax at source that is NOT recoverable inside OST (the OST tax deferral doesn't reach beyond Finnish borders). For high-yield US dividend stocks, AOT is often more efficient despite the Finnish 30/34% capital gains rate. For non-dividend US stocks (e.g., BRK-B, growth names), OST is fine — full deferral on capital gains, no WHT leakage. Flag this trade-off when a US high-dividend stock is proposed for OST; do NOT block it.
 
 ## Data Access
 

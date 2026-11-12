@@ -206,6 +206,7 @@ interface InsiderTrade {
   securityId: number;
   ticker: string;
   insiderName: string;
+  role: string;
   tradeType: string;
   shares: number;
   priceCents: number | null;
@@ -213,6 +214,18 @@ interface InsiderTrade {
   currency: string | null;
   tradeDate: string;
 }
+
+const INSIDER_ROLE_LABELS: Record<string, string> = {
+  ceo: "CEO",
+  cfo: "CFO",
+  cto: "CTO",
+  coo: "COO",
+  director: "Director",
+  board_chair: "Board Chair",
+  vp: "VP",
+  other_executive: "Executive",
+  related_party: "Related",
+};
 
 interface NewsItem {
   id: number;
@@ -1117,6 +1130,7 @@ export default function SecurityDetailPage() {
                 <tr className="bg-terminal-bg-secondary text-terminal-text-secondary text-xs">
                   <th className="text-left px-4 py-2 font-medium">Date</th>
                   <th className="text-left px-4 py-2 font-medium">Insider</th>
+                  <th className="text-left px-4 py-2 font-medium">Role</th>
                   <th className="text-left px-4 py-2 font-medium">Type</th>
                   <th className="text-right px-4 py-2 font-medium">Shares</th>
                   <th className="text-right px-4 py-2 font-medium">Value</th>
@@ -1132,6 +1146,9 @@ export default function SecurityDetailPage() {
                       {formatDate(trade.tradeDate)}
                     </td>
                     <td className="px-4 py-2 text-xs">{trade.insiderName}</td>
+                    <td className="px-4 py-2 text-xs text-terminal-text-secondary">
+                      {trade.role ? (INSIDER_ROLE_LABELS[trade.role] || trade.role) : "-"}
+                    </td>
                     <td className="px-4 py-2">
                       <span
                         className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${
